@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals"><ProjectGuid>{4C849A91-CC49-47FC-8372-1C916773751A}</ProjectGuid><WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration"><ConfigurationType>Application</ConfigurationType><PlatformToolset>v145</PlatformToolset></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="..\msbuild\Common.props" />
+  <Import Project="..\msbuild\Protocol.props" />
+  <ItemGroup>
+    <ClCompile Include="ProtocolTests.cpp" />
+    <ClCompile Include="..\src\androidauto\AndroidAutoSession.cpp" />
+    <ClCompile Include="..\src\video\VideoDecoder.cpp" />
+    <ClCompile Include="..\src\logging\Logger.cpp" />
+    <ProjectReference Include="..\Aasdk.vcxproj"><Project>{D37D4DBC-67C4-4572-BDCB-123D4AF98A76}</Project></ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Import Project="..\msbuild\Protocol.targets" />
+</Project>

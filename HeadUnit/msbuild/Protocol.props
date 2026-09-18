@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <ProtocolDepsRoot>$(HeadUnitRoot)..\.tools\vcpkg\installed\x64-windows\</ProtocolDepsRoot>
+    <ProtocolGeneratedRoot>$(HeadUnitRoot)out\generated\</ProtocolGeneratedRoot>
+    <ProtocolLibRoot Condition="'$(Configuration)'=='Debug'">$(ProtocolDepsRoot)debug\lib\</ProtocolLibRoot>
+    <ProtocolLibRoot Condition="'$(Configuration)'!='Debug'">$(ProtocolDepsRoot)lib\</ProtocolLibRoot>
+    <ProtocolBinRoot Condition="'$(Configuration)'=='Debug'">$(ProtocolDepsRoot)debug\bin\</ProtocolBinRoot>
+    <ProtocolBinRoot Condition="'$(Configuration)'!='Debug'">$(ProtocolDepsRoot)bin\</ProtocolBinRoot>
+    <ProtocolProtobufLib Condition="'$(Configuration)'=='Debug'">libprotobufd.lib</ProtocolProtobufLib>
+    <ProtocolProtobufLib Condition="'$(Configuration)'!='Debug'">libprotobuf.lib</ProtocolProtobufLib>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(HeadUnitRoot)third_party\aasdk\include;$(ProtocolGeneratedRoot);$(ProtocolDepsRoot)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>_WIN32_WINNT=0x0A00;BOOST_ALL_NO_LIB;PROTOBUF_USE_DLLS;ABSL_CONSUME_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalOptions>/bigobj %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <AdditionalLibraryDirectories>$(ProtocolLibRoot);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>$(ProtocolProtobufLib);abseil_dll.lib;utf8_validity.lib;libssl.lib;libcrypto.lib;avcodec.lib;avutil.lib;swscale.lib;ws2_32.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <Target Name="CheckProtocolDependencies" BeforeTargets="PrepareForBuild">
+    <Error Condition="!Exists('$(ProtocolDepsRoot)include\openssl\ssl.h') Or !Exists('$(ProtocolDepsRoot)tools\protobuf\protoc.exe')" Text="Protocol dependencies missing. Run HeadUnit\scripts\Prepare-Dependencies.ps1 once, then build the solution again." />
+  </Target>
+</Project>

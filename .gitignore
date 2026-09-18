@@ -1,0 +1,6 @@
+.tools/
+HeadUnit/out/
+HeadUnit/CMakeUserPresets.json
+*.log
+.vs/
+*.vcxproj.user

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Target Name="CheckQtSdk" BeforeTargets="PrepareForBuild">
+    <Error Condition="!Exists('$(QtRoot)\lib\Qt6Widgets$(QtSuffix).lib')" Text="Qt SDK missing at $(QtRoot). Set QtRoot in msbuild/Qt.props or QT_ROOT to a Qt 6 MSVC x64 SDK. See README.md." />
+  </Target>
+  <Target Name="DeployQtRuntime" AfterTargets="Build">
+    <ItemGroup>
+      <QtRuntime Include="$(QtRoot)\bin\Qt6Core$(QtSuffix).dll;$(QtRoot)\bin\Qt6Gui$(QtSuffix).dll;$(QtRoot)\bin\Qt6Widgets$(QtSuffix).dll;$(QtRoot)\bin\Qt6Concurrent$(QtSuffix).dll" />
+      <QtPlatform Include="$(QtRoot)\plugins\platforms\qwindows$(QtSuffix).dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(QtRuntime)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(QtPlatform)" DestinationFolder="$(OutDir)platforms" SkipUnchangedFiles="true" />
+    <WriteLinesToFile File="$(OutDir)qt.conf" Lines="[Paths];Plugins=." Overwrite="true" WriteOnlyWhenDifferent="true" />
+  </Target>
+</Project>

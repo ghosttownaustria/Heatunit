@@ -1,0 +1,32 @@
+{
+  "version": 5,
+  "configurePresets": [
+    {
+      "name": "windows-vs2022",
+      "displayName": "Windows x64 / VS 2022 / Qt 6",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/out/build/windows-vs2022",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": "$env{QT_ROOT}",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install",
+        "BUILD_TESTING": "ON"
+      }
+    },
+    {
+      "name": "core-only",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/out/build/core-only",
+      "cacheVariables": { "HEADUNIT_BUILD_APP": "OFF", "BUILD_TESTING": "ON" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "windows-debug", "configurePreset": "windows-vs2022", "configuration": "Debug" },
+    { "name": "core-debug", "configurePreset": "core-only", "configuration": "Debug" }
+  ],
+  "testPresets": [
+    { "name": "windows-debug", "configurePreset": "windows-vs2022", "configuration": "Debug", "output": { "outputOnFailure": true } },
+    { "name": "core-debug", "configurePreset": "core-only", "configuration": "Debug", "output": { "outputOnFailure": true } }
+  ]
+}

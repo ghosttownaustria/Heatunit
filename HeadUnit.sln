@@ -1,0 +1,38 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 18
+VisualStudioVersion = 18.0.0.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "HeadUnit", "HeadUnit\HeadUnit.vcxproj", "{51900BEF-B4A4-46AF-A382-F96F5B6FF1B1}"
+EndProject
+Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "CoreTests", "HeadUnit\tests\CoreTests.vcxproj", "{C4CAFA45-FD36-47C9-8F87-D8401DC611C9}"
+EndProject
+Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "Aasdk", "HeadUnit\Aasdk.vcxproj", "{D37D4DBC-67C4-4572-BDCB-123D4AF98A76}"
+EndProject
+Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "ProtocolTests", "HeadUnit\tests\ProtocolTests.vcxproj", "{4C849A91-CC49-47FC-8372-1C916773751A}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4C849A91-CC49-47FC-8372-1C916773751A}.Debug|x64.ActiveCfg = Debug|x64
+		{4C849A91-CC49-47FC-8372-1C916773751A}.Debug|x64.Build.0 = Debug|x64
+		{4C849A91-CC49-47FC-8372-1C916773751A}.Release|x64.ActiveCfg = Release|x64
+		{4C849A91-CC49-47FC-8372-1C916773751A}.Release|x64.Build.0 = Release|x64
+
+		{D37D4DBC-67C4-4572-BDCB-123D4AF98A76}.Debug|x64.ActiveCfg = Debug|x64
+		{D37D4DBC-67C4-4572-BDCB-123D4AF98A76}.Debug|x64.Build.0 = Debug|x64
+		{D37D4DBC-67C4-4572-BDCB-123D4AF98A76}.Release|x64.ActiveCfg = Release|x64
+		{D37D4DBC-67C4-4572-BDCB-123D4AF98A76}.Release|x64.Build.0 = Release|x64
+
+		{51900BEF-B4A4-46AF-A382-F96F5B6FF1B1}.Debug|x64.ActiveCfg = Debug|x64
+		{51900BEF-B4A4-46AF-A382-F96F5B6FF1B1}.Debug|x64.Build.0 = Debug|x64
+		{51900BEF-B4A4-46AF-A382-F96F5B6FF1B1}.Release|x64.ActiveCfg = Release|x64
+		{51900BEF-B4A4-46AF-A382-F96F5B6FF1B1}.Release|x64.Build.0 = Release|x64
+		{C4CAFA45-FD36-47C9-8F87-D8401DC611C9}.Debug|x64.ActiveCfg = Debug|x64
+		{C4CAFA45-FD36-47C9-8F87-D8401DC611C9}.Debug|x64.Build.0 = Debug|x64
+		{C4CAFA45-FD36-47C9-8F87-D8401DC611C9}.Release|x64.ActiveCfg = Release|x64
+		{C4CAFA45-FD36-47C9-8F87-D8401DC611C9}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+EndGlobal

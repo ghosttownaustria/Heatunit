@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="src" />
+    <Filter Include="src\androidauto" />
+    <Filter Include="src\logging" />
+    <Filter Include="src\ui" />
+    <Filter Include="src\usb" />
+    <Filter Include="docs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\usb\AndroidUsbProbe.cpp"><Filter>src\usb</Filter></ClCompile>
+    <ClInclude Include="src\usb\AndroidUsbProbe.h"><Filter>src\usb</Filter></ClInclude>
+    <None Include="docs\windows_connection.md"><Filter>docs</Filter></None>
+    <ClCompile Include="src\main.cpp"><Filter>src</Filter></ClCompile>
+    <ClCompile Include="src\androidauto\AoaNegotiator.cpp"><Filter>src\androidauto</Filter></ClCompile>
+    <ClInclude Include="src\androidauto\AoaNegotiator.h"><Filter>src\androidauto</Filter></ClInclude>
+    <ClCompile Include="src\androidauto\AndroidDeviceDetector.cpp"><Filter>src\androidauto</Filter></ClCompile>
+    <ClInclude Include="src\androidauto\AndroidDeviceDetector.h"><Filter>src\androidauto</Filter></ClInclude>
+    <ClCompile Include="src\logging\Logger.cpp"><Filter>src\logging</Filter></ClCompile>
+    <ClInclude Include="src\logging\Logger.h"><Filter>src\logging</Filter></ClInclude>
+    <ClCompile Include="src\ui\MainWindow.cpp"><Filter>src\ui</Filter></ClCompile>
+    <ClInclude Include="src\ui\MainWindow.h"><Filter>src\ui</Filter></ClInclude>
+    <ClCompile Include="src\usb\UsbDescriptors.cpp"><Filter>src\usb</Filter></ClCompile>
+    <ClInclude Include="src\usb\UsbDescriptors.h"><Filter>src\usb</Filter></ClInclude>
+    <ClCompile Include="src\usb\WindowsUsbBackend.cpp"><Filter>src\usb</Filter></ClCompile>
+    <ClInclude Include="src\usb\WindowsUsbBackend.h"><Filter>src\usb</Filter></ClInclude>
+    <ClInclude Include="src\usb\IUsbBackend.h"><Filter>src\usb</Filter></ClInclude>
+    <ClInclude Include="src\usb\UsbTypes.h"><Filter>src\usb</Filter></ClInclude>
+    <None Include="docs\architecture.md"><Filter>docs</Filter></None>
+    <None Include="docs\android_auto.md"><Filter>docs</Filter></None>
+    <None Include="docs\usb.md"><Filter>docs</Filter></None>
+    <None Include="docs\dependencies.md"><Filter>docs</Filter></None>
+    <None Include="docs\progress.md"><Filter>docs</Filter></None>
+  </ItemGroup>
+</Project>

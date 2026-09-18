@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Target Name="DeployProtocolRuntime" AfterTargets="Build">
+    <ItemGroup><ProtocolRuntime Include="$(ProtocolBinRoot)*.dll" /></ItemGroup>
+    <Copy SourceFiles="@(ProtocolRuntime)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals"><ProjectGuid>{D37D4DBC-67C4-4572-BDCB-123D4AF98A76}</ProjectGuid><WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration"><ConfigurationType>StaticLibrary</ConfigurationType><PlatformToolset>v145</PlatformToolset></PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <Import Project="msbuild\Common.props" />
+  <Import Project="msbuild\Protocol.props" />
+  <ItemDefinitionGroup><ClCompile><WarningLevel>Level1</WarningLevel><ObjectFileName>$(IntDir)%(RelativeDir)</ObjectFileName></ClCompile></ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="third_party\aasdk\src\Common\*.cpp;third_party\aasdk\src\Error\*.cpp;third_party\aasdk\src\IO\*.cpp;third_party\aasdk\src\Messenger\*.cpp;third_party\aasdk\src\Channel\Channel.cpp;third_party\aasdk\src\Channel\Control\*.cpp;third_party\aasdk\src\Channel\MediaSink\Video\*.cpp;third_party\aasdk\src\Channel\MediaSink\Audio\*.cpp;third_party\aasdk\src\Channel\MediaSource\*.cpp;third_party\aasdk\src\Channel\SensorSource\*.cpp;third_party\aasdk\src\Channel\InputSource\*.cpp;third_party\aasdk\src\Transport\SSLWrapper.cpp" />
+    <ProtocolSchema Include="third_party\aasdk\protobuf\**\*.proto" />
+    <ClCompile Remove="third_party\aasdk\src\**\*.ut.cpp" />
+    <ClCompile Include="@(ProtocolSchema->'out\generated\%(RecursiveDir)%(Filename).pb.cc')" />
+  </ItemGroup>
+  <Target Name="GenerateProtocolSchemas" BeforeTargets="ClCompile">
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(HeadUnitRoot)scripts\Generate-Protobuf.ps1&quot; -Protoc &quot;$(ProtocolDepsRoot)tools\protobuf\protoc.exe&quot; -SourceRoot &quot;$(HeadUnitRoot)third_party\aasdk\protobuf&quot; -OutputRoot &quot;$(ProtocolGeneratedRoot).&quot;" />
+  </Target>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>
