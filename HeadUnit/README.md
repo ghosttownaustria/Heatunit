@@ -2,28 +2,33 @@
 
 C++20 / Visual Studio 2026 x64 / Qt 6. USB discovery, AOA mode switching, Android
 Auto version/TLS negotiation, service and H.264 channel handling, FFmpeg decoding
-and Qt video rendering are implemented. Real phone testing has confirmed version
-1.7, TLS and service discovery; projected video is not yet hardware-verified.
-There is no simulated phone data or AA screen.
+and Qt video rendering are implemented. Real phone testing (Samsung SM-F776B) has
+confirmed version 1.7, TLS, service discovery and projected video, including repeated
+sessions and a clean stop. There is no simulated phone data or AA screen.
 
-**Verbinden:** **Android Auto verbinden** anklicken. Ist genau ein Android-Handy
-angeschlossen, wird es automatisch verwendet; bei mehreren zuerst eines in der Liste
-auswaehlen. Der Knopf uebernimmt auch den Accessory-Moduswechsel. Hinweise auf dem
-entsperrten Handy bestaetigen.
+**Bedienung: ein Knopf.** Handy per Datenkabel anschliessen, entsperren und
+**Android Auto verbinden** anklicken. Die App erledigt alle Schritte selbst und meldet
+jeden davon im Fenster: Handy suchen, bei Bedarf den USB-Treiber reparieren (einmal
+die Windows-Abfrage nach Administratorrechten bestaetigen), Android Auto auf dem Handy
+starten und das Video anzeigen. Auf dem Handy nur die Android-Auto-Hinweise bestaetigen.
+Waehrend der Sitzung heisst derselbe Knopf **Verbindung beenden** (oder das Fenster
+schliessen): Das Handy bekommt ein Goodbye, dann wird die USB-Schnittstelle freigegeben.
 
-**Beenden:** **Verbindung beenden** (oder das Fenster schliessen) schickt dem Handy
-zuerst ein Android-Auto-Goodbye und wartet bis zu 2 Sekunden auf die Bestaetigung,
-bevor die USB-Verbindung getrennt und die Schnittstelle freigegeben wird. Danach
-startet die App nach kurzer Pause automatisch einen neuen Scan, sodass das Handy
-sofort wieder verbunden werden kann. Beendet das Handy die Sitzung selbst, laeuft
-derselbe Ablauf.
+**Wenn etwas klemmt, versucht die App es selbst:**
+- Das Handy im Accessory-Modus bekommt Android Auto per AOA-Neustart neu gestartet,
+  ohne Kabel-Neustecken (ca. 10 Sekunden).
+- Windows weist dem Handy im Dateiuebertragungs-Modus oft wieder Samsungs Treiber zu
+  (`LIBUSB_ERROR_NOT_FOUND`). Die App stellt WinUSB dann selbst wieder her.
+- Antwortet das Handy nach ca. 20 Sekunden nicht, startet die App die USB-Verbindung
+  des Handys neu (wie Kabel abziehen und anstecken), repariert den Treiber und
+  versucht es erneut (bis zu zweimal). Dafuer kommt dieselbe Windows-Abfrage.
+- Klappt auch das nicht, steht im Fenster, was zu tun ist (meist: Handy entsperren
+  oder das Kabel einmal abziehen und wieder anstecken).
 
 **Stabilitaet:** Eine Sitzung endet mit einer konkreten Meldung, wenn das Kabel
 gezogen wird, das Handy 30 Sekunden lang nichts mehr sendet oder in der Startphase
-90 Sekunden lang kein Fortschritt erkennbar ist (die Meldung nennt die haengende
-Stufe: Versionsabfrage, TLS, Servicesuche oder Video). Einzelne nicht decodierbare
-Videopakete werden verworfen statt die Sitzung zu beenden. Hilft nach einer
-fehlgeschlagenen Sitzung ein erneutes Verbinden nicht, das Kabel neu einstecken.
+kein Fortschritt erkennbar ist (die Meldung nennt die haengende Stufe: Versionsabfrage,
+TLS, Servicesuche oder Video). Nicht decodierbare Videopakete werden verworfen.
 Audio und Touch-Eingabe sind noch nicht implementiert.
 
 Beim ersten Build auf einem neuen Rechner einmal
@@ -32,23 +37,12 @@ aus dem Repository-Hauptordner ausfuehren. Danach normal in Visual Studio bauen.
 Der erste Abhaengigkeitsbuild kann laenger dauern. Die App und AASDK verwenden
 native VS-Projekte; Protobuf-Dateien und DLL-Kopien werden automatisch erzeugt.
 
-**Neu: echter USB-Zugriffstest.** Nach dem Scan das Handy auswaehlen und
-**Android Auto: USB-Zugriff pruefen** anklicken. Der Test versucht das Geraet mit
-libusb zu oeffnen und dessen AOA-Version abzufragen. Beim angeschlossenen Samsung
-funktioniert dies nach der freigegebenen Treiberumstellung: AOA-Version 2 wurde
-am 2026-09-17 tatsaechlich empfangen. Details, Treiber-Rueckweg und der naechste
-Schritt stehen in [Windows-Verbindung](docs/windows_connection.md). Dies ist noch
-kein vollstaendiger Android-Auto-Verbindungsaufbau.
-
-**Accessory-Modus:** Handy auswaehlen und **Android Auto: Accessory-Modus starten**
-anklicken. Die App sendet die AOA-Kennung, startet den Moduswechsel und wartet bis
-zu 15 Sekunden auf das Geraet am selben USB-Port. Danach prueft sie das Bulk-Paar.
-Am echten Samsung erfolgreich getestet: `04E8:6860` wird zu `18D1:2D00`,
-Interface 0 ist zugreifbar (IN `0x81`, OUT `0x01`). Die Geraeteliste wird nach dem
-Versuch aktualisiert. Alternativ: `HeadUnit.exe --start-accessory`.
-Die Pruefung gibt das Interface anschliessend frei; erst **Android Auto verbinden**
-startet die Protokollsitzung. Abziehen und erneut anschliessen beendet normalerweise
-den Accessory-Modus.
+**Diagnose per Kommandozeile** (ohne Fenster, jeweils mit `HeadUnit.exe`): `--scan`
+(USB-Geraete auflisten), `--probe-usb` (USB-Zugriff und AOA-Version pruefen),
+`--start-accessory` (Accessory-Modus starten und Bulk-Paar pruefen), `--repair-driver`
+(WinUSB wiederherstellen), `--recover-phone` (USB-Verbindung des Handys neu starten und
+Treiber reparieren), `--test-projection` (kompletter Ablauf, erfolgreich nach zehn
+angezeigten Videobildern). Details: [Windows-Verbindung](docs/windows_connection.md).
 
 ## Visual Studio 2026: oeffnen, bauen, starten
 
@@ -144,15 +138,16 @@ Android candidate; exit 3 means a probe failure or ambiguous selection.
 ## Phone check
 
 1. Connect an unlocked Android phone with a data-capable USB cable.
-2. Start the app or press **Scan USB devices** after connecting it.
-3. Expand the device to inspect VID/PID, strings, configurations, interfaces and endpoints.
-4. Record the evidence and phone/Android/AA versions in `docs/progress.md`.
+2. Run `HeadUnit.exe --scan` (or the log of any run) to inspect VID/PID, strings,
+   configurations, interfaces and endpoints of every USB device.
+3. Record the evidence and phone/Android/AA versions in `docs/progress.md`.
 
 ADB debugging is not required. If already enabled, its interface provides an
 additional identification hint. Manufacturer IDs alone are only candidates:
 Samsung also makes non-phone USB devices. Unknown/charge-only phones may not be
 identified. Missing descriptors are shown as warnings, never invented.
-This milestone performs no driver installation, mode switch or bulk transfer.
+The window itself has one button (**Android Auto verbinden**) and does the mode switch,
+driver repair and session by itself; the individual steps stay available on the command line.
 
 See [research and protocol plan](docs/android_auto.md), [architecture](docs/architecture.md),
 [USB diagnostics](docs/usb.md), [dependencies](docs/dependencies.md), and [verified progress](docs/progress.md).

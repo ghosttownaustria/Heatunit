@@ -1,29 +1,56 @@
 # Windows USB connection
 
-## 2026-09-18: WinUSB binding reverted (LIBUSB_ERROR_NOT_FOUND again)
+## 2026-09-18: WinUSB binding reverts whenever the phone re-appears in file-transfer mode
 
-Symptom: `USB open: LIBUSB_ERROR_NOT_FOUND (-5)` although the phone is attached and
-in file-transfer mode. Read-only check: the composite parent `USB\VID_04E8&PID_6860\...`
-is bound to Samsung `dg_ssudbus` again (install date 2026-09-18 21:50) and the MTP
-function to `WUDFWpdMtp`; the `MI_00`/WinUSB layout of 2026-09-17 is gone. The WinUSB
-package `oem151.inf` (libwdi) is still in the driver store, and the backup is intact.
+Symptom: `USB open: LIBUSB_ERROR_NOT_FOUND (-5)` although the phone is attached and in
+file-transfer mode. Evidence (`C:\Windows\INF\setupapi.dev.log`, Kernel-PnP event 442
+"device settings not migrated ... partial or ambiguous match"): every time the phone
+re-appears as `04E8:6860` (cable replug, phone returning from accessory mode) Windows
+treats it as a new installation and picks the best-ranked driver, which is Samsung's
+`ssudbus` (`oem144.inf`, rank 00FF0001) over the composite driver that was forced onto
+the previous device node. `oem151.inf` (libwdi, WinUSB for `MI_00`) only takes effect
+while the composite parent is `usbccgp`, so the binding is lost with each re-appearance.
 
-Fix (run by the user, needs administrator rights, UAC prompt appears):
+Three changes make this a non-issue in daily use:
+
+1. **The phone no longer has to leave accessory mode between sessions.** After a session
+   the phone stays in accessory mode (`18D1:2D00`, Samsung's own `ssudaoa` WinUSB driver,
+   which Windows keeps). Connecting to a phone that is already in accessory mode now
+   re-sends the AOA identity and START, which makes Android launch Android Auto afresh
+   (verified on the Samsung SM-F776B: three consecutive sessions with real video and a
+   clean stop each, no replug). So the file-transfer-mode driver only matters after a
+   cable replug or phone reboot.
+2. **Self-repair in the window.** If opening the phone in file-transfer mode fails with a
+   driver error, the window runs `HeadUnit.exe --repair-driver` elevated (Windows shows
+   its administrator prompt), which switches the composite parent to Microsoft's
+   `usbccgp` and waits until `MI_00` reports WinUSB, then rescans and continues the
+   connect on its own. No script is needed. Manual use, same effect:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File HeadUnit\scripts\Repair-PhoneDriver.ps1
+HeadUnit.exe --repair-driver
 ```
 
-`-CheckOnly` only reports the binding (exit 0 = WinUSB bound, 1 = broken). The script
-re-runs the verified parent switch from `.tools/usb-driver-backup`, waits for `MI_00` to
-appear with WinUSB and then runs `HeadUnit.exe --probe-usb`. If the binding reverts
-again (Samsung USB Drivers / Windows Update may reinstall `oem144.inf`), run it again.
+3. **Restart for a phone that does not answer.** `HeadUnit.exe --recover-phone` (started by the
+   window when the phone stays silent) disables and re-enables the phone's accessory device node
+   in one elevated process. The phone sees the bus reset, leaves accessory mode and returns as
+   `04E8:6860` like after a cable replug (verified). The same process then repairs the driver.
+   After a restart the phone shows a single MTP interface; the composite driver is then not in
+   the compatible list, so it is picked from the USB class list with `DI_FLAGSEX_ALLOWEXCLUDEDDRVS`
+   (hardware ID `USB\COMPOSITE`), and `MI_00` gets the existing WinUSB package. libusb's
+   `libusb_reset_device` and `IOCTL_USB_HUB_CYCLE_PORT` do not restart the phone on this machine.
+
+Exit codes: 0 fixed, 1 already fine, 2 no phone, 3 phone in accessory mode (nothing to
+do), 4 phone not in `04E8:6860` layout (set the phone to file transfer), 5 install
+failed, 6 timeout, 7 not elevated, 9 UAC declined. Details: `headunit-repair.log`.
 
 Open point, "charging only" like a real car: Android Auto starts through AOA, which
-also works while the phone is in "no data transfer" mode; the phone then shows its own
-"allow Android Auto" prompt. What is missing is a WinUSB binding for that mode, because
-its PID/interface layout is not yet known. Set the phone to "No data transfer", scan
-(`HeadUnit.exe --scan` or the UI) and record the VID/PID and interfaces here.
+also works while the phone is in "no data transfer" mode. The missing piece is a WinUSB
+binding for that mode, because its PID/interface layout is not known yet (the log also
+shows `04E8:6863`, the tethering/RNDIS layout). Set the phone to "No data transfer",
+scan and record VID/PID and interfaces here. A permanent fix independent of Windows'
+re-selection needs the Samsung parent package (`oem144.inf`, `oem64.inf`) to be removed
+from the driver store (backup in `.tools/usb-driver-backup/original-samsung`), which
+also affects other Samsung tools; that has not been done.
 
 ## 2026-09-17: USB driver blocker resolved on the test phone
 

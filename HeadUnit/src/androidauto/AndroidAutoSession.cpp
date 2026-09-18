@@ -61,6 +61,9 @@ constexpr auto kShutdownGrace = std::chrono::seconds(2);
 // No byte from the phone for this long after discovery means the link is dead.
 constexpr auto kSilenceTimeout = std::chrono::seconds(30);
 constexpr auto kStartupTimeout = std::chrono::seconds(90);
+constexpr auto kVersionTimeout = std::chrono::seconds(20);
+constexpr auto kVersionRetryInterval = std::chrono::seconds(4);
+constexpr int kMaxVersionRequests = 6;
 // Undecodable packets are dropped (the stream recovers at the next keyframe); only
 // a decoder that never recovers ends the session.
 constexpr int kMaxDecodeFailures = 200;
@@ -222,6 +225,7 @@ public:
         MarkAlive();
         Status("Android Auto version request sent; waiting for phone");
         m_control->sendVersionRequest(Promise());
+        m_lastVersionRequest = std::chrono::steady_clock::now();
         ReceiveControl();
         Tick();
     }
@@ -241,6 +245,7 @@ public:
     // the encrypted control channel is not up yet or the phone does not answer.
     void BeginShutdown() {
         if (m_isEnding || m_isStopping) return;
+        m_result.isStoppedByUser = true;
         if (!m_isAuthenticated) { End(kStoppedByUser); return; }
         m_isStopping = true;
         m_stopDeadline = std::chrono::steady_clock::now() + kShutdownGrace;
@@ -251,8 +256,11 @@ public:
     }
     ProjectionResult Result() const { return m_result; }
     void onVersionResponse(std::uint16_t major, std::uint16_t minor, aap_protobuf::shared::MessageStatus status) override {
+        // A repeated request can be answered twice; the TLS handshake must start only once.
+        if (m_hasVersionReply) { ReceiveControl(); return; }
         if (status != success) { End("Phone rejected AA version: status=" + std::to_string(status)); return; }
         m_hasVersionReply = true;
+        m_result.hasVersionReply = true;
         Status("Phone accepted Android Auto " + std::to_string(major) + "." + std::to_string(minor) + "; starting TLS");
         m_cryptor->doHandshake();
         m_control->sendHandshake(m_cryptor->readHandshakeBuffer(), Promise());
@@ -445,7 +453,7 @@ private:
     }
     void Status(const std::string& message) { m_logger.Write("INFO", "AA", message); if (m_callbacks.onStatus) m_callbacks.onStatus(message); }
     std::string StartupTimeoutMessage() const {
-        if (!m_hasVersionReply) return "The phone never answered the Android Auto version request. Unplug and replug the USB cable, unlock the phone and connect again.";
+        if (!m_hasVersionReply) return "The phone did not answer the Android Auto version request within 20 seconds (phone locked or Android Auto not started).";
         if (!m_isAuthenticated) return "The Android Auto TLS handshake did not finish within 90 seconds.";
         if (!m_isDiscoverySent) return "The phone did not request the service list within 90 seconds.";
         return "No decoded video within 90 seconds. Check phone consent/unlock prompts and the preceding AA stage.";
@@ -458,6 +466,14 @@ private:
         if (m_isStopping) {
             if (now >= m_stopDeadline) { End(std::string(kStoppedByUser) + " (phone did not acknowledge)"); return; }
         } else {
+            // Android Auto may not be listening yet when the accessory has just (re)started;
+            // its answer to an early request is lost, so ask again until it replies.
+            if (!m_hasVersionReply && m_versionRequests < kMaxVersionRequests && now - m_lastVersionRequest >= kVersionRetryInterval) {
+                m_lastVersionRequest = now;
+                ++m_versionRequests;
+                Status("No version answer yet; asking the phone again (" + std::to_string(m_versionRequests) + "/" + std::to_string(kMaxVersionRequests) + ")");
+                m_control->sendVersionRequest(Promise());
+            }
             // The advertised interval is one second; the headunit's own keepalive stays well
             // below that so a slow phone is never mistaken for a dead link.
             if (m_isDiscoverySent && now - m_lastPing >= kPingInterval) {
@@ -470,6 +486,10 @@ private:
                 End("The phone stopped responding (no data for " + std::to_string(std::chrono::duration_cast<std::chrono::seconds>(kSilenceTimeout).count()) + " seconds)");
                 return;
             }
+            // No answer at all means Android Auto is not running on the phone (locked phone,
+            // stale accessory); waiting longer will not change that, so fail early and let the
+            // caller restart the connection instead of idling for the whole startup window.
+            if (!m_hasVersionReply && now - m_started > kVersionTimeout) { End(StartupTimeoutMessage()); return; }
             if (!m_result.hasVideo && now - m_started > kStartupTimeout) { End(StartupTimeoutMessage()); return; }
         }
         m_timer.expires_after(std::chrono::milliseconds(100));
@@ -496,6 +516,8 @@ private:
     std::chrono::steady_clock::time_point m_lastPing{};
     std::chrono::steady_clock::time_point m_lastActivity{std::chrono::steady_clock::now()};
     std::chrono::steady_clock::time_point m_stopDeadline{};
+    std::chrono::steady_clock::time_point m_lastVersionRequest{};
+    int m_versionRequests{1};
     int m_videoSession{-1};
     int m_decodeFailures{};
     bool m_isEnding{}, m_isStopping{}, m_isAuthenticated{}, m_hasVersionReply{};

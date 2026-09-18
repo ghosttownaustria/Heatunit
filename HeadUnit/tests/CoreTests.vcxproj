@@ -23,6 +23,8 @@
   <ItemGroup>
     <ClCompile Include="CoreTests.cpp" />
     <ClCompile Include="AoaTests.cpp" />
+    <ClCompile Include="AutoConnectTests.cpp" />
+    <ClCompile Include="..\src\androidauto\AutoConnect.cpp" />
     <ClCompile Include="..\src\androidauto\AoaNegotiator.cpp" />
     <ClCompile Include="..\src\androidauto\AndroidDeviceDetector.cpp" />
     <ClCompile Include="..\src\usb\UsbDescriptors.cpp" />

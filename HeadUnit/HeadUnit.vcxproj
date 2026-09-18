@@ -29,6 +29,12 @@
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\androidauto\AndroidAutoSession.cpp" />
     <ClCompile Include="src\usb\ProjectionTransport.cpp" />
+    <ClCompile Include="src\usb\DriverRepair.cpp" />
+    <ClCompile Include="src\usb\AutoConnectSystem.cpp" />
+    <ClCompile Include="src\androidauto\AutoConnect.cpp" />
+    <ClInclude Include="src\usb\AutoConnectSystem.h" />
+    <ClInclude Include="src\androidauto\AutoConnect.h" />
+    <ClInclude Include="src\usb\DriverRepair.h" />
     <ClCompile Include="src\video\VideoDecoder.cpp" />
     <ClCompile Include="src\androidauto\AoaNegotiator.cpp" />
     <ClInclude Include="src\androidauto\AoaNegotiator.h" />

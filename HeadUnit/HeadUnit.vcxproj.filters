@@ -24,6 +24,8 @@
     <ClCompile Include="src\usb\UsbDescriptors.cpp"><Filter>src\usb</Filter></ClCompile>
     <ClInclude Include="src\usb\UsbDescriptors.h"><Filter>src\usb</Filter></ClInclude>
     <ClCompile Include="src\usb\WindowsUsbBackend.cpp"><Filter>src\usb</Filter></ClCompile>
+    <ClCompile Include="src\usb\DriverRepair.cpp"><Filter>src\usb</Filter></ClCompile>
+    <ClInclude Include="src\usb\DriverRepair.h"><Filter>src\usb</Filter></ClInclude>
     <ClInclude Include="src\usb\WindowsUsbBackend.h"><Filter>src\usb</Filter></ClInclude>
     <ClInclude Include="src\usb\IUsbBackend.h"><Filter>src\usb</Filter></ClInclude>
     <ClInclude Include="src\usb\UsbTypes.h"><Filter>src\usb</Filter></ClInclude>

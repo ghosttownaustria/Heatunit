@@ -1,5 +1,47 @@
 # Progress
 
+## 2026-09-19: one button, automatic recovery
+
+- The window has one button. `RunAutoConnect` (`src/androidauto/AutoConnect.cpp`, portable and
+  unit-tested with 11 scripted scenarios in `tests/AutoConnectTests.cpp`) finds the phone, repairs
+  the USB driver when Windows reverted it, starts Android Auto and, when the phone never answers
+  the version request (20 s, previously up to 90 s), restarts the phone's USB connection and
+  retries (max. 2 recoveries, max. 3 driver repairs). Progress is shown step by step.
+- Failure seen on hardware: restarting Android Auto in place (AOA START on a phone already in
+  accessory mode) worked repeatedly, then failed five times in a row (`USB write deadline after
+  0 of 10 bytes`, phone not reading the accessory endpoint). Likely a phone-side state (phone
+  locked or Android Auto not launching); not confirmed.
+- Recovery, verified on hardware in a scratch program: disabling and re-enabling the accessory
+  device node (elevated) makes the phone re-enumerate and leave accessory mode, i.e. it comes back
+  as `04E8:6860` like after a cable replug. `libusb_reset_device` and `IOCTL_USB_HUB_CYCLE_PORT`
+  do not do this on Windows (no re-enumeration / Win32 31 on the xHCI root hub).
+  `HeadUnit.exe --recover-phone` does restart + driver repair in one elevated process
+  (one UAC prompt).
+- After such a restart the phone shows a single MTP interface (not MTP + modem). The composite
+  driver is not offered as "compatible" then, so `--repair-driver` selects it from the USB class
+  list (`DI_FLAGSEX_ALLOWEXCLUDEDDRVS`, hardware ID `USB\COMPOSITE`), after which `MI_00` receives the
+  existing WinUSB package. Verified on hardware: WinUSB bound and the following AOA START
+  accepted. **Not verified:** the complete flow up to video after the recovery; the phone dropped
+  off USB entirely during the last test run and needed a physical replug.
+- `Repair-PhoneDriver.ps1` and the device list / probe buttons are gone from the window.
+
+## 2026-09-18 (later): reconnect without replug, in-window driver repair
+
+- Cause of the recurring `LIBUSB_ERROR_NOT_FOUND`: Windows re-selects Samsung's driver
+  whenever the phone re-appears as `04E8:6860` (setupapi log, Kernel-PnP event 442), so the
+  forced `usbccgp`/WinUSB binding is lost each time. Details: `windows_connection.md`.
+- Reconnect: a phone already in accessory mode gets AOA identity + START again, which makes
+  Android relaunch Android Auto. **Verified on hardware** (Samsung SM-F776B): three
+  consecutive `--test-projection` runs, each with real video and a clean ByeBye stop,
+  without replugging. Version requests are repeated (max. 6, every 4 s) until the phone
+  answers; waiting for the accessory device is now 30 s (was 15 s, too short once) and
+  honours the Stop button.
+- Repair: `HeadUnit.exe --repair-driver` (elevated, started by the window via UAC when a
+  driver error occurs, then rescan and automatic connect). The elevated helper and the
+  window flow are new; only the "nothing to repair" paths were exercised on hardware,
+  the actual rebinding needs the phone in file-transfer mode after a replug.
+- `scripts/Repair-PhoneDriver.ps1` was removed (replaced by the in-app repair).
+
 ## 2026-09-18: connection lifecycle (start, stability, clean shutdown)
 
 - **Clean shutdown:** a user stop now sends `ByeByeRequest(USER_SELECTION)` and waits

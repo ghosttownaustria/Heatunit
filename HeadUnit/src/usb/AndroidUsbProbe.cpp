@@ -4,6 +4,7 @@
 #include "usb/ProjectionTransport.h"
 #include <libusb.h>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <iomanip>
 #include <stdexcept>
@@ -83,14 +84,66 @@ UsbProbeResult CheckAccessory(libusb_device* device, Logger& logger, const Acces
     return {UsbProbeState::AccessoryTransportReady, "Accessory transport",
         endpoints.str() + ". Probe released the interface. Choose Android Auto verbinden to start projection."};
 }
+struct UsbPort {
+    std::uint8_t bus{};
+    std::array<std::uint8_t, 8> ports{};
+    int count{};
+    bool Matches(libusb_device* device) const {
+        std::array<std::uint8_t, 8> current{};
+        const auto currentCount = libusb_get_port_numbers(device, current.data(), static_cast<int>(current.size()));
+        return libusb_get_bus_number(device) == bus && currentCount == count && current == ports;
+    }
+};
+// Waits until an accessory-mode device shows up on `port` and checks it. A restart has to
+// leave the bus first (or give up waiting for that after a few seconds, when the phone
+// restarts Android Auto without re-enumerating); a plain switch just waits for the device.
+// A device that appears before its driver is ready is retried instead of reported at once.
+std::optional<UsbProbeResult> WaitForAccessory(libusb_context* context, const UsbPort& port, std::chrono::seconds timeout,
+    bool isRestart, Logger& logger, const AccessorySession& session, const std::atomic_bool* isStopRequested)
+{
+    const auto begin = std::chrono::steady_clock::now();
+    const auto deadline = begin + timeout;
+    const auto leaveDeadline = begin + std::chrono::seconds(4);
+    bool hasLeft = !isRestart;
+    std::optional<UsbProbeResult> lastFailure;
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (isStopRequested && *isStopRequested) return UsbProbeResult{UsbProbeState::Failed, "AOA re-enumeration", "Stopped by user before the phone finished restarting."};
+        libusb_device** rawDevices = nullptr;
+        const auto count = libusb_get_device_list(context, &rawDevices);
+        if (count < 0) return UsbProbeResult{UsbProbeState::Failed, "USB enumeration", Error(static_cast<int>(count))};
+        const std::unique_ptr<libusb_device*, ListDeleter> devices(rawDevices);
+        libusb_device* found = nullptr;
+        libusb_device_descriptor foundDescriptor{};
+        for (std::ptrdiff_t i = 0; i < count && !found; ++i) {
+            libusb_device_descriptor descriptor{};
+            if (libusb_get_device_descriptor(rawDevices[i], &descriptor) != 0 || !IsAccessory(descriptor) || !port.Matches(rawDevices[i])) continue;
+            found = rawDevices[i];
+            foundDescriptor = descriptor;
+        }
+        if (!found) hasLeft = true;
+        else if (hasLeft || std::chrono::steady_clock::now() >= leaveDeadline) {
+            std::ostringstream message;
+            message << "Accessory " << (hasLeft ? "re-enumerated" : "restarted in place") << ": VID=18D1 PID=" << std::uppercase << std::hex << foundDescriptor.idProduct;
+            logger.Write("INFO", "AA", message.str());
+            // Android needs a moment to launch Android Auto before it can answer.
+            if (!hasLeft) std::this_thread::sleep_for(std::chrono::seconds(1));
+            auto checked = CheckAccessory(found, logger, session);
+            if (checked.state != UsbProbeState::DriverUnavailable) return checked;
+            lastFailure = std::move(checked);
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+    return lastFailure;
 }
-static UsbProbeResult RunAndroidUsb(const UsbDevice& selected, Logger& logger, bool isStartAccessory, const AccessorySession& session = {})
+}
+static UsbProbeResult RunAndroidUsb(const UsbDevice& selected, Logger& logger, bool isStartAccessory, const AccessorySession& session = {},
+    const std::atomic_bool* isStopRequested = nullptr)
 {
     std::string stage = "device selection";
-    const auto finish = [&](UsbProbeState state, const std::string& message) {
+    const auto finish = [&](UsbProbeState state, const std::string& message, bool canRepairDriver = false, bool isRetryable = false) {
         const bool isReady = state == UsbProbeState::AoaAvailable || state == UsbProbeState::AccessoryAvailable || state == UsbProbeState::AccessoryTransportReady || state == UsbProbeState::VideoReceived;
         logger.Write(isReady ? "INFO" : "ERROR", "AA", stage + ": " + message);
-        return UsbProbeResult{state, stage, message};
+        return UsbProbeResult{state, stage, message, canRepairDriver, isRetryable};
     };
     try {
         if (DetectAndroidDevice(selected).evidence == AndroidEvidence::None)
@@ -130,10 +183,12 @@ static UsbProbeResult RunAndroidUsb(const UsbDevice& selected, Logger& logger, b
         result = libusb_open(target, &rawHandle);
         if (result < 0) {
             const bool hasDriverIssue = result == LIBUSB_ERROR_NOT_FOUND || result == LIBUSB_ERROR_NOT_SUPPORTED || result == LIBUSB_ERROR_ACCESS;
+            const bool isNormalMode = !IsAccessory(targetDescriptor);
             return finish(hasDriverIssue ? UsbProbeState::DriverUnavailable : UsbProbeState::Failed,
                 Error(result) + ". " + (hasDriverIssue ?
-                "Windows exposes the device for discovery, but libusb cannot access it: the phone is bound to the Samsung/MTP driver instead of WinUSB (Windows can silently switch back). Fix: run HeadUnit\\scripts\\Repair-PhoneDriver.ps1 (checks the binding, asks for administrator rights), then rescan. Background: docs/windows_connection.md. No Android Auto handshake was sent." :
-                "Device open failed; rescan and inspect the USB connection."));
+                "Windows exposes the device for discovery, but libusb cannot access it: the phone is bound to the Samsung/MTP driver instead of WinUSB (Windows re-selects the driver whenever the phone re-appears in file-transfer mode). See docs/windows_connection.md. No Android Auto handshake was sent." :
+                "Device open failed; rescan and inspect the USB connection."),
+                hasDriverIssue && isNormalMode);
         }
         std::unique_ptr<libusb_device_handle, HandleDeleter> handle(rawHandle);
         // Confirm identity after opening; VID/PID alone does not distinguish two phones.
@@ -145,56 +200,52 @@ static UsbProbeResult RunAndroidUsb(const UsbDevice& selected, Logger& logger, b
                 return finish(UsbProbeState::Failed, "Device identity changed. Rescan and select the phone again.");
         }
         logger.Write("INFO", "USB", "Selected device handle opened");
-        if (IsAccessory(targetDescriptor)) {
+        const bool isAlreadyAccessory = IsAccessory(targetDescriptor);
+        if (isAlreadyAccessory && !session) {
+            // Probes only look at the accessory interface; they never restart the phone.
             handle.reset();
             const auto checked = CheckAccessory(target, logger, session);
             stage = checked.stage;
             return finish(checked.state, checked.message);
         }
-        stage = "AOA GET_PROTOCOL (51)";
-        unsigned char versionBytes[2]{};
-        result = libusb_control_transfer(handle.get(), 0xc0, 51, 0, 0, versionBytes, sizeof(versionBytes), 2000);
-        if (result < 0) return finish(UsbProbeState::Failed, Error(result) + ". AOA support could not be established; no mode switch attempted.");
-        if (result != 2) return finish(UsbProbeState::Failed, "Invalid AOA response length: " + std::to_string(result));
-        const auto protocolVersion = static_cast<unsigned>(versionBytes[0] | (versionBytes[1] << 8));
-        if (protocolVersion == 0) return finish(UsbProbeState::Failed, "Device reports no AOA support.");
-        logger.Write("INFO", "AA", "AOA version " + std::to_string(protocolVersion) + " received from phone");
-        if (!isStartAccessory) return finish(UsbProbeState::AoaAvailable,
-            "AOA version " + std::to_string(protocolVersion) + " received. Use Start accessory mode for the next USB step. AA video is not connected.");
-        std::array<std::uint8_t, 8> ports{};
-        const auto portCount = libusb_get_port_numbers(target, ports.data(), static_cast<int>(ports.size()));
-        const auto bus = libusb_get_bus_number(target);
-        if (portCount <= 0) return finish(UsbProbeState::Failed, "Cannot identify physical USB port; mode change refused");
+        if (!isAlreadyAccessory) {
+            stage = "AOA GET_PROTOCOL (51)";
+            unsigned char versionBytes[2]{};
+            result = libusb_control_transfer(handle.get(), 0xc0, 51, 0, 0, versionBytes, sizeof(versionBytes), 2000);
+            if (result < 0) return finish(UsbProbeState::Failed, Error(result) + ". AOA support could not be established; no mode switch attempted.");
+            if (result != 2) return finish(UsbProbeState::Failed, "Invalid AOA response length: " + std::to_string(result));
+            const auto protocolVersion = static_cast<unsigned>(versionBytes[0] | (versionBytes[1] << 8));
+            if (protocolVersion == 0) return finish(UsbProbeState::Failed, "Device reports no AOA support.");
+            logger.Write("INFO", "AA", "AOA version " + std::to_string(protocolVersion) + " received from phone");
+            if (!isStartAccessory) return finish(UsbProbeState::AoaAvailable,
+                "AOA version " + std::to_string(protocolVersion) + " received. Use Start accessory mode for the next USB step. AA video is not connected.");
+        }
+        UsbPort port;
+        port.count = libusb_get_port_numbers(target, port.ports.data(), static_cast<int>(port.ports.size()));
+        port.bus = libusb_get_bus_number(target);
+        if (port.count <= 0) return finish(UsbProbeState::Failed, "Cannot identify physical USB port; mode change refused");
+        // A finished session leaves the phone in accessory mode with Android Auto stopped, and
+        // a new version request then gets no usable answer. Sending the AOA start again makes
+        // Android launch Android Auto afresh, so no cable replug (and no driver re-selection
+        // by Windows) is needed between sessions.
+        bool isRestart = isAlreadyAccessory;
         LibusbControl control(handle.get());
-        RequestAccessoryMode(control, [&](const std::string& nextStage) {
-            stage = nextStage;
-            logger.Write("INFO", "AA", stage);
-        });
+        try {
+            RequestAccessoryMode(control, [&](const std::string& nextStage) {
+                stage = isRestart ? "AOA restart: " + nextStage : nextStage;
+                logger.Write("INFO", "AA", stage);
+            });
+        } catch (const std::exception& error) {
+            if (!isRestart) throw;
+            logger.Write("WARN", "AA", std::string("AOA restart not possible (") + error.what() + "); using the running accessory session");
+            isRestart = false;
+        }
         handle.reset();
         stage = "AOA re-enumeration";
-        logger.Write("INFO", "USB", "Waiting up to 15 seconds for accessory PID on the same USB port");
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
-        while (std::chrono::steady_clock::now() < deadline) {
-            libusb_device** rawUpdated = nullptr;
-            const auto updatedCount = libusb_get_device_list(context.get(), &rawUpdated);
-            if (updatedCount < 0) return finish(UsbProbeState::Failed, Error(static_cast<int>(updatedCount)));
-            const std::unique_ptr<libusb_device*, ListDeleter> updated(rawUpdated);
-            for (std::ptrdiff_t i = 0; i < updatedCount; ++i) {
-                libusb_device_descriptor descriptor{};
-                if (libusb_get_device_descriptor(rawUpdated[i], &descriptor) != 0 || !IsAccessory(descriptor)) continue;
-                std::array<std::uint8_t, 8> currentPorts{};
-                const auto currentCount = libusb_get_port_numbers(rawUpdated[i], currentPorts.data(), static_cast<int>(currentPorts.size()));
-                if (libusb_get_bus_number(rawUpdated[i]) != bus || currentCount != portCount || currentPorts != ports) continue;
-                std::ostringstream message;
-                message << "Accessory re-enumerated: VID=18D1 PID=" << std::uppercase << std::hex << descriptor.idProduct;
-                logger.Write("INFO", "AA", message.str());
-                const auto checked = CheckAccessory(rawUpdated[i], logger, session);
-                stage = checked.stage;
-                return finish(checked.state, checked.message);
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(250));
-        }
-        return finish(UsbProbeState::Failed, "No accessory PID observed on the original USB port within 15 seconds. Check phone prompts and rescan; do not assume a session was established.");
+        logger.Write("INFO", "USB", std::string("Waiting up to 30 seconds for the accessory device on the same USB port") + (isRestart ? " (restart)" : ""));
+        const auto waited = WaitForAccessory(context.get(), port, std::chrono::seconds(30), isRestart, logger, session, isStopRequested);
+        if (waited) { stage = waited->stage; return finish(waited->state, waited->message, waited->canRepairDriver, waited->isRetryable); }
+        return finish(UsbProbeState::Failed, "No accessory device observed on the original USB port within 30 seconds. Check phone prompts and rescan; do not assume a session was established.", false, true);
     } catch (const std::exception& error) { return finish(UsbProbeState::Failed, error.what()); }
 }
 UsbProbeResult ProbeAndroidUsb(const UsbDevice& selected, Logger& logger) { return RunAndroidUsb(selected, logger, false); }
@@ -204,7 +255,10 @@ UsbProbeResult ConnectAndroidAuto(const UsbDevice& selected, Logger& logger,
     return RunAndroidUsb(selected, logger, true, [&](libusb_device_handle* handle, std::uint8_t input, std::uint8_t output) {
         auto transport = std::make_shared<ProjectionTransport>(handle, input, output);
         const auto result = RunAndroidAutoSession(transport, logger, isStopRequested, callbacks);
-        return UsbProbeResult{result.hasVideo ? UsbProbeState::VideoReceived : UsbProbeState::Failed, "Android Auto session", result.message};
-    });
+        UsbProbeResult probe{result.hasVideo ? UsbProbeState::VideoReceived : UsbProbeState::Failed, "Android Auto session", result.message};
+        // Never reaching Android Auto on the phone (and not being told to stop) is worth another try.
+        probe.isRetryable = !result.hasVideo && !result.hasVersionReply && !result.isStoppedByUser;
+        return probe;
+    }, &isStopRequested);
 }
 }
