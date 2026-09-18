@@ -1,5 +1,29 @@
 # Progress
 
+## 2026-09-18: connection lifecycle (start, stability, clean shutdown)
+
+- **Clean shutdown:** a user stop now sends `ByeByeRequest(USER_SELECTION)` and waits
+  up to 2 s for the phone's answer before the transport is stopped. Before TLS is
+  established the session ends immediately. Aim: the phone leaves Android Auto
+  properly so the next connect does not require replugging the cable. **Not yet
+  verified on hardware.**
+- **Transport:** `stop()` is idempotent (previously joined the same thread pools
+  twice), requests after `stop()` are rejected instead of silently dropped, USB stalls
+  are cleared with CLEAR_HALT (max. 3 in a row), errors carry a readable libusb text.
+- **Session:** liveness watchdog (30 s), stage-specific startup timeout message,
+  undecodable video packets are dropped instead of ending the session, a throwing
+  handler no longer skips queued completions, leak check after shutdown.
+- **UI:** one state machine controls all buttons; the only Android phone is used
+  automatically when nothing is selected; closing the window mid-session ends it
+  cleanly first; automatic rescan 1.5 s after a session; the last video frame is
+  cleared when the session ends.
+- **Tests:** ProtocolTests now cover stopping a session that is waiting for the phone
+  (prompt end, transport stopped, no leaked session) and repeated transport `stop()`
+  with rejected follow-up requests. Debug build, CoreTests, ProtocolTests and the GUI
+  smoke run pass. The graceful ByeBye path itself needs a real phone or a scripted
+  TLS peer and is untested.
+
+
 ## 2026-09-18: native protocol/video implementation and real handshake
 
 Added the pinned AASDK native static-library project, automatic protoc generation,

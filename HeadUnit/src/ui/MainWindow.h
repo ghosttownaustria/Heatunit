@@ -6,6 +6,7 @@
 #include <QMainWindow>
 #include <mutex>
 #include <optional>
+class QCloseEvent;
 class QLabel;
 class QPushButton;
 class QTreeWidget;
@@ -15,10 +16,19 @@ class MainWindow final : public QMainWindow {
 public:
     MainWindow(IUsbBackend& backend, Logger& logger, bool isSmokeTest, bool isProjectionTest = false);
     ~MainWindow() override;
+protected:
+    void closeEvent(QCloseEvent* event) override;
 private:
+    // Exactly one activity runs at a time; every button's availability follows from it.
+    enum class State { Idle, Scanning, Probing, Connecting, Stopping };
+    void SetState(State state);
     void StartScan();
+    void BeginScan(bool isAutomatic);
     void FinishScan();
+    void FinishProbe(const UsbProbeResult& result);
+    void RequestStop();
     void StartUsbProbe(bool isStartAccessory = false, bool isProjection = false);
+    std::optional<UsbDevice> SelectedDevice() const;
     IUsbBackend& m_backend;
     Logger& m_logger;
     bool m_isSmokeTest;
@@ -35,6 +45,9 @@ private:
     bool m_isProjectionTest{}, m_hasTestStarted{};
     unsigned m_displayedFrames{};
     bool m_isAccessoryAttempt{};
+    bool m_isCloseRequested{};
+    State m_state{State::Idle};
+    int m_candidateCount{};
     QLabel* m_connectionStatus{};
     QTreeWidget* m_devices{};
     QFutureWatcher<UsbScanResult> m_watcher;

@@ -6,12 +6,25 @@ and Qt video rendering are implemented. Real phone testing has confirmed version
 1.7, TLS and service discovery; projected video is not yet hardware-verified.
 There is no simulated phone data or AA screen.
 
-**Verbinden:** Handy auswaehlen und **Android Auto verbinden** anklicken.
-Der Knopf uebernimmt auch den Accessory-Moduswechsel. Hinweise auf dem entsperrten
-Handy bestaetigen. **Verbindung beenden** stoppt die Sitzung. Nach einer
-fehlgeschlagenen Sitzung das Kabel neu einstecken; ein offener USB-Handle allein
-startet den Android-Auto-Prozess auf dem Handy nicht neu. Audio und Touch-Eingabe
-sind noch nicht implementiert.
+**Verbinden:** **Android Auto verbinden** anklicken. Ist genau ein Android-Handy
+angeschlossen, wird es automatisch verwendet; bei mehreren zuerst eines in der Liste
+auswaehlen. Der Knopf uebernimmt auch den Accessory-Moduswechsel. Hinweise auf dem
+entsperrten Handy bestaetigen.
+
+**Beenden:** **Verbindung beenden** (oder das Fenster schliessen) schickt dem Handy
+zuerst ein Android-Auto-Goodbye und wartet bis zu 2 Sekunden auf die Bestaetigung,
+bevor die USB-Verbindung getrennt und die Schnittstelle freigegeben wird. Danach
+startet die App nach kurzer Pause automatisch einen neuen Scan, sodass das Handy
+sofort wieder verbunden werden kann. Beendet das Handy die Sitzung selbst, laeuft
+derselbe Ablauf.
+
+**Stabilitaet:** Eine Sitzung endet mit einer konkreten Meldung, wenn das Kabel
+gezogen wird, das Handy 30 Sekunden lang nichts mehr sendet oder in der Startphase
+90 Sekunden lang kein Fortschritt erkennbar ist (die Meldung nennt die haengende
+Stufe: Versionsabfrage, TLS, Servicesuche oder Video). Einzelne nicht decodierbare
+Videopakete werden verworfen statt die Sitzung zu beenden. Hilft nach einer
+fehlgeschlagenen Sitzung ein erneutes Verbinden nicht, das Kabel neu einstecken.
+Audio und Touch-Eingabe sind noch nicht implementiert.
 
 Beim ersten Build auf einem neuen Rechner einmal
 `powershell -ExecutionPolicy Bypass -File HeadUnit/scripts/Prepare-Dependencies.ps1`

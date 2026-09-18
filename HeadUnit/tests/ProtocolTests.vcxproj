@@ -9,10 +9,12 @@
   <PropertyGroup Label="Configuration"><ConfigurationType>Application</ConfigurationType><PlatformToolset>v145</PlatformToolset></PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <Import Project="..\msbuild\Common.props" />
+  <Import Project="..\msbuild\Usb.props" />
   <Import Project="..\msbuild\Protocol.props" />
   <ItemGroup>
     <ClCompile Include="ProtocolTests.cpp" />
     <ClCompile Include="..\src\androidauto\AndroidAutoSession.cpp" />
+    <ClCompile Include="..\src\usb\ProjectionTransport.cpp" />
     <ClCompile Include="..\src\video\VideoDecoder.cpp" />
     <ClCompile Include="..\src\logging\Logger.cpp" />
     <ProjectReference Include="..\Aasdk.vcxproj"><Project>{D37D4DBC-67C4-4572-BDCB-123D4AF98A76}</Project></ProjectReference>

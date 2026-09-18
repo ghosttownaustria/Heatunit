@@ -1,11 +1,17 @@
 #include "androidauto/AndroidAutoSession.h"
+#include "usb/ProjectionTransport.h"
 #include <aasdk/Messenger/Cryptor.hpp>
 #include <aasdk/Transport/SSLWrapper.hpp>
 #include <aasdk/Transport/ITransport.hpp>
 #include <openssl/err.h>
+#include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <iterator>
 #include <stdexcept>
+#include <thread>
+#include <utility>
 
 namespace {
 void Check(bool value, const char* message) { if (!value) throw std::runtime_error(message); }
@@ -83,6 +89,56 @@ public:
     void stop() override { m_hasStopped = true; }
     bool m_hasStopped{};
 };
+// A phone that connected but never says anything: the read stays pending until stop().
+class SilentTransport final : public aasdk::transport::ITransport {
+public:
+    void receive(std::size_t, ReceivePromise::Pointer promise) override { m_pending = std::move(promise); }
+    void send(Data, SendPromise::Pointer promise) override { promise->resolve(); }
+    void stop() override {
+        m_hasStopped = true;
+        if (m_pending) std::exchange(m_pending, nullptr)->reject(aasdk::error::Error(aasdk::error::ErrorCode::OPERATION_ABORTED));
+    }
+    ReceivePromise::Pointer m_pending;
+    bool m_hasStopped{};
+};
+std::string ReadFile(const std::filesystem::path& path) {
+    std::ifstream file(path);
+    return {std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+}
+// The user presses "Verbindung beenden" while the phone has not answered yet: the session
+// must end promptly, stop its transport and leave no object behind.
+void TestStopWhileWaitingForPhone() {
+    const auto logPath = std::filesystem::temp_directory_path() / "headunit-protocol-stop-tests.log";
+    std::filesystem::remove(logPath);
+    headunit::Logger logger(logPath);
+    std::atomic_bool isStopRequested{false};
+    auto transport = std::make_shared<SilentTransport>();
+    std::thread user([&] { std::this_thread::sleep_for(std::chrono::milliseconds(300)); isStopRequested = true; });
+    const auto begin = std::chrono::steady_clock::now();
+    const auto result = headunit::RunAndroidAutoSession(transport, logger, isStopRequested, {});
+    user.join();
+    Check(std::chrono::steady_clock::now() - begin < std::chrono::seconds(5), "Stopping a waiting session took too long");
+    Check(transport->m_hasStopped && !result.hasVideo, "Stopped session kept its transport or reported video");
+    Check(result.message.find("stopped by user") != std::string::npos, "Stop reason was not reported");
+    Check(ReadFile(logPath).find("ownership cycle") == std::string::npos, "Session leaked after being stopped");
+}
+// stop() must be repeatable and must reject later requests instead of dropping them,
+// otherwise a protocol layer waits forever for a completion that never comes.
+void TestTransportStop() {
+    boost::asio::io_context io;
+    auto transport = std::make_shared<headunit::ProjectionTransport>(nullptr, 0x81, 0x01);
+    transport->stop();
+    transport->stop();
+    int rejected = 0;
+    auto receive = aasdk::transport::ITransport::ReceivePromise::defer(io);
+    receive->then([](Data) {}, [&](const aasdk::error::Error& error) { rejected += error.getCode() == aasdk::error::ErrorCode::OPERATION_ABORTED; });
+    transport->receive(16, receive);
+    auto send = aasdk::transport::ITransport::SendPromise::defer(io);
+    send->then([] {}, [&](const aasdk::error::Error& error) { rejected += error.getCode() == aasdk::error::ErrorCode::OPERATION_ABORTED; });
+    transport->send(Data(4), send);
+    io.run();
+    Check(rejected == 2, "Requests after stop() were not rejected");
+}
 }
 int main() {
     try {
@@ -93,7 +149,9 @@ int main() {
         auto transport = std::make_shared<StoppedTransport>();
         const auto result = headunit::RunAndroidAutoSession(transport, logger, isStopRequested, {});
         Check(!result.hasVideo && transport->m_hasStopped, "Cancelled session reported video or retained transport");
-        std::cout << "TLS 1.2/1.3 variable record sizes and session cancellation passed\n";
+        TestStopWhileWaitingForPhone();
+        TestTransportStop();
+        std::cout << "TLS 1.2/1.3 variable record sizes, session cancellation and transport shutdown passed\n";
         return 0;
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }
 }

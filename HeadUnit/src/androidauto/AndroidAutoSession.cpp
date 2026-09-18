@@ -54,6 +54,16 @@ const AudioStream kAudioStreams[] = {
     {ChannelId::MEDIA_SINK_GUIDANCE_AUDIO, sink::AUDIO_STREAM_GUIDANCE, 16000, 16, 1, "Guidance"},
     {ChannelId::MEDIA_SINK_SYSTEM_AUDIO, sink::AUDIO_STREAM_SYSTEM_AUDIO, 16000, 16, 1, "System"},
 };
+constexpr const char* kStoppedByUser = "Android Auto stopped by user";
+constexpr auto kPingInterval = std::chrono::seconds(5);
+// How long the phone gets to answer our goodbye before the link is cut anyway.
+constexpr auto kShutdownGrace = std::chrono::seconds(2);
+// No byte from the phone for this long after discovery means the link is dead.
+constexpr auto kSilenceTimeout = std::chrono::seconds(30);
+constexpr auto kStartupTimeout = std::chrono::seconds(90);
+// Undecodable packets are dropped (the stream recovers at the next keyframe); only
+// a decoder that never recovers ends the session.
+constexpr int kMaxDecodeFailures = 200;
 constexpr std::uint32_t kMicrophoneSamplingRate = 16000;
 constexpr std::uint32_t kMicrophoneBits = 16;
 constexpr std::uint32_t kMicrophoneChannels = 1;
@@ -101,6 +111,8 @@ public:
     void onMediaIndication(const aasdk::common::DataConstBuffer& buffer) override { onMediaWithTimestampIndication(0, buffer); }
     void onChannelError(const aasdk::error::Error& error) override {
         // Audio is not required for projection; report it but keep the video session running.
+        // An abort is just the session shutting down, not a failure worth reporting.
+        if (error.getCode() == aasdk::error::ErrorCode::OPERATION_ABORTED) return;
         m_report(m_name + " audio channel stopped: " + error.what());
     }
 private:
@@ -151,6 +163,7 @@ public:
     }
     void onMediaChannelAckIndication(const source::Ack&) override { m_channel->receive(shared_from_this()); }
     void onChannelError(const aasdk::error::Error& error) override {
+        if (error.getCode() == aasdk::error::ErrorCode::OPERATION_ABORTED) return;
         m_report(std::string("Microphone channel stopped: ") + error.what());
     }
 private:
@@ -206,6 +219,7 @@ public:
         m_video->receive(shared_from_this());
         m_sensors->receive(shared_from_this());
         m_input->receive(shared_from_this());
+        MarkAlive();
         Status("Android Auto version request sent; waiting for phone");
         m_control->sendVersionRequest(Promise());
         ReceiveControl();
@@ -217,13 +231,28 @@ public:
         m_result.message = reason;
         Status(reason);
         m_timer.cancel();
+        // Stopping the transport joins its USB workers and rejects everything still
+        // pending; the rejections are drained by io.run() in RunAndroidAutoSession.
         m_transport->stop();
         m_messenger->stop();
-        // The transport joins its reader; drain all posted completions naturally.
+    }
+    // Ends the session politely: the phone is told to leave Android Auto, which lets
+    // it start a fresh session on the next connect. Falls back to a plain End() when
+    // the encrypted control channel is not up yet or the phone does not answer.
+    void BeginShutdown() {
+        if (m_isEnding || m_isStopping) return;
+        if (!m_isAuthenticated) { End(kStoppedByUser); return; }
+        m_isStopping = true;
+        m_stopDeadline = std::chrono::steady_clock::now() + kShutdownGrace;
+        Status("Stopping Android Auto: saying goodbye to the phone");
+        ctrl::ByeByeRequest request;
+        request.set_reason(ctrl::USER_SELECTION);
+        m_control->sendShutdownRequest(request, Promise());
     }
     ProjectionResult Result() const { return m_result; }
     void onVersionResponse(std::uint16_t major, std::uint16_t minor, aap_protobuf::shared::MessageStatus status) override {
         if (status != success) { End("Phone rejected AA version: status=" + std::to_string(status)); return; }
+        m_hasVersionReply = true;
         Status("Phone accepted Android Auto " + std::to_string(major) + "." + std::to_string(minor) + "; starting TLS");
         m_cryptor->doHandshake();
         m_control->sendHandshake(m_cryptor->readHandshakeBuffer(), Promise());
@@ -235,6 +264,7 @@ public:
         auto outgoing = m_cryptor->readHandshakeBuffer();
         if (!outgoing.empty()) m_control->sendHandshake(std::move(outgoing), Promise());
         if (isComplete) {
+            m_isAuthenticated = true;
             Status("Android Auto TLS handshake completed; sending authentication complete");
             ctrl::AuthResponse auth;
             auth.set_status(success);
@@ -334,8 +364,19 @@ public:
         Status("Phone stopped its video stream"); m_videoSession = -1; m_video->receive(shared_from_this());
     }
     void onMediaWithTimestampIndication(aasdk::messenger::Timestamp::ValueType, const aasdk::common::DataConstBuffer& buffer) override {
+        MarkAlive();
+        if (m_isEnding) return;
         if (!m_hasVideoPackets) { m_hasVideoPackets = true; Status("First real H.264 payload received: " + std::to_string(buffer.size) + " bytes"); }
-        m_decoder->Decode({buffer.cdata, buffer.size});
+        try {
+            m_decoder->Decode({buffer.cdata, buffer.size});
+            m_decodeFailures = 0;
+        } catch (const std::exception& error) {
+            // The packet is still acknowledged so the phone keeps streaming and can
+            // send the next keyframe.
+            if (++m_decodeFailures == 1 || m_decodeFailures % 50 == 0)
+                Status(std::string("Dropped undecodable video packet: ") + error.what());
+            if (m_decodeFailures >= kMaxDecodeFailures) { End(std::string("Video decoding keeps failing: ") + error.what()); return; }
+        }
         source::Ack ack;
         ack.set_session_id(m_videoSession); ack.set_ack(1);
         m_video->sendMediaAckIndication(ack, Promise());
@@ -385,7 +426,9 @@ public:
         ctrl::ByeByeResponse response;
         m_control->sendShutdownResponse(response, Promise([self = shared_from_this()] { self->End("Phone ended Android Auto"); }));
     }
-    void onByeByeResponse(const ctrl::ByeByeResponse&) override { End("Android Auto shutdown acknowledged"); }
+    void onByeByeResponse(const ctrl::ByeByeResponse&) override {
+        End(m_isStopping ? kStoppedByUser : "Android Auto shutdown acknowledged");
+    }
     void onChannelError(const aasdk::error::Error& error) override { if (!m_isEnding) End(std::string("Android Auto channel failure: ") + error.what()); }
 private:
     aasdk::channel::SendPromise::Pointer Promise(std::function<void()> onSent = [] {}) {
@@ -393,26 +436,41 @@ private:
         promise->then(std::move(onSent), [self = shared_from_this()](auto error) { self->onChannelError(error); });
         return promise;
     }
-    void ReceiveControl() { if (!m_isEnding) m_control->receive(shared_from_this()); }
+    // Called after every inbound control message, so it doubles as the liveness signal.
+    void ReceiveControl() { MarkAlive(); if (!m_isEnding) m_control->receive(shared_from_this()); }
+    void MarkAlive() { m_lastActivity = std::chrono::steady_clock::now(); }
     void FocusVideo() {
         video::VideoFocusNotification focus; focus.set_focus(video::VIDEO_FOCUS_PROJECTED); focus.set_unsolicited(true);
         m_video->sendVideoFocusIndication(focus, Promise());
     }
     void Status(const std::string& message) { m_logger.Write("INFO", "AA", message); if (m_callbacks.onStatus) m_callbacks.onStatus(message); }
+    std::string StartupTimeoutMessage() const {
+        if (!m_hasVersionReply) return "The phone never answered the Android Auto version request. Unplug and replug the USB cable, unlock the phone and connect again.";
+        if (!m_isAuthenticated) return "The Android Auto TLS handshake did not finish within 90 seconds.";
+        if (!m_isDiscoverySent) return "The phone did not request the service list within 90 seconds.";
+        return "No decoded video within 90 seconds. Check phone consent/unlock prompts and the preceding AA stage.";
+    }
     void Tick() {
         if (m_isEnding) return;
-        if (m_isStopRequested) { End("Android Auto stopped by user"); return; }
         const auto now = std::chrono::steady_clock::now();
-        // The advertised interval is one second; the headunit's own keepalive stays well
-        // below that so a slow phone is never mistaken for a dead link.
-        if (m_isDiscoverySent && now - m_lastPing >= std::chrono::seconds(5)) {
-            m_lastPing = now;
-            ctrl::PingRequest ping;
-            ping.set_timestamp(std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count());
-            m_control->sendPingRequest(ping, Promise());
-        }
-        if (!m_result.hasVideo && std::chrono::steady_clock::now() - m_started > std::chrono::seconds(90)) {
-            End("No decoded video within 90 seconds. Check phone consent/unlock prompts and the preceding AA stage."); return;
+        if (m_isStopRequested) BeginShutdown();
+        if (m_isEnding) return;
+        if (m_isStopping) {
+            if (now >= m_stopDeadline) { End(std::string(kStoppedByUser) + " (phone did not acknowledge)"); return; }
+        } else {
+            // The advertised interval is one second; the headunit's own keepalive stays well
+            // below that so a slow phone is never mistaken for a dead link.
+            if (m_isDiscoverySent && now - m_lastPing >= kPingInterval) {
+                m_lastPing = now;
+                ctrl::PingRequest ping;
+                ping.set_timestamp(std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count());
+                m_control->sendPingRequest(ping, Promise());
+            }
+            if (m_isDiscoverySent && now - m_lastActivity > kSilenceTimeout) {
+                End("The phone stopped responding (no data for " + std::to_string(std::chrono::duration_cast<std::chrono::seconds>(kSilenceTimeout).count()) + " seconds)");
+                return;
+            }
+            if (!m_result.hasVideo && now - m_started > kStartupTimeout) { End(StartupTimeoutMessage()); return; }
         }
         m_timer.expires_after(std::chrono::milliseconds(100));
         m_timer.async_wait([weak = weak_from_this()](auto error) { if (!error) if (auto self = weak.lock()) self->Tick(); });
@@ -436,8 +494,12 @@ private:
     ProjectionResult m_result;
     std::chrono::steady_clock::time_point m_started{std::chrono::steady_clock::now()};
     std::chrono::steady_clock::time_point m_lastPing{};
+    std::chrono::steady_clock::time_point m_lastActivity{std::chrono::steady_clock::now()};
+    std::chrono::steady_clock::time_point m_stopDeadline{};
     int m_videoSession{-1};
-    bool m_isEnding{}, m_hasVideoPackets{}, m_isDiscoverySent{}, m_hasPingReply{};
+    int m_decodeFailures{};
+    bool m_isEnding{}, m_isStopping{}, m_isAuthenticated{}, m_hasVersionReply{};
+    bool m_hasVideoPackets{}, m_isDiscoverySent{}, m_hasPingReply{};
 };
 }
 ProjectionResult RunAndroidAutoSession(std::shared_ptr<aasdk::transport::ITransport> transport,
@@ -446,11 +508,23 @@ ProjectionResult RunAndroidAutoSession(std::shared_ptr<aasdk::transport::ITransp
         aasdk::common::ModernLogger::getInstance().setLevel(aasdk::common::LogLevel::DEBUG);
     boost::asio::io_context io;
     auto session = std::make_shared<Session>(io, transport, logger, isStopRequested, std::move(callbacks));
-    try { session->Start(); io.run(); }
+    const std::weak_ptr<Session> observer = session;
+    try { session->Start(); }
     catch (const std::exception& error) { session->End(std::string("AA session failed: ") + error.what()); }
+    // A throwing handler must not abandon the handlers still queued behind it: end the
+    // session, then keep running until every completion has been delivered.
+    for (bool isDrained = false; !isDrained;) {
+        try { io.run(); isDrained = true; }
+        catch (const std::exception& error) { session->End(std::string("AA session failed: ") + error.what()); }
+    }
     transport->stop();
     io.restart();
     io.poll();
-    return session->Result();
+    auto result = session->Result();
+    session.reset();
+    // Everything the session owns must be gone before the caller releases the USB
+    // interface; a survivor would mean a promise/handler ownership cycle.
+    if (!observer.expired()) logger.Write("WARN", "AA", "Session object is still referenced after shutdown (ownership cycle)");
+    return result;
 }
 }

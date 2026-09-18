@@ -46,6 +46,23 @@ reads, preserves partial writes, uses 100 ms read polls and a bounded write
 deadline. Stopping joins the reader before interface release and drains protocol
 completions before destroying the Asio context.
 
+Session lifecycle: a 100 ms tick drives all timing. A user stop (atomic flag) or a
+phone-side ByeBye leads to `End()`. After TLS a user stop first sends
+`ByeByeRequest(USER_SELECTION)` and waits up to 2 s for the response; before TLS it
+ends immediately. `End()` stops the transport (idempotent, joins both USB workers,
+later receive/send calls are rejected with OPERATION_ABORTED rather than dropped),
+stops the messenger and lets `io.run()` deliver the rejections, which releases the
+promise/handler ownership cycles. `RunAndroidAutoSession` logs a warning if the
+session object survives that. Exceptions from handlers end the session but never
+skip queued completions. Watchdogs: 30 s without any inbound data after service
+discovery, and a 90 s startup limit whose message names the stage that stalled.
+Undecodable video packets are dropped and still acknowledged.
+
+UI lifecycle: `MainWindow` has a single state (Idle, Scanning, Probing, Connecting,
+Stopping) that alone decides which buttons are enabled. Closing the window during a
+session requests a stop and closes once the worker has finished; after a session
+the device list is rescanned automatically because the phone re-enumerates.
+
 FFmpeg accepts only the advertised H.264 video path. Decoded RGB frames replace
 the previous mailbox frame under a mutex; a 33 ms Qt timer consumes the newest
 one, preventing a growing GUI event backlog. Only the first displayed real frame

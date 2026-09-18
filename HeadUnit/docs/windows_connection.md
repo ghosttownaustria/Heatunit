@@ -1,5 +1,30 @@
 # Windows USB connection
 
+## 2026-09-18: WinUSB binding reverted (LIBUSB_ERROR_NOT_FOUND again)
+
+Symptom: `USB open: LIBUSB_ERROR_NOT_FOUND (-5)` although the phone is attached and
+in file-transfer mode. Read-only check: the composite parent `USB\VID_04E8&PID_6860\...`
+is bound to Samsung `dg_ssudbus` again (install date 2026-09-18 21:50) and the MTP
+function to `WUDFWpdMtp`; the `MI_00`/WinUSB layout of 2026-09-17 is gone. The WinUSB
+package `oem151.inf` (libwdi) is still in the driver store, and the backup is intact.
+
+Fix (run by the user, needs administrator rights, UAC prompt appears):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File HeadUnit\scripts\Repair-PhoneDriver.ps1
+```
+
+`-CheckOnly` only reports the binding (exit 0 = WinUSB bound, 1 = broken). The script
+re-runs the verified parent switch from `.tools/usb-driver-backup`, waits for `MI_00` to
+appear with WinUSB and then runs `HeadUnit.exe --probe-usb`. If the binding reverts
+again (Samsung USB Drivers / Windows Update may reinstall `oem144.inf`), run it again.
+
+Open point, "charging only" like a real car: Android Auto starts through AOA, which
+also works while the phone is in "no data transfer" mode; the phone then shows its own
+"allow Android Auto" prompt. What is missing is a WinUSB binding for that mode, because
+its PID/interface layout is not yet known. Set the phone to "No data transfer", scan
+(`HeadUnit.exe --scan` or the UI) and record the VID/PID and interfaces here.
+
 ## 2026-09-17: USB driver blocker resolved on the test phone
 
 With the user's approval, the connected Samsung `04E8:6860` was changed as follows:

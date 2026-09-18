@@ -132,7 +132,7 @@ static UsbProbeResult RunAndroidUsb(const UsbDevice& selected, Logger& logger, b
             const bool hasDriverIssue = result == LIBUSB_ERROR_NOT_FOUND || result == LIBUSB_ERROR_NOT_SUPPORTED || result == LIBUSB_ERROR_ACCESS;
             return finish(hasDriverIssue ? UsbProbeState::DriverUnavailable : UsbProbeState::Failed,
                 Error(result) + ". " + (hasDriverIssue ?
-                "Windows exposes the device for discovery, but libusb cannot access it. Check the bound driver/permissions; the Samsung/MTP driver does not provide WinUSB access. See docs/windows_connection.md. No Android Auto handshake was sent." :
+                "Windows exposes the device for discovery, but libusb cannot access it: the phone is bound to the Samsung/MTP driver instead of WinUSB (Windows can silently switch back). Fix: run HeadUnit\\scripts\\Repair-PhoneDriver.ps1 (checks the binding, asks for administrator rights), then rescan. Background: docs/windows_connection.md. No Android Auto handshake was sent." :
                 "Device open failed; rescan and inspect the USB connection."));
         }
         std::unique_ptr<libusb_device_handle, HandleDeleter> handle(rawHandle);
