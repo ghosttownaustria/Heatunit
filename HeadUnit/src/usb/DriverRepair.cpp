@@ -208,16 +208,19 @@ PhoneMode RestartAccessoryNode(const std::wstring& instance, std::chrono::millis
     if (!ChangeDeviceState(instance, DICS_DISABLE, error)) return PhoneMode::Gone;
     std::this_thread::sleep_for(offTime);
     if (!ChangeDeviceState(instance, DICS_ENABLE, error)) return PhoneMode::Gone;
-    // The phone drops off the bus for a few seconds and returns; wait for what it comes back as.
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(25);
+    // The phone drops off the bus for a few seconds and returns; wait for what it comes back as. A phone
+    // that never drops off did not see the link go away, so the attempt failed: do not wait it out.
+    const auto begin = std::chrono::steady_clock::now();
+    const auto deadline = begin + std::chrono::seconds(25);
     bool hasLeft = false;
     while (std::chrono::steady_clock::now() < deadline) {
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
         const auto mode = CurrentMode();
         if (mode == PhoneMode::Gone) hasLeft = true;
         else if (mode == PhoneMode::Normal || hasLeft) return mode;
+        else if (std::chrono::steady_clock::now() - begin > std::chrono::seconds(9)) break;
     }
-    logger.Write("WARN", "REPAIR", "Phone did not re-enumerate within 25 seconds");
+    logger.Write("WARN", "REPAIR", hasLeft ? "Phone did not come back within 25 seconds" : "Phone stayed in accessory mode");
     return CurrentMode();
 }
 }

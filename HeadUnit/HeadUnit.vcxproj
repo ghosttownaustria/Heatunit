@@ -43,6 +43,14 @@
     <ClCompile Include="src\androidauto\AndroidDeviceDetector.cpp" />
     <ClCompile Include="src\logging\Logger.cpp" />
     <ClCompile Include="src\ui\MainWindow.cpp" />
+    <ClCompile Include="src\ui\CarWidgets.cpp" />
+    <ClCompile Include="src\androidauto\InputReports.cpp" />
+    <ClCompile Include="src\audio\WasapiAudioEngine.cpp" />
+    <ClInclude Include="src\ui\CarWidgets.h" />
+    <ClInclude Include="src\androidauto\InputReports.h" />
+    <ClInclude Include="src\androidauto\ProjectionInput.h" />
+    <ClInclude Include="src\audio\AudioTypes.h" />
+    <ClInclude Include="src\audio\WasapiAudioEngine.h" />
     <ClCompile Include="src\usb\UsbDescriptors.cpp" />
     <ClCompile Include="src\usb\WindowsUsbBackend.cpp" />
     <ClInclude Include="src\androidauto\AndroidDeviceDetector.h" />

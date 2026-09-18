@@ -13,7 +13,9 @@
   <Import Project="..\msbuild\Protocol.props" />
   <ItemGroup>
     <ClCompile Include="ProtocolTests.cpp" />
+    <ClCompile Include="InputAudioTests.cpp" />
     <ClCompile Include="..\src\androidauto\AndroidAutoSession.cpp" />
+    <ClCompile Include="..\src\androidauto\InputReports.cpp" />
     <ClCompile Include="..\src\usb\ProjectionTransport.cpp" />
     <ClCompile Include="..\src\video\VideoDecoder.cpp" />
     <ClCompile Include="..\src\logging\Logger.cpp" />

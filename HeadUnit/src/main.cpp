@@ -11,7 +11,7 @@
 
 int main(int argc, char* argv[])
 {
-    bool isScanOnly = false, isSmokeTest = false, isUsbProbe = false, isStartAccessory = false, isProjectionTest = false, isRepairDriver = false, isRecoverPhone = false;
+    bool isScanOnly = false, isSmokeTest = false, isUsbProbe = false, isStartAccessory = false, isProjectionTest = false, isRepairDriver = false, isRecoverPhone = false, isInputTest = false, isAudioTest = false;
     for (int index = 1; index < argc; ++index) {
         const std::string_view argument(argv[index]);
         if (argument == "--scan") isScanOnly = true;
@@ -21,14 +21,16 @@ int main(int argc, char* argv[])
         else if (argument == "--probe-usb") isUsbProbe = true;
         else if (argument == "--start-accessory") isStartAccessory = true;
         else if (argument == "--test-projection") isProjectionTest = true;
+        else if (argument == "--test-input") isInputTest = true;
+        else if (argument == "--test-audio") isAudioTest = true;
         else if (argument == "--help") {
-            std::cout << "HeadUnit [--scan | --smoke-test | --probe-usb | --start-accessory | --test-projection | --repair-driver | --recover-phone]\n"
+            std::cout << "HeadUnit [--scan | --smoke-test | --probe-usb | --start-accessory | --test-projection | --test-input | --test-audio | --repair-driver | --recover-phone]\n"
                          "Logs: ./headunit.log (includes USB serial numbers)\n"
                          "--repair-driver rebinds the phone to WinUSB (needs administrator rights; the app starts it itself when needed)\n";
             return 0;
         } else { std::cerr << "Unknown option: " << argument << '\n'; return 1; }
     }
-    if (static_cast<int>(isScanOnly) + static_cast<int>(isSmokeTest) + static_cast<int>(isUsbProbe) + static_cast<int>(isStartAccessory) + static_cast<int>(isProjectionTest) + static_cast<int>(isRepairDriver) + static_cast<int>(isRecoverPhone) > 1) { std::cerr << "Choose one run mode\n"; return 1; }
+    if (static_cast<int>(isScanOnly) + static_cast<int>(isSmokeTest) + static_cast<int>(isUsbProbe) + static_cast<int>(isStartAccessory) + static_cast<int>(isProjectionTest) + static_cast<int>(isRepairDriver) + static_cast<int>(isRecoverPhone) + static_cast<int>(isInputTest) + static_cast<int>(isAudioTest) > 1) { std::cerr << "Choose one run mode\n"; return 1; }
     try {
         if (isRepairDriver || isRecoverPhone) {
             // Runs elevated in its own process, so it keeps a separate log.
@@ -58,7 +60,8 @@ int main(int argc, char* argv[])
                 result.state == headunit::UsbProbeState::AccessoryTransportReady ? 0 : 3;
         }
         QApplication application(argc, argv);
-        headunit::MainWindow window(backend, logger, isSmokeTest, isProjectionTest);
+        using Mode = headunit::MainWindow::TestMode;
+        headunit::MainWindow window(backend, logger, isSmokeTest ? Mode::Smoke : isProjectionTest ? Mode::Projection : isInputTest ? Mode::Input : isAudioTest ? Mode::Audio : Mode::None);
         window.show();
         logger.Write("INFO", "UI", "Qt " QT_VERSION_STR " window initialized");
         const auto result = application.exec();

@@ -2,6 +2,7 @@
 // Copyright (C) 2018 f1x.studio (Michal Szwaj).
 // Upstream revisions and local changes: third_party/aasdk/PATCHES.md.
 #include "androidauto/AndroidAutoSession.h"
+#include "androidauto/InputReports.h"
 #include <aasdk/Channel/Control/ControlServiceChannel.hpp>
 #include <aasdk/Channel/Control/IControlServiceChannelEventHandler.hpp>
 #include <aasdk/Channel/MediaSink/Video/VideoMediaSinkService.hpp>
@@ -48,11 +49,12 @@ struct AudioStream {
     std::uint32_t bits;
     std::uint32_t channels;
     const char* name;
+    AudioKind kind;
 };
 const AudioStream kAudioStreams[] = {
-    {ChannelId::MEDIA_SINK_MEDIA_AUDIO, sink::AUDIO_STREAM_MEDIA, 48000, 16, 2, "Media"},
-    {ChannelId::MEDIA_SINK_GUIDANCE_AUDIO, sink::AUDIO_STREAM_GUIDANCE, 16000, 16, 1, "Guidance"},
-    {ChannelId::MEDIA_SINK_SYSTEM_AUDIO, sink::AUDIO_STREAM_SYSTEM_AUDIO, 16000, 16, 1, "System"},
+    {ChannelId::MEDIA_SINK_MEDIA_AUDIO, sink::AUDIO_STREAM_MEDIA, 48000, 16, 2, "Media", AudioKind::Media},
+    {ChannelId::MEDIA_SINK_GUIDANCE_AUDIO, sink::AUDIO_STREAM_GUIDANCE, 16000, 16, 1, "Guidance", AudioKind::Guidance},
+    {ChannelId::MEDIA_SINK_SYSTEM_AUDIO, sink::AUDIO_STREAM_SYSTEM_AUDIO, 16000, 16, 1, "System", AudioKind::System},
 };
 constexpr const char* kStoppedByUser = "Android Auto stopped by user";
 constexpr auto kPingInterval = std::chrono::seconds(5);
@@ -71,15 +73,20 @@ constexpr std::uint32_t kMicrophoneSamplingRate = 16000;
 constexpr std::uint32_t kMicrophoneBits = 16;
 constexpr std::uint32_t kMicrophoneChannels = 1;
 
-// Accepts an advertised audio sink and acknowledges its payloads without playback.
-// Dropping the samples keeps the channel alive; refusing it ends the phone's session.
+// Accepts an advertised audio sink, plays what the phone sends and acknowledges every payload.
+// Without an output the samples are dropped, which keeps the channel alive; refusing the
+// channel would end the phone's session.
 class AudioSink final : public aasdk::channel::mediasink::audio::IAudioMediaSinkServiceEventHandler,
     public std::enable_shared_from_this<AudioSink> {
 public:
     AudioSink(boost::asio::io_context::strand& strand, aasdk::messenger::IMessenger::Pointer messenger,
-        ChannelId channelId, std::string name, std::function<void(const std::string&)> report)
-        : m_strand(strand), m_name(std::move(name)), m_report(std::move(report)),
-          m_channel(std::make_shared<aasdk::channel::mediasink::audio::AudioMediaSinkService>(strand, std::move(messenger), channelId)) {}
+        const AudioStream& stream, AudioOpener opener, std::function<void(const std::string&)> report)
+        : m_strand(strand), m_name(stream.name), m_kind(stream.kind), m_opener(std::move(opener)), m_report(std::move(report)),
+          m_channel(std::make_shared<aasdk::channel::mediasink::audio::AudioMediaSinkService>(strand, std::move(messenger), stream.channel)) {
+        m_format.sampleRate = stream.samplingRate;
+        m_format.channels = stream.channels;
+        m_format.bitsPerSample = stream.bits;
+    }
     void Start() { m_channel->receive(shared_from_this()); }
     void onChannelOpenRequest(const ctrl::ChannelOpenRequest&) override {
         m_report("Phone opened the " + m_name + " audio channel");
@@ -102,9 +109,11 @@ public:
     }
     void onMediaChannelStopIndication(const media::Stop&) override {
         m_session = -1;
+        if (m_output) m_output->Flush();
         m_channel->receive(shared_from_this());
     }
-    void onMediaWithTimestampIndication(aasdk::messenger::Timestamp::ValueType, const aasdk::common::DataConstBuffer&) override {
+    void onMediaWithTimestampIndication(aasdk::messenger::Timestamp::ValueType, const aasdk::common::DataConstBuffer& buffer) override {
+        Play(buffer);
         source::Ack ack;
         ack.set_session_id(m_session);
         ack.set_ack(1);
@@ -119,6 +128,17 @@ public:
         m_report(m_name + " audio channel stopped: " + error.what());
     }
 private:
+    void Play(const aasdk::common::DataConstBuffer& buffer) {
+        if (!m_opener) return;
+        if (!m_output) {
+            // Opened on the first sample, so a stream the phone never uses never touches the speaker.
+            m_output = m_opener(m_kind, m_format);
+            m_report(m_name + " audio started: " + std::to_string(m_format.sampleRate) + " Hz, " + std::to_string(m_format.channels) +
+                " channel(s)" + (m_output ? "" : " (no output device)"));
+            if (!m_output) m_opener = nullptr;
+        }
+        if (m_output) m_output->Write({buffer.cdata, buffer.size});
+    }
     aasdk::channel::SendPromise::Pointer Promise() {
         auto promise = aasdk::channel::SendPromise::defer(m_strand);
         promise->then([] {}, [self = shared_from_this()](auto error) { self->onChannelError(error); });
@@ -126,6 +146,10 @@ private:
     }
     boost::asio::io_context::strand& m_strand;
     std::string m_name;
+    AudioKind m_kind;
+    PcmFormat m_format;
+    AudioOpener m_opener;
+    std::shared_ptr<IPcmOutput> m_output;
     std::function<void(const std::string&)> m_report;
     std::shared_ptr<aasdk::channel::mediasink::audio::AudioMediaSinkService> m_channel;
     int m_session{-1};
@@ -199,7 +223,10 @@ public:
         m_sensors = std::make_shared<aasdk::channel::sensorsource::SensorSourceService>(m_strand, m_messenger);
         m_input = std::make_shared<aasdk::channel::inputsource::InputSourceService>(m_strand, m_messenger);
     }
-    ~Session() { m_cryptor->deinit(); }
+    ~Session() {
+        if (m_callbacks.input) m_callbacks.input->Detach(m_inputToken);
+        m_cryptor->deinit();
+    }
     void Start() {
         m_cryptor->init();
         m_decoder = std::make_unique<VideoDecoder>([this](VideoFrame frame) {
@@ -213,12 +240,19 @@ public:
             if (auto self = weak.lock()) self->Status(message);
         };
         for (const auto& stream : kAudioStreams) {
-            auto channel = std::make_shared<AudioSink>(m_strand, m_messenger, stream.channel, stream.name, report);
+            auto channel = std::make_shared<AudioSink>(m_strand, m_messenger, stream, m_callbacks.openAudio, report);
             channel->Start();
             m_audio.push_back(std::move(channel));
         }
         m_microphone = std::make_shared<MicrophoneSource>(m_strand, m_messenger, report);
         m_microphone->Start();
+        if (m_callbacks.input) {
+            // The window's events are handed over to the protocol thread; nothing is sent before the
+            // phone opened the input channel.
+            m_inputToken = m_callbacks.input->Attach([weak = weak_from_this()](const InputEvent& event) {
+                if (auto self = weak.lock()) boost::asio::post(self->m_strand, [self, event] { self->HandleInput(event); });
+            });
+        }
         m_video->receive(shared_from_this());
         m_sensors->receive(shared_from_this());
         m_input->receive(shared_from_this());
@@ -235,6 +269,7 @@ public:
         m_result.message = reason;
         Status(reason);
         m_timer.cancel();
+        if (m_callbacks.input) m_callbacks.input->Detach(m_inputToken);
         // Stopping the transport joins its USB workers and rejects everything still
         // pending; the rejections are drained by io.run() in RunAndroidAutoSession.
         m_transport->stop();
@@ -255,6 +290,11 @@ public:
         m_control->sendShutdownRequest(request, Promise());
     }
     ProjectionResult Result() const { return m_result; }
+    void HandleInput(const InputEvent& event) {
+        if (m_isEnding || m_isStopping || !m_isInputReady) return;
+        const auto now = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch());
+        m_input->sendInputReport(BuildInputReport(event, static_cast<std::uint64_t>(now.count())), Promise());
+    }
     void onVersionResponse(std::uint16_t major, std::uint16_t minor, aap_protobuf::shared::MessageStatus status) override {
         // A repeated request can be answered twice; the TLS handshake must start only once.
         if (m_hasVersionReply) { ReceiveControl(); return; }
@@ -333,7 +373,9 @@ public:
         channel = response.add_channels();
         channel->set_id(static_cast<unsigned>(ChannelId::INPUT_SOURCE));
         auto* touch = channel->mutable_input_source_service()->add_touchscreen();
-        touch->set_width(800); touch->set_height(480);
+        touch->set_width(kTouchWidth); touch->set_height(kTouchHeight);
+        touch->set_type(aap_protobuf::service::inputsource::message::CAPACITIVE);
+        for (const auto keycode : keys::Supported) channel->mutable_input_source_service()->add_keycodes_supported(static_cast<int>(keycode));
         if (!response.IsInitialized()) { End("Invalid service description: " + response.InitializationErrorString()); return; }
         Status("Service description ready: " + std::to_string(response.channels_size()) + " channels, "
             + std::to_string(response.ByteSizeLong()) + " bytes");
@@ -352,6 +394,7 @@ public:
         } else if (request.service_id() == static_cast<unsigned>(ChannelId::SENSOR)) {
             m_sensors->sendChannelOpenResponse(response, Promise()); m_sensors->receive(shared_from_this());
         } else if (request.service_id() == static_cast<unsigned>(ChannelId::INPUT_SOURCE)) {
+            m_isInputReady = true;
             m_input->sendChannelOpenResponse(response, Promise()); m_input->receive(shared_from_this());
         } else End("Unexpected AA channel open");
     }
@@ -402,7 +445,8 @@ public:
         }));
         m_sensors->receive(shared_from_this());
     }
-    void onKeyBindingRequest(const sink::KeyBindingRequest&) override {
+    void onKeyBindingRequest(const sink::KeyBindingRequest& request) override {
+        Status("Phone binds " + std::to_string(request.keycodes_size()) + " car keys; touch, keys and rotary input are ready");
         sink::KeyBindingResponse response; response.set_status(success);
         m_input->sendKeyBindingResponse(response, Promise()); m_input->receive(shared_from_this());
     }
@@ -520,6 +564,8 @@ private:
     int m_versionRequests{1};
     int m_videoSession{-1};
     int m_decodeFailures{};
+    std::uint64_t m_inputToken{};
+    bool m_isInputReady{};
     bool m_isEnding{}, m_isStopping{}, m_isAuthenticated{}, m_hasVersionReply{};
     bool m_hasVideoPackets{}, m_isDiscoverySent{}, m_hasPingReply{};
 };

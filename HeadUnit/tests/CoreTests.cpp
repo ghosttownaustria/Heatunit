@@ -6,6 +6,7 @@
 using namespace headunit;
 void TestAoaNegotiation();
 void TestAutoConnect();
+void TestCarControls();
 void Check(bool isValid, const char* message) { if (!isValid) throw std::runtime_error(message); }
 void CheckRejected(const std::vector<std::uint8_t>& data)
 {
@@ -18,6 +19,7 @@ int main()
     try {
         TestAoaNegotiation();
         TestAutoConnect();
+        TestCarControls();
         const std::vector<std::uint8_t> descriptor{
             9,2,32,0,1,1,0,0x80,50,
             9,4,0,0,2,0xff,0xff,0,0,

@@ -1,5 +1,31 @@
 # Progress
 
+## 2026-09-19 (later still): touch, rotary knob and keys, audio playback
+
+- **Input:** mouse on the picture becomes touch (`InputReport.touch_event`, coordinates mapped from the
+  letterboxed picture into the 800x480 touch space, moves paced at ~125 Hz). A simulated centre console
+  sends the rotary controller (`RelativeEvent`, `KEYCODE_ROTARY_CONTROLLER`, one detent per 15 degrees),
+  the four nudge keys, Enter, Home, Back, Media, Navigation, Phone and track/play keys. Keyboard shortcuts
+  mirror them. The service description now lists these key codes; the phone bound all 20 of them.
+  Events cross from the GUI thread to the protocol thread through `ProjectionInput` (token based
+  attach/detach, so a finished session can never detach its successor).
+- **Audio:** the three audio sinks (media 48 kHz stereo, guidance and system 16 kHz mono) play through
+  WASAPI shared mode with a per-stream ring buffer (500 ms, oldest audio dropped when late, 60 ms
+  prime), AUTOCONVERTPCM for any output format, master volume in 30 steps (squared gain), mute, and
+  level meters for the on-screen audio display. Qt Multimedia is not part of the local Qt install, so
+  no extra dependency was added.
+- **Verified on the Samsung SM-F776B** (Debug and Release): `--test-input` showed the blue rotary
+  focus ring after rotary/direction keys and the map opening after a touch tap in the middle
+  (screenshots via `HEADUNIT_TEST_SHOTS`); `--test-audio` played Spotify at volume 5/30 for three
+  seconds: 581,632 bytes rendered, 0 bytes dropped, 0 underruns, and Windows' own audio-session meter
+  for `HeadUnit.exe` read a peak of 0.0148 (matches the gain). The full stale-Android-Auto recovery
+  (`TLS record decode` -> USB restart, attempt 2 with a longer off time -> new session) ran end to end
+  once during these tests.
+- **Not done:** microphone capture (voice commands, calls), audio focus ducking, night-mode switch.
+- **Tests:** CoreTests cover the touch mapping, input bus, ring buffer, PCM peak/gain and audio state;
+  ProtocolTests cover the protocol messages for touch, keys and rotary and the session's attach/detach
+  of the input bus.
+
 ## 2026-09-19 (later): why the one-button flow never got past "connected to the car"
 
 - **Root cause:** after AOA START the app looked for the accessory device "on the same USB port" as

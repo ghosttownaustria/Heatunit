@@ -7,8 +7,8 @@ portable sources. Shared settings live in `msbuild/`. CMake targets below remain
 available independently for portability.
 
 Discovery, AOA control, a persistent protocol session and the video pipeline are
-implemented. Hardware verification currently reaches TLS and service discovery;
-video remains unverified. Audio and touch transmission are not implemented.
+implemented and hardware-verified with a Samsung phone: projected video, touch,
+rotary/key input and audio playback all work. Microphone capture is not implemented.
 
 ```text
 main (composition/lifetime)
@@ -58,10 +58,9 @@ skip queued completions. Watchdogs: 30 s without any inbound data after service
 discovery, and a 90 s startup limit whose message names the stage that stalled.
 Undecodable video packets are dropped and still acknowledged.
 
-UI lifecycle: `MainWindow` has a single state (Idle, Scanning, Probing, Connecting,
-Stopping) that alone decides which buttons are enabled. Closing the window during a
-session requests a stop and closes once the worker has finished; after a session
-the device list is rescanned automatically because the phone re-enumerates.
+UI lifecycle: `MainWindow` has a single state (Idle, Connecting,
+Stopping) behind one button that connects (all steps run in `RunAutoConnect`) or ends the session. Closing the window during a
+session requests a stop and closes once the worker has finished.
 
 FFmpeg accepts only the advertised H.264 video path. Decoded RGB frames replace
 the previous mailbox frame under a mutex; a 33 ms Qt timer consumes the newest
@@ -75,3 +74,13 @@ but Windows needs appropriate interface driver bindings. Raspberry Pi graphics
 and codec acceleration are separate decoder/renderer decisions. Core can already
 be built without Qt/Windows using `-DHEADUNIT_BUILD_APP=OFF`; a Linux build has not
 been executed in this workspace.
+
+Input and audio: the window owns a `ProjectionInput` (GUI thread -> protocol thread) and an
+`AudioState` plus `WasapiAudioEngine`. `ProjectionCallbacks` hands them to the session, which attaches
+to the input bus while it runs and turns `InputEvent`s into `InputReport` messages on its strand
+(dropped until the phone has opened the input channel). The audio sinks write PCM into
+`IPcmOutput`s opened lazily on the first sample; each WASAPI stream has its own render thread and a
+bounded ring buffer, applies the shared volume/mute gain and reports levels back for the display.
+`CarPanel` (rotary knob, keys, audio display) and `VideoWidget` (picture and touch mapping) are plain
+Qt widgets without moc; the portable parts (touch mapping, input bus, PCM helpers) are header-only
+and unit-tested in CoreTests.

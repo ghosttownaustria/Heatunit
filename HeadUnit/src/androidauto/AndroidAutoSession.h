@@ -1,4 +1,6 @@
 #pragma once
+#include "androidauto/ProjectionInput.h"
+#include "audio/AudioTypes.h"
 #include "logging/Logger.h"
 #include "video/VideoDecoder.h"
 #include <atomic>
@@ -10,6 +12,11 @@ namespace headunit {
 struct ProjectionCallbacks {
     std::function<void(const std::string&)> onStatus;
     std::function<void(VideoFrame)> onFrame;
+    // Touch, keys and rotary input from the window; the session attaches to it while it runs.
+    std::shared_ptr<ProjectionInput> input;
+    // Opens the speaker for one of the phone's audio streams. Without it audio is acknowledged
+    // and dropped, which keeps the phone's session alive.
+    AudioOpener openAudio;
 };
 struct ProjectionResult {
     bool hasVideo{};

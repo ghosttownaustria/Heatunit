@@ -140,6 +140,7 @@ void TestTransportStop() {
     Check(rejected == 2, "Requests after stop() were not rejected");
 }
 }
+void RunInputAudioTests();
 int main() {
     try {
         TestTls(TLS1_2_VERSION);
@@ -151,6 +152,7 @@ int main() {
         Check(!result.hasVideo && transport->m_hasStopped, "Cancelled session reported video or retained transport");
         TestStopWhileWaitingForPhone();
         TestTransportStop();
+        RunInputAudioTests();
         std::cout << "TLS 1.2/1.3 variable record sizes, session cancellation and transport shutdown passed\n";
         return 0;
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }

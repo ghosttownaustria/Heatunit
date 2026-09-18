@@ -4,7 +4,8 @@ C++20 / Visual Studio 2026 x64 / Qt 6. USB discovery, AOA mode switching, Androi
 Auto version/TLS negotiation, service and H.264 channel handling, FFmpeg decoding
 and Qt video rendering are implemented. Real phone testing (Samsung SM-F776B) has
 confirmed version 1.7, TLS, service discovery and projected video, including repeated
-sessions and a clean stop. There is no simulated phone data or AA screen.
+sessions and a clean stop. Touch (mouse), a simulated rotary knob with hard keys, and phone audio
+over WASAPI with a simulated audio display work on hardware. There is no simulated phone data or AA screen.
 
 **Bedienung: ein Knopf.** Handy per Datenkabel anschliessen, entsperren und
 **Android Auto verbinden** anklicken. Die App erledigt alle Schritte selbst und meldet
@@ -13,6 +14,21 @@ die Windows-Abfrage nach Administratorrechten bestaetigen), Android Auto auf dem
 starten und das Video anzeigen. Auf dem Handy nur die Android-Auto-Hinweise bestaetigen.
 Waehrend der Sitzung heisst derselbe Knopf **Verbindung beenden** (oder das Fenster
 schliessen): Das Handy bekommt ein Goodbye, dann wird die USB-Schnittstelle freigegeben.
+
+**Bedienen wie im Auto.** Neben dem Bild sitzt eine simulierte Mittelkonsole:
+- **Touch:** Mit der Maus direkt auf dem Bild klicken und ziehen. Die Position wird auf das
+  Touchdisplay des Handys umgerechnet (das Bild behaelt sein Seitenverhaeltnis, Klicks auf
+  die schwarzen Raender zaehlen nicht).
+- **Drehregler:** Mausrad auf dem Regler oder mit der Maus im Kreis ziehen dreht (ein Rastpunkt
+  alle 15 Grad), ein Klick ohne Ziehen drueckt ihn. Darum die vier Pfeiltasten.
+- **Tasten:** Home, Zurueck, Medien, Navi, Telefon, Titel zurueck/vor, Play/Pause.
+- **Audio-Anzeige:** Lautstaerke (30 Stufen), Stumm und je ein Pegel fuer Medien, Navigation und
+  System. Die Anzeige zeigt, welche Tonspur des Handys gerade Audio liefert. Lautstaerke und Stumm
+  wirken in der App (der Windows-Regler bleibt unberuehrt); mehr Lautstaerke schaltet Stumm aus.
+- **Tastatur:** Pfeile, Enter (Regler druecken), Esc/Rueck (Zurueck), Pos1 (Home), Leertaste
+  (Play/Pause), Bild hoch/runter (Titel), +/- (Lautstaerke), M (Stumm).
+Der Ton laeuft ueber das Standard-Ausgabegeraet von Windows (WASAPI, andere Programme behalten
+ihren Ton). Das Mikrofon (Sprachbefehle, Telefonate) ist noch nicht angebunden.
 
 **Wenn etwas klemmt, versucht die App es selbst:**
 - Das Handy im Accessory-Modus bekommt Android Auto per AOA-Neustart neu gestartet,
@@ -34,7 +50,7 @@ schliessen): Das Handy bekommt ein Goodbye, dann wird die USB-Schnittstelle frei
 gezogen wird, das Handy 30 Sekunden lang nichts mehr sendet oder in der Startphase
 kein Fortschritt erkennbar ist (die Meldung nennt die haengende Stufe: Versionsabfrage,
 TLS, Servicesuche oder Video). Nicht decodierbare Videopakete werden verworfen.
-Audio und Touch-Eingabe sind noch nicht implementiert.
+
 
 Beim ersten Build auf einem neuen Rechner einmal
 `powershell -ExecutionPolicy Bypass -File HeadUnit/scripts/Prepare-Dependencies.ps1`
@@ -47,7 +63,7 @@ native VS-Projekte; Protobuf-Dateien und DLL-Kopien werden automatisch erzeugt.
 `--start-accessory` (Accessory-Modus starten und Bulk-Paar pruefen), `--repair-driver`
 (WinUSB wiederherstellen), `--recover-phone` (USB-Verbindung des Handys neu starten und
 Treiber reparieren), `--test-projection` (kompletter Ablauf, erfolgreich nach zehn
-angezeigten Videobildern). Details: [Windows-Verbindung](docs/windows_connection.md).
+angezeigten Videobildern), `--test-input` (schickt Regler-, Tasten- und Touch-Eingaben ans Handy), `--test-audio` (startet Wiedergabe leise und prueft, dass Ton am Ausgabegeraet ankommt). Mit `HEADUNIT_TEST_SHOTS=<Ordner>` speichern die Tests Bilder des Handys und des Fensters. Details: [Windows-Verbindung](docs/windows_connection.md).
 
 ## Visual Studio 2026: oeffnen, bauen, starten
 

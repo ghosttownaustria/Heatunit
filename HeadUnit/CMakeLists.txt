@@ -27,11 +27,12 @@ if(HEADUNIT_BUILD_APP)
     IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libusb/x64/libusb-1.0.dll"
     INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libusb/include")
   add_library(headunit_usb src/usb/WindowsUsbBackend.cpp src/usb/AndroidUsbProbe.cpp
-    src/usb/ProjectionTransport.cpp src/usb/DriverRepair.cpp src/usb/AutoConnectSystem.cpp src/androidauto/AndroidAutoSession.cpp)
+    src/usb/ProjectionTransport.cpp src/usb/DriverRepair.cpp src/usb/AutoConnectSystem.cpp src/androidauto/AndroidAutoSession.cpp
+    src/androidauto/InputReports.cpp src/audio/WasapiAudioEngine.cpp)
   target_link_libraries(headunit_usb PRIVATE libusb headunit_aasdk headunit_video)
   target_link_libraries(headunit_usb PUBLIC headunit_core PRIVATE setupapi)
   target_compile_definitions(headunit_usb PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
-  add_executable(HeadUnit src/main.cpp src/ui/MainWindow.cpp)
+  add_executable(HeadUnit src/main.cpp src/ui/MainWindow.cpp src/ui/CarWidgets.cpp)
   target_link_libraries(HeadUnit PRIVATE headunit_usb Qt6::Widgets Qt6::Concurrent)
   add_custom_command(TARGET HeadUnit POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
     "$<TARGET_FILE:libusb>" "$<TARGET_FILE_DIR:HeadUnit>")
@@ -44,11 +45,11 @@ if(HEADUNIT_BUILD_APP)
   install(SCRIPT ${deployScript})
 endif()
 if(BUILD_TESTING)
-  add_executable(CoreTests tests/CoreTests.cpp tests/AoaTests.cpp tests/AutoConnectTests.cpp)
+  add_executable(CoreTests tests/CoreTests.cpp tests/AoaTests.cpp tests/AutoConnectTests.cpp tests/CarControlTests.cpp)
   target_link_libraries(CoreTests PRIVATE headunit_core)
   add_test(NAME CoreTests COMMAND CoreTests)
   if(HEADUNIT_BUILD_APP)
-    add_executable(ProtocolTests tests/ProtocolTests.cpp src/androidauto/AndroidAutoSession.cpp src/usb/ProjectionTransport.cpp)
+    add_executable(ProtocolTests tests/ProtocolTests.cpp tests/InputAudioTests.cpp src/androidauto/AndroidAutoSession.cpp src/androidauto/InputReports.cpp src/usb/ProjectionTransport.cpp)
     target_link_libraries(ProtocolTests PRIVATE headunit_aasdk headunit_video headunit_core libusb)
     add_test(NAME ProtocolTests COMMAND ProtocolTests)
     add_custom_command(TARGET ProtocolTests POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory
