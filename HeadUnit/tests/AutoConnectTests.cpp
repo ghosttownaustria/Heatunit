@@ -19,6 +19,11 @@ UsbDevice Phone(std::uint16_t vendor = 0x04e8, std::uint16_t product = 0x6860) {
 UsbProbeResult Video() { return {UsbProbeState::VideoReceived, "Android Auto session", "Android Auto stopped by user"}; }
 UsbProbeResult NoAnswer() {
     UsbProbeResult result{UsbProbeState::Failed, "Android Auto session", "The phone did not answer the version request."};
+    result.needsRecovery = true;
+    return result;
+}
+UsbProbeResult NoAccessory() {
+    UsbProbeResult result{UsbProbeState::Failed, "AOA re-enumeration", "The phone did not switch to Android accessory mode."};
     result.isRetryable = true;
     return result;
 }
@@ -84,6 +89,17 @@ void TestAutoConnect() {
         const auto result = Run(script, stop);
         Check(!result.hasVideo && script.recoverCalls == 2 && script.connectCalls == 3, "Recovery is not bounded");
         Check(result.message.find("entsperren") != std::string::npos, "Final message gives no hint");
+    }
+    {   // The phone did not switch to accessory mode (locked?): plain retries, no USB restart, no admin prompt.
+        Script script{{NoAccessory(), Video()}, {WithPhone()}};
+        const auto result = Run(script, stop);
+        Check(result.hasVideo && script.connectCalls == 2 && script.recoverCalls == 0 && script.repairCalls == 0, "A missed mode switch was not simply retried");
+    }
+    {   // ... and a bounded number of retries with advice the user can act on.
+        Script script{{NoAccessory()}, {WithPhone()}};
+        const auto result = Run(script, stop);
+        Check(!result.hasVideo && script.connectCalls == 3 && script.recoverCalls == 0, "Retries of a missed mode switch are not bounded");
+        Check(result.message.find("entsperren") != std::string::npos, "No hint for a phone that does not switch modes");
     }
     {   // The recovery is refused (e.g. UAC declined): say so, do not loop.
         Script script{{NoAnswer()}, {WithPhone()}};

@@ -12,9 +12,12 @@ struct UsbProbeResult {
     // The phone is in its normal USB mode but Windows bound a driver libusb cannot open;
     // rebinding WinUSB (DriverRepair) can fix exactly this.
     bool canRepairDriver{};
-    // The phone never reached Android Auto (no answer, accessory device did not appear):
-    // restarting the USB connection and trying again can help.
+    // The phone did not switch to accessory mode: asking again (after the phone is unlocked or
+    // the prompt on it is confirmed) can help.
     bool isRetryable{};
+    // Accessory mode was up but Android Auto on the phone never answered: only restarting the
+    // phone's USB connection (like a cable replug) helps.
+    bool needsRecovery{};
 };
 // Reads AOA support, or briefly claims/releases an existing accessory interface.
 // Does not switch modes or install drivers.

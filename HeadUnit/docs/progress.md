@@ -1,5 +1,30 @@
 # Progress
 
+## 2026-09-19 (later): why the one-button flow never got past "connected to the car"
+
+- **Root cause:** after AOA START the app looked for the accessory device "on the same USB port" as
+  the phone. The phone's port is not stable: in file-transfer mode it links at SuperSpeed
+  (`root_hub30 ... port-2`, bulk `maxPacket=1024`), in accessory mode it often links at USB 2.0 and
+  shows up on another root-hub port (`port-6`) or even another root hub. The phone had switched
+  ("Mit dem Fahrzeug verbunden"), but the app never saw it, waited 30 s, and its recovery steps (USB
+  restart, repeated AOA START) made it worse. The evidence is in the old Release log (accessory on
+  `2bce96aa/port-6` and `2c35141/port-8` while the phone sat on `2bce96aa/port-2`).
+- **Fix:** the accessory device is found by the phone's **serial number** (read through libusb from
+  every accessory-mode candidate; the port is only logged). Verified on hardware right after the
+  fix: normal mode on port 2 -> accessory on bus 1 port 6 found after 912 ms -> video.
+- **Retry ladder is now split by cause:** the phone did not switch to accessory mode (locked phone /
+  prompt) -> plain retries (max. 2), no USB restart and no admin prompt; accessory mode up but
+  Android Auto silent (no version answer, or `TLS record decode` from a stale Android Auto) -> USB
+  restart of the phone with driver check (max. 2). Version requests are repeated every 2 s (max. 10).
+- **USB restart helper:** disabling the accessory device node for 1.5 s did not always make the
+  phone leave accessory mode; 3 s did (verified repeatedly). The helper now waits 3 s, checks what
+  the phone comes back as and retries with longer off times (3 / 5.5 / 8 s).
+- **Hardware results:** 6 consecutive `--test-projection` runs (in-place restart) and 3 runs after a
+  helper restart (normal mode -> accessory, incl. the port-6 case) all reached real video (exit 0),
+  Debug and Release; also after killing the app mid-session. Not reproduced on demand: the "stale
+  Android Auto" (`TLS record decode` right after an in-place restart) seen once; the ladder handles
+  it by design but it was not exercised end to end.
+
 ## 2026-09-19: one button, automatic recovery
 
 - The window has one button. `RunAutoConnect` (`src/androidauto/AutoConnect.cpp`, portable and

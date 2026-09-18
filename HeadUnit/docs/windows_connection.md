@@ -123,8 +123,9 @@ or installs drivers.
 
 The separate **Android Auto: Accessory-Modus starten** action (CLI:
 `--start-accessory`) sends all six identity strings (52), then START (53).
-It waits up to 15 seconds for the new accessory VID/PID at the same physical
-port and validates the bulk interface. On 2026-09-17 the real phone switched
+It waits up to 30 seconds for the new accessory VID/PID, matched by the phone's serial
+number (not by USB port: in accessory mode the phone often links at USB 2.0 and appears on
+another root-hub port), and validates the bulk interface. On 2026-09-17 the real phone switched
 from `04E8:6860` to `18D1:2D00`; the existing Samsung AOA WinUSB driver
 `oem118.inf` allowed interface 0 to be claimed (IN `0x81`, OUT `0x01`).
 An already-accessory-mode phone skips the switch and just checks the interface.

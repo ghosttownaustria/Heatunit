@@ -62,8 +62,8 @@ constexpr auto kShutdownGrace = std::chrono::seconds(2);
 constexpr auto kSilenceTimeout = std::chrono::seconds(30);
 constexpr auto kStartupTimeout = std::chrono::seconds(90);
 constexpr auto kVersionTimeout = std::chrono::seconds(20);
-constexpr auto kVersionRetryInterval = std::chrono::seconds(4);
-constexpr int kMaxVersionRequests = 6;
+constexpr auto kVersionRetryInterval = std::chrono::seconds(2);
+constexpr int kMaxVersionRequests = 10;
 // Undecodable packets are dropped (the stream recovers at the next keyframe); only
 // a decoder that never recovers ends the session.
 constexpr int kMaxDecodeFailures = 200;

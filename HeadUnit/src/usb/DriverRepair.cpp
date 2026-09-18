@@ -194,34 +194,69 @@ RepairResult RepairPhoneDriverNow(Logger& logger) {
     return {RepairOutcome::Timeout, "Der Treiber wurde umgestellt, aber MI_00 meldet noch kein WinUSB. Kabel einmal abziehen und wieder anstecken."};
 }
 
+namespace {
+enum class PhoneMode { Gone, Normal, Accessory };
+PhoneMode CurrentMode() {
+    const auto nodes = Snapshot();
+    if (Find(nodes, kParentPrefix)) return PhoneMode::Normal;
+    if (Find(nodes, kAccessoryPrefix)) return PhoneMode::Accessory;
+    return PhoneMode::Gone;
+}
+// Disables the accessory device node for `offTime` and enables it again, which makes Windows
+// re-enumerate the phone on the bus. Returns the mode the phone came back in.
+PhoneMode RestartAccessoryNode(const std::wstring& instance, std::chrono::milliseconds offTime, Logger& logger, std::string& error) {
+    if (!ChangeDeviceState(instance, DICS_DISABLE, error)) return PhoneMode::Gone;
+    std::this_thread::sleep_for(offTime);
+    if (!ChangeDeviceState(instance, DICS_ENABLE, error)) return PhoneMode::Gone;
+    // The phone drops off the bus for a few seconds and returns; wait for what it comes back as.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(25);
+    bool hasLeft = false;
+    while (std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        const auto mode = CurrentMode();
+        if (mode == PhoneMode::Gone) hasLeft = true;
+        else if (mode == PhoneMode::Normal || hasLeft) return mode;
+    }
+    logger.Write("WARN", "REPAIR", "Phone did not re-enumerate within 25 seconds");
+    return CurrentMode();
+}
+}
+
 RepairResult RecoverPhoneNow(Logger& logger) {
     if (!IsElevated()) return {RepairOutcome::NotElevated, "Administratorrechte sind noetig."};
     auto nodes = Snapshot();
+    bool wasRestarted = false;
     if (const auto* accessory = Find(nodes, kAccessoryPrefix)) {
-        // Disabling and re-enabling the device node makes Windows re-enumerate the phone on the
-        // bus. The phone sees the reset, leaves accessory mode and returns as 04E8:6860.
+        // The phone only leaves accessory mode when it sees the USB link go away for long enough;
+        // a short off time sometimes leaves it in accessory mode, so the time grows per attempt.
         const auto instance = accessory->instance;
-        logger.Write("INFO", "REPAIR", "Restarting accessory device " + Narrow(instance));
-        std::string error;
-        if (!ChangeDeviceState(instance, DICS_DISABLE, error)) { logger.Write("ERROR", "REPAIR", error); return {RepairOutcome::InstallFailed, error}; }
-        std::this_thread::sleep_for(std::chrono::milliseconds(1500));
-        if (!ChangeDeviceState(instance, DICS_ENABLE, error)) { logger.Write("ERROR", "REPAIR", error); return {RepairOutcome::InstallFailed, error}; }
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(40);
-        bool isBack = false;
-        while (!isBack && std::chrono::steady_clock::now() < deadline) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
-            nodes = Snapshot();
-            isBack = Find(nodes, kParentPrefix) != nullptr;
+        PhoneMode mode = PhoneMode::Accessory;
+        for (int attempt = 1; attempt <= 3 && mode != PhoneMode::Normal; ++attempt) {
+            const auto offTime = std::chrono::milliseconds(3000 + 2500 * (attempt - 1));
+            logger.Write("INFO", "REPAIR", "Restarting accessory device " + Narrow(instance) + " (attempt " + std::to_string(attempt) +
+                ", off for " + std::to_string(offTime.count()) + " ms)");
+            std::string error;
+            mode = RestartAccessoryNode(instance, offTime, logger, error);
+            if (!error.empty()) { logger.Write("ERROR", "REPAIR", error); return {RepairOutcome::InstallFailed, error}; }
+            if (mode == PhoneMode::Accessory) {
+                // Still (or again) in accessory mode: the instance may have been recreated.
+                nodes = Snapshot();
+                const auto* again = Find(nodes, kAccessoryPrefix);
+                if (!again) break;
+                if (Narrow(again->instance) != Narrow(instance)) logger.Write("WARN", "REPAIR", "Accessory instance changed to " + Narrow(again->instance));
+            }
         }
-        if (!isBack) {
+        if (mode != PhoneMode::Normal) {
             logger.Write("ERROR", "REPAIR", "Phone did not come back as 04E8:6860 after the restart");
             return {RepairOutcome::Timeout, "Das Handy hat sich nach dem USB-Neustart nicht als 04E8:6860 zurueckgemeldet. Bitte das Kabel einmal abziehen und wieder anstecken."};
         }
         logger.Write("INFO", "REPAIR", "Phone is back in normal mode");
+        wasRestarted = true;
         std::this_thread::sleep_for(std::chrono::seconds(2));  // let Windows finish its own driver installation first
     }
     auto result = RepairPhoneDriverNow(logger);
-    if (result.outcome == RepairOutcome::Fixed) result.message = "Handy neu gestartet und Treiber repariert.";
+    // Nothing left to repair after a restart is still a success: the phone was restarted.
+    if (wasRestarted && result.IsUsable()) { result.outcome = RepairOutcome::Fixed; result.message = "Handy neu gestartet, Treiber in Ordnung."; }
     return result;
 }
 
@@ -265,8 +300,8 @@ RepairResult RunElevated(Logger& logger, const wchar_t* argument, int timeoutMs)
 RepairResult RepairPhoneDriverElevated(Logger& logger) { return RunElevated(logger, L"--repair-driver", 120000); }
 RepairResult RecoverPhoneElevated(Logger& logger) {
     auto result = RunElevated(logger, L"--recover-phone", 240000);
-    // Fixed means "restarted and repaired" here; the phone is no longer in accessory mode.
-    if (result.outcome == RepairOutcome::Fixed) result.message = "Handy neu gestartet und Treiber repariert.";
+    // Fixed means the phone was restarted (the helper turns "driver already fine" into Fixed then).
+    if (result.outcome == RepairOutcome::Fixed) result.message = "Handy neu gestartet, Treiber in Ordnung.";
     return result;
 }
 }

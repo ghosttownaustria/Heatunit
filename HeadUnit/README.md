@@ -19,9 +19,14 @@ schliessen): Das Handy bekommt ein Goodbye, dann wird die USB-Schnittstelle frei
   ohne Kabel-Neustecken (ca. 10 Sekunden).
 - Windows weist dem Handy im Dateiuebertragungs-Modus oft wieder Samsungs Treiber zu
   (`LIBUSB_ERROR_NOT_FOUND`). Die App stellt WinUSB dann selbst wieder her.
-- Antwortet das Handy nach ca. 20 Sekunden nicht, startet die App die USB-Verbindung
-  des Handys neu (wie Kabel abziehen und anstecken), repariert den Treiber und
-  versucht es erneut (bis zu zweimal). Dafuer kommt dieselbe Windows-Abfrage.
+- Das Accessory-Geraet des Handys wird an der Seriennummer erkannt, nicht am USB-Port:
+  Im Accessory-Modus meldet sich das Handy oft auf einem anderen Port (USB 2.0 statt
+  SuperSpeed).
+- Wechselt das Handy nicht in den Android-Auto-Modus (gesperrt, Hinweis am Handy nicht
+  bestaetigt), fragt die App bis zu zweimal neu an und sagt, was am Handy zu tun ist.
+- Antwortet Android Auto auf dem Handy nach ca. 20 Sekunden nicht, startet die App die
+  USB-Verbindung des Handys neu (wie Kabel abziehen und anstecken), prueft den Treiber
+  und versucht es erneut (bis zu zweimal). Dafuer kommt die Windows-Abfrage.
 - Klappt auch das nicht, steht im Fenster, was zu tun ist (meist: Handy entsperren
   oder das Kabel einmal abziehen und wieder anstecken).
 

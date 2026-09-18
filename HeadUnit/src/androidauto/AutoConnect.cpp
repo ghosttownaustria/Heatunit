@@ -9,6 +9,7 @@ using namespace std::chrono_literals;
 constexpr int kFindTries = 10;            // one scan per second while the phone is missing
 constexpr int kFindTriesAfterRecovery = 25;  // a restarted phone needs time to enumerate and load drivers
 constexpr int kMaxRecoveries = 2;
+constexpr int kMaxPlainRetries = 2;
 constexpr int kMaxDriverRepairs = 3;
 constexpr int kMaxRounds = 10;
 std::string Describe(const UsbDevice& device) {
@@ -29,7 +30,7 @@ AutoConnectResult RunAutoConnect(const AutoConnectDeps& deps, Logger& logger, co
     const auto step = [&](const std::string& text) { logger.Write("INFO", "AUTO", text); if (onStep) onStep(text); };
     const auto stopped = [&] { outcome.isStoppedByUser = true; outcome.message = "Verbindung beendet."; return outcome; };
     const auto failed = [&](std::string message) { logger.Write("ERROR", "AUTO", message); outcome.message = std::move(message); return outcome; };
-    int recoveries = 0, repairs = 0, findTries = kFindTries;
+    int recoveries = 0, retries = 0, repairs = 0, findTries = kFindTries;
     for (int round = 0; round < kMaxRounds; ++round) {
         if (isStopRequested) return stopped();
         step(round == 0 ? "Suche Android-Handy ..." : "Suche das Handy erneut ...");
@@ -63,11 +64,11 @@ AutoConnectResult RunAutoConnect(const AutoConnectDeps& deps, Logger& logger, co
             deps.wait(2000ms);
             continue;
         }
-        if (result.isRetryable && recoveries < kMaxRecoveries) {
-            // Same effect as unplugging and replugging the cable, which is what fixes a phone
-            // whose Android Auto does not start.
+        if (result.needsRecovery && recoveries < kMaxRecoveries) {
+            // Accessory mode is up but Android Auto on the phone stays silent. Restarting the phone's
+            // USB connection (same as unplugging and replugging the cable) is what fixes that.
             ++recoveries;
-            step("Das Handy startet Android Auto nicht (" + result.message + "). Starte die USB-Verbindung neu (" +
+            step("Android Auto auf dem Handy antwortet nicht. Starte die USB-Verbindung des Handys neu (" +
                 std::to_string(recoveries) + "/" + std::to_string(kMaxRecoveries) + ") - bitte die Windows-Abfrage (Administratorrechte) bestaetigen ...");
             const auto recovered = deps.recover();
             if (!recovered.IsUsable()) return failed(recovered.message + " Alternativ das Kabel einmal abziehen und wieder anstecken.");
@@ -76,8 +77,19 @@ AutoConnectResult RunAutoConnect(const AutoConnectDeps& deps, Logger& logger, co
             findTries = kFindTriesAfterRecovery;
             continue;
         }
+        if (result.isRetryable && retries < kMaxPlainRetries) {
+            // The phone did not switch to accessory mode. That is usually a locked screen or a prompt
+            // that has not been confirmed yet; restarting USB would not change either.
+            ++retries;
+            step("Das Handy ist nicht in den Android-Auto-Modus gewechselt. Bitte das Handy entsperren und Hinweise auf dem Handy bestaetigen. Neuer Versuch (" +
+                std::to_string(retries) + "/" + std::to_string(kMaxPlainRetries) + ") ...");
+            deps.wait(3000ms);
+            continue;
+        }
         if (result.isRetryable)
-            return failed("Android Auto startet auf dem Handy nicht: " + result.message + " Bitte das Handy entsperren, pruefen ob Android Auto aktiviert ist, und erneut verbinden.");
+            return failed("Das Handy wechselt nicht in den Android-Auto-Modus. Bitte das Handy entsperren, Android Auto aktivieren und die Hinweise auf dem Handy bestaetigen, dann erneut verbinden.");
+        if (result.needsRecovery)
+            return failed("Android Auto auf dem Handy antwortet auch nach dem Neustart der USB-Verbindung nicht. Bitte das Handy entsperren und pruefen, ob Android Auto aktiviert ist, dann erneut verbinden.");
         return failed(result.stage + ": " + result.message);
     }
     return failed("Die Verbindung kam nach mehreren Versuchen nicht zustande.");
