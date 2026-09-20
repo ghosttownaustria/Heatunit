@@ -1,5 +1,41 @@
 # Progress
 
+## 2026-09-20: BMW-style hard keys and a two-step Home
+
+- **Keys:** the console follows a BMW iDrive multimedia controller: Media, Radio, Menu, Tel, Nav, Back,
+  Option, plus Map, CarPlay/Android Auto, Home, volume up/down, mute, skip forward/back (and play/pause),
+  around the rotary knob with its four nudge keys. Pressing a key goes through `ConsoleController`
+  (portable, header-only, in CoreTests): Media, Tel, Nav and Map send the phone's Media, Phone and
+  Navigation car keys (Map and Nav both open the phone's navigation app, there is only one key; Nav and
+  Media verified on the phone), Option sends `KEYCODE_MENU` (its effect on the phone was not verified),
+  Back sends `KEYCODE_BACK`. Radio and Menu
+  have no function without an operating system behind them and only write a line to the window log, as
+  does the radio side of Home. The CarPlay/Android Auto key starts the connection when nothing is
+  connected. Keyboard: Pos1 Home, Esc/Backspace Back, F1 Menu, F2 Option, F3 Media, F4 Radio, F5 Tel,
+  F6 Nav, F7 Map, F8 CarPlay/Android Auto.
+- **Home is a two-step key while a phone is projected:** the first press brings the phone to its
+  dashboard (map, media and phone cards), a second press while the phone shows that dashboard goes to the
+  radio's home menu (log line only), a third press goes back to the phone's dashboard. Without a
+  projection Home only logs the radio menu.
+- **`KEYCODE_HOME` cannot be used for the dashboard:** on this phone it always opens Android Auto's
+  app launcher (the 3x3 grid), and `KEYCODE_APP_SWITCH` and Back do nothing useful. The bottom-left
+  button of the navigation bar (touch position 42,438) toggles: it shows a framed split-view symbol
+  everywhere except on the dashboard, where tapping it goes to the dashboard, and nine dots on the
+  dashboard itself, where tapping it opens the launcher. So Home **reads the phone's picture**
+  (`DetectPhoneScreen`: shape of that symbol, nine small separate dots against one large connected
+  frame, independent of colours and picture size; a focus ring around the button is ignored) and taps
+  the button only when the phone is not on the dashboard. When the picture cannot be read (a
+  transition), it sends the phone's home key and looks at the picture again after one second.
+- **Verified on the Samsung SM-F776B:** `--test-console` (Nav opens Maps, Home reads "other" and returns
+  to the dashboard with Maps and Spotify cards, the second Home reads "dashboard" and only logs the radio
+  menu and leaves the phone alone, Media opens Spotify, Home again reads "other" and returns to the
+  dashboard, Radio logs); `--test-input`, `--test-audio` and `--test-projection` still pass.
+  `--test-keys` with `HEADUNIT_TEST_KEYS` (steps: a number is a car key code, `t:X:Y` a tap, `c:name` a
+  console key) is the diagnostic used to find out what the phone does with a key.
+- **Tests:** CoreTests now also cover the picture reading (synthetic frames: dots, frame, focus ring
+  with and without symbol, black, light, stray blobs, two picture sizes) and the Home logic for all
+  three picture readings.
+
 ## 2026-09-19 (later still): touch, rotary knob and keys, audio playback
 
 - **Input:** mouse on the picture becomes touch (`InputReport.touch_event`, coordinates mapped from the

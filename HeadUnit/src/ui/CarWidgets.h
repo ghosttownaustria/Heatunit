@@ -1,4 +1,5 @@
 #pragma once
+#include "androidauto/ConsoleController.h"
 #include "androidauto/ProjectionInput.h"
 #include "audio/AudioTypes.h"
 #include "video/VideoDecoder.h"
@@ -76,11 +77,14 @@ private:
     std::array<bool, kAudioKindCount> m_isActive{};
 };
 
-// The simulated centre console: audio display with volume keys, the rotary knob with its four
-// nudge keys and the hard keys (home, back, media, navigation, phone, track skip).
+// The simulated centre console, laid out like a BMW iDrive multimedia controller: audio display with volume keys, the rotary knob with its four
+// nudge keys and MENU/HOME/BACK/OPTION around it, the MEDIA/RADIO/TEL/NAV/MAP hot keys, the projection key and track skip.
 class CarPanel final : public QWidget {
 public:
     explicit CarPanel(QWidget* parent = nullptr);
+    // Controller keys (Home, Menu, Media, ...); what they mean is decided by the ConsoleController.
+    std::function<void(ConsoleKey key)> onConsole;
+    // Keys that go straight to the phone: nudge keys and the track/play keys (down on press, up on release).
     std::function<void(unsigned keycode, bool isDown)> onKey;
     std::function<void(int detents)> onRotate;
     std::function<void(int delta)> onVolume;
@@ -88,6 +92,7 @@ public:
     AudioDisplay* Display() { return m_display; }
 private:
     QPushButton* AddKeyButton(const QString& text, unsigned keycode, const QString& tip);
+    QPushButton* AddConsoleButton(const QString& text, ConsoleKey key, const QString& tip);
     QPushButton* AddPlainButton(const QString& text, const QString& tip);
     AudioDisplay* m_display{};
     RotaryKnob* m_knob{};

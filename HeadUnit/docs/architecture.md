@@ -84,3 +84,14 @@ bounded ring buffer, applies the shared volume/mute gain and reports levels back
 `CarPanel` (rotary knob, keys, audio display) and `VideoWidget` (picture and touch mapping) are plain
 Qt widgets without moc; the portable parts (touch mapping, input bus, PCM helpers) are header-only
 and unit-tested in CoreTests.
+
+Hard keys: `CarPanel` reports controller keys (`ConsoleKey`: Home, Menu, Option, Media, Radio, Tel,
+Nav, Map, Back, Projection) to `MainWindow::PressConsole`, which asks the portable `ConsoleController`
+what the key means and gets a `ConsoleEffect` back: car keys and touch taps for the phone, one line for
+the window log, and whether to connect first. There is no radio operating system yet, so the radio side
+(Radio, Menu, the second step of Home) is only a log line. Home is two-step while a phone is projected;
+where the phone currently is comes from `DetectPhoneScreen`, which reads the symbol of the navigation
+bar's bottom-left button from the newest decoded frame (the protocol never reports the phone's screen,
+and `KEYCODE_HOME` only opens the app launcher). `ApplyConsoleEffect` sends keys and taps through
+`ProjectionInput` and re-reads the picture once after the phone's home key when the picture was
+not readable. Hardware tests for this are `--test-console` and the diagnostic `--test-keys`.

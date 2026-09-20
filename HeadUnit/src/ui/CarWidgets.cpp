@@ -266,7 +266,8 @@ CarPanel::CarPanel(QWidget* parent) : QWidget(parent)
     volume->addWidget(up);
     layout->addLayout(volume);
 
-    // Knob with the four nudge keys around it, like a joystick-style controller.
+    // The controller: rotary knob in the middle, the four nudge keys around it and MENU / HOME / BACK /
+    // OPTION in the corners, as on a BMW iDrive controller.
     auto* pad = new QGridLayout();
     pad->setSpacing(4);
     m_knob = new RotaryKnob(this);
@@ -278,26 +279,51 @@ CarPanel::CarPanel(QWidget* parent) : QWidget(parent)
         button->setStyleSheet("font-size: 18px;");
         pad->addWidget(button, row, column, Qt::AlignCenter);
     };
+    const auto corner = [&](const char* text, ConsoleKey key, const char* tip, int row, int column) {
+        auto* button = AddConsoleButton(text, key, tip);
+        button->setFixedSize(70, 36);
+        pad->addWidget(button, row, column, Qt::AlignCenter);
+    };
+    corner("MENU", ConsoleKey::Menu, "Hauptmenue des Radios (noch ohne Funktion), Taste F1", 0, 0);
     nudge("▲", keys::DpadUp, "Nach oben (Pfeil hoch)", 0, 1);
+    corner("HOME", ConsoleKey::Home, "Android-Auto-Startbildschirm; nochmal: Radio-Startmenue (Pos1)", 0, 2);
     nudge("◀", keys::DpadLeft, "Nach links (Pfeil links)", 1, 0);
     pad->addWidget(m_knob, 1, 1, Qt::AlignCenter);
     nudge("▶", keys::DpadRight, "Nach rechts (Pfeil rechts)", 1, 2);
+    corner("BACK", ConsoleKey::Back, "Zurueck (Esc)", 2, 0);
     nudge("▼", keys::DpadDown, "Nach unten (Pfeil runter)", 2, 1);
+    corner("OPTION", ConsoleKey::Option, "Optionen/Kontextmenue der aktuellen Ansicht (F2)", 2, 2);
     pad->setAlignment(Qt::AlignHCenter);
     layout->addLayout(pad);
 
-    auto* hard = new QGridLayout();
-    hard->setSpacing(6);
-    hard->addWidget(AddKeyButton("Home", keys::Home, "Startbildschirm (Pos1)"), 0, 0);
-    hard->addWidget(AddKeyButton("Zurueck", keys::Back, "Zurueck (Esc)"), 0, 1);
-    hard->addWidget(AddKeyButton("Medien", keys::Media, "Medien-Taste"), 1, 0);
-    hard->addWidget(AddKeyButton("Navi", keys::Navigation, "Navigations-Taste"), 1, 1);
-    hard->addWidget(AddKeyButton("Telefon", keys::Tel, "Telefon-Taste"), 1, 2);
-    hard->addWidget(AddKeyButton("◀◀ Titel", keys::MediaPrevious, "Voriger Titel (Bild hoch)"), 2, 0);
-    hard->addWidget(AddKeyButton("Play/Pause", keys::MediaPlayPause, "Wiedergabe/Pause (Leertaste)"), 2, 1);
-    hard->addWidget(AddKeyButton("Titel ▶▶", keys::MediaNext, "Naechster Titel (Bild runter)"), 2, 2);
-    layout->addLayout(hard);
+    // Hot keys.
+    auto* hot = new QGridLayout();
+    hot->setSpacing(6);
+    hot->addWidget(AddConsoleButton("MEDIA", ConsoleKey::Media, "Medien (Spotify o.ae. auf dem Handy), Taste F3"), 0, 0);
+    hot->addWidget(AddConsoleButton("RADIO", ConsoleKey::Radio, "Radio (noch ohne Funktion), Taste F4"), 0, 1);
+    hot->addWidget(AddConsoleButton("TEL", ConsoleKey::Tel, "Telefon auf dem Handy, Taste F5"), 0, 2);
+    hot->addWidget(AddConsoleButton("NAV", ConsoleKey::Nav, "Navigation auf dem Handy, Taste F6"), 1, 0);
+    hot->addWidget(AddConsoleButton("MAP", ConsoleKey::Map, "Karte auf dem Handy, Taste F7"), 1, 1);
+    layout->addLayout(hot);
+    auto* projection = AddConsoleButton("CarPlay / Android Auto", ConsoleKey::Projection, "Projektion nach vorn holen; ohne Verbindung: verbinden (Taste F8)");
+    projection->setMinimumHeight(36);
+    layout->addWidget(projection);
+
+    // Track skip and play/pause go straight to the phone's media session.
+    auto* skip = new QHBoxLayout();
+    skip->setSpacing(6);
+    skip->addWidget(AddKeyButton("◀◀ Titel", keys::MediaPrevious, "Voriger Titel (Bild hoch)"));
+    skip->addWidget(AddKeyButton("Play/Pause", keys::MediaPlayPause, "Wiedergabe/Pause (Leertaste)"));
+    skip->addWidget(AddKeyButton("Titel ▶▶", keys::MediaNext, "Naechster Titel (Bild runter)"));
+    layout->addLayout(skip);
     layout->addStretch(1);
+}
+QPushButton* CarPanel::AddConsoleButton(const QString& text, ConsoleKey key, const QString& tip)
+{
+    auto* button = AddPlainButton(text, tip);
+    // A controller key acts once per click; what it does depends on the console state.
+    connect(button, &QPushButton::clicked, this, [this, key] { if (onConsole) onConsole(key); });
+    return button;
 }
 QPushButton* CarPanel::AddPlainButton(const QString& text, const QString& tip)
 {

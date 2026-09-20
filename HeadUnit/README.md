@@ -21,12 +21,25 @@ schliessen): Das Handy bekommt ein Goodbye, dann wird die USB-Schnittstelle frei
   die schwarzen Raender zaehlen nicht).
 - **Drehregler:** Mausrad auf dem Regler oder mit der Maus im Kreis ziehen dreht (ein Rastpunkt
   alle 15 Grad), ein Klick ohne Ziehen drueckt ihn. Darum die vier Pfeiltasten.
-- **Tasten:** Home, Zurueck, Medien, Navi, Telefon, Titel zurueck/vor, Play/Pause.
+- **Tasten** (angelehnt an ein BMW-iDrive-Multimedia-Bedienteil): Menu, Home, Back, Option um den
+  Drehregler; Media, Radio, Tel, Nav, Map; **CarPlay / Android Auto**; Leiser, Stumm, Lauter;
+  Titel zurueck/vor und Play/Pause. Media, Tel, Nav und Map rufen die entsprechende App auf dem Handy
+  auf (Map und Nav oeffnen beide die Navigation), Back ist die Zurueck-Taste des Handys, Option
+  sendet dessen Menue-Taste. Radio und Menu haben noch keine Belegung, weil es kein eigenes
+  Betriebssystem gibt: sie schreiben nur eine Zeile ins Fenster-Log.
+- **Home** hat zwei Stufen, solange ein Handy uebertragen wird: Beim ersten Druck wechselt das Handy auf
+  seinen Startbildschirm (Karte, Medien, Telefon-Karten, z. B. Maps und Spotify). Der zweite Druck
+  oeffnet das Home-Menue des Radios (nur ein Log-Eintrag), der dritte geht zurueck zum Handy-Startbildschirm.
+  Ohne verbundenes Handy meldet Home nur das Radio-Menue. Ob das Handy gerade auf seinem Startbildschirm
+  ist, liest die App am Symbol unten links im Bild ab.
+- **CarPlay / Android Auto** startet die Verbindung, wenn noch keine besteht, sonst holt die Taste das Handy in den
+  Vordergrund.
 - **Audio-Anzeige:** Lautstaerke (30 Stufen), Stumm und je ein Pegel fuer Medien, Navigation und
   System. Die Anzeige zeigt, welche Tonspur des Handys gerade Audio liefert. Lautstaerke und Stumm
   wirken in der App (der Windows-Regler bleibt unberuehrt); mehr Lautstaerke schaltet Stumm aus.
-- **Tastatur:** Pfeile, Enter (Regler druecken), Esc/Rueck (Zurueck), Pos1 (Home), Leertaste
-  (Play/Pause), Bild hoch/runter (Titel), +/- (Lautstaerke), M (Stumm).
+- **Tastatur:** Pfeile, Enter (Regler druecken), Esc/Rueck (Back), Pos1 (Home), F1 Menu, F2 Option,
+  F3 Media, F4 Radio, F5 Tel, F6 Nav, F7 Map, F8 CarPlay / Android Auto, Leertaste (Play/Pause),
+  Bild hoch/runter (Titel), +/- (Lautstaerke), M (Stumm).
 Der Ton laeuft ueber das Standard-Ausgabegeraet von Windows (WASAPI, andere Programme behalten
 ihren Ton). Das Mikrofon (Sprachbefehle, Telefonate) ist noch nicht angebunden.
 
@@ -63,7 +76,7 @@ native VS-Projekte; Protobuf-Dateien und DLL-Kopien werden automatisch erzeugt.
 `--start-accessory` (Accessory-Modus starten und Bulk-Paar pruefen), `--repair-driver`
 (WinUSB wiederherstellen), `--recover-phone` (USB-Verbindung des Handys neu starten und
 Treiber reparieren), `--test-projection` (kompletter Ablauf, erfolgreich nach zehn
-angezeigten Videobildern), `--test-input` (schickt Regler-, Tasten- und Touch-Eingaben ans Handy), `--test-audio` (startet Wiedergabe leise und prueft, dass Ton am Ausgabegeraet ankommt). Mit `HEADUNIT_TEST_SHOTS=<Ordner>` speichern die Tests Bilder des Handys und des Fensters. Details: [Windows-Verbindung](docs/windows_connection.md).
+angezeigten Videobildern), `--test-input` (schickt Regler-, Tasten- und Touch-Eingaben ans Handy), `--test-audio` (startet Wiedergabe leise und prueft, dass Ton am Ausgabegeraet ankommt), `--test-console` (Nav, Home, Home, Media, Home, Radio: prueft die Zwei-Stufen-Logik von Home am echten Handybild), `--test-keys` (Diagnose: spielt die Schritte aus `HEADUNIT_TEST_KEYS` ab (Zahl = Tastencode, `t:X:Y` = Tipp aufs Display, `c:name` = Konsolentaste), durch Komma getrennt, z. B. `3,t:42:438,c:home`, und speichert nach jedem Schritt ein Bild). Mit `HEADUNIT_TEST_SHOTS=<Ordner>` speichern die Tests Bilder des Handys und des Fensters. Details: [Windows-Verbindung](docs/windows_connection.md).
 
 ## Visual Studio 2026: oeffnen, bauen, starten
 

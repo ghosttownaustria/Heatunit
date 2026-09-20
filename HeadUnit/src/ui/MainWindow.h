@@ -1,4 +1,5 @@
 #pragma once
+#include "androidauto/ConsoleController.h"
 #include "androidauto/ProjectionInput.h"
 #include "audio/AudioTypes.h"
 #include "audio/WasapiAudioEngine.h"
@@ -29,7 +30,7 @@ class VideoWidget;
 class MainWindow final : public QMainWindow {
 public:
     // The test modes run one scripted check against the real phone and exit with its result.
-    enum class TestMode { None, Smoke, Projection, Input, Audio };
+    enum class TestMode { None, Smoke, Projection, Input, Audio, Console, Keys };
     MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode = TestMode::None);
     ~MainWindow() override;
 protected:
@@ -48,12 +49,19 @@ private:
     bool HandleKey(QKeyEvent* event, bool isDown);
     void RunInputTest();
     void RunAudioTest();
+    void RunConsoleTest();
+    void RunKeysTest();
+    void PressConsole(ConsoleKey key);
+    void TapPhone(int x, int y);
+    PhoneScreen CurrentPhoneScreen() const;
+    void ApplyConsoleEffect(const ConsoleEffect& effect);
     void FinishTest(int exitCode, const std::string& summary);
     void SaveTestShot(const char* name, bool isWholeWindow = false);
     IUsbBackend& m_backend;
     Logger& m_logger;
     TestMode m_mode;
     std::shared_ptr<ProjectionInput> m_input;
+    ConsoleController m_console;
     std::shared_ptr<AudioState> m_audioState;
     std::unique_ptr<WasapiAudioEngine> m_audio;
     VideoWidget* m_video{};
@@ -76,5 +84,7 @@ private:
     unsigned m_testFrames[4]{};
     int m_testExitCode{3};
     bool m_isTestFinished{};
+    std::string m_testProblems;
+    std::vector<std::string> m_testSteps;   // --test-keys script
 };
 }

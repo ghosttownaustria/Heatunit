@@ -26,6 +26,7 @@ constexpr unsigned DpadDown = 20;
 constexpr unsigned DpadLeft = 21;
 constexpr unsigned DpadRight = 22;
 constexpr unsigned DpadCenter = 23;
+constexpr unsigned Menu = 82;                // context menu ("Option")
 constexpr unsigned Search = 84;              // voice assistant on most phones
 constexpr unsigned MediaPlayPause = 85;
 constexpr unsigned MediaStop = 86;
@@ -38,7 +39,7 @@ constexpr unsigned Media = 65537;
 constexpr unsigned Navigation = 65538;
 constexpr unsigned Tel = 65540;
 // What the phone may bind; anything else it asks for is answered but never sent.
-constexpr unsigned Supported[] = {Home, Back, Call, EndCall, DpadUp, DpadDown, DpadLeft, DpadRight, DpadCenter, Search,
+constexpr unsigned Supported[] = {Home, Back, Call, EndCall, DpadUp, DpadDown, DpadLeft, DpadRight, DpadCenter, Menu, Search,
     MediaPlayPause, MediaStop, MediaNext, MediaPrevious, MediaPlay, MediaPause, RotaryController, Media, Navigation, Tel};
 }
 

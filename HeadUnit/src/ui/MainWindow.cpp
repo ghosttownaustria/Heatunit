@@ -34,7 +34,10 @@ MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
     auto* left = new QVBoxLayout();
     m_video = new VideoWidget(central);
     m_video->ClearFrame("Android Auto ist nicht verbunden.");
-    m_video->onTouch = [this](TouchAction action, int x, int y) { m_input->Touch(action, x, y); };
+    m_video->onTouch = [this](TouchAction action, int x, int y) {
+        if (action == TouchAction::Down) m_console.NoteTouch();
+        m_input->Touch(action, x, y);
+    };
     left->addWidget(m_video, 1);
     m_button = new QPushButton(central);
     m_button->setMinimumHeight(48);
@@ -56,7 +59,8 @@ MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
     root->addLayout(left, 1);
     m_panel = new CarPanel(central);
     m_panel->setFixedWidth(310);
-    m_panel->onKey = [this](unsigned keycode, bool isDown) { m_input->Key(keycode, isDown); };
+    m_panel->onConsole = [this](ConsoleKey key) { PressConsole(key); };
+    m_panel->onKey = [this](unsigned keycode, bool isDown) { m_console.NoteKey(keycode, isDown); m_input->Key(keycode, isDown); };
     m_panel->onRotate = [this](int detents) { m_input->Rotate(detents); };
     m_panel->onVolume = [this](int delta) { m_audioState->ChangeVolume(delta); };
     m_panel->onMute = [this] { m_audioState->ToggleMute(); };
@@ -105,6 +109,26 @@ void MainWindow::closeEvent(QCloseEvent* event)
 }
 bool MainWindow::HandleKey(QKeyEvent* event, bool isDown)
 {
+    // Controller keys: the console decides what they mean (see ConsoleController).
+    std::optional<ConsoleKey> console;
+    switch (event->key()) {
+    case Qt::Key_Home: console = ConsoleKey::Home; break;
+    case Qt::Key_Escape: case Qt::Key_Backspace: console = ConsoleKey::Back; break;
+    case Qt::Key_F1: console = ConsoleKey::Menu; break;
+    case Qt::Key_F2: console = ConsoleKey::Option; break;
+    case Qt::Key_F3: console = ConsoleKey::Media; break;
+    case Qt::Key_F4: console = ConsoleKey::Radio; break;
+    case Qt::Key_F5: console = ConsoleKey::Tel; break;
+    case Qt::Key_F6: console = ConsoleKey::Nav; break;
+    case Qt::Key_F7: console = ConsoleKey::Map; break;
+    case Qt::Key_F8: console = ConsoleKey::Projection; break;
+    default: break;
+    }
+    if (console) {
+        if (isDown && !event->isAutoRepeat()) PressConsole(*console);
+        return true;
+    }
+    // Keys that go straight to the phone.
     unsigned keycode = 0;
     bool isArrow = false;
     switch (event->key()) {
@@ -113,8 +137,6 @@ bool MainWindow::HandleKey(QKeyEvent* event, bool isDown)
     case Qt::Key_Left: keycode = keys::DpadLeft; isArrow = true; break;
     case Qt::Key_Right: keycode = keys::DpadRight; isArrow = true; break;
     case Qt::Key_Return: case Qt::Key_Enter: keycode = keys::DpadCenter; break;
-    case Qt::Key_Escape: case Qt::Key_Backspace: keycode = keys::Back; break;
-    case Qt::Key_Home: keycode = keys::Home; break;
     case Qt::Key_Space: keycode = keys::MediaPlayPause; break;
     case Qt::Key_PageUp: keycode = keys::MediaPrevious; break;
     case Qt::Key_PageDown: keycode = keys::MediaNext; break;
@@ -122,7 +144,7 @@ bool MainWindow::HandleKey(QKeyEvent* event, bool isDown)
     }
     if (keycode != 0) {
         if (event->isAutoRepeat()) { if (isDown && isArrow) m_input->Tap(keycode); }  // held arrows keep nudging
-        else m_input->Key(keycode, isDown);
+        else { m_console.NoteKey(keycode, isDown); m_input->Key(keycode, isDown); }
         return true;
     }
     if (!isDown) return false;
@@ -132,6 +154,50 @@ bool MainWindow::HandleKey(QKeyEvent* event, bool isDown)
     case Qt::Key_M: m_audioState->ToggleMute(); return true;
     default: return false;
     }
+}
+// What the phone shows right now, read from the last picture (unknown without one).
+PhoneScreen MainWindow::CurrentPhoneScreen() const
+{
+    if (!m_video->HasFrame()) return PhoneScreen::Unknown;
+    const QImage& image = m_video->Image();
+    if (image.format() != QImage::Format_RGB888) return PhoneScreen::Unknown;
+    return DetectPhoneScreen(image.constBits(), image.width(), image.height(), static_cast<int>(image.bytesPerLine()));
+}
+void MainWindow::PressConsole(ConsoleKey key)
+{
+    // Only Home depends on where the phone is.
+    PhoneScreen phone = PhoneScreen::Unknown;
+    if (key == ConsoleKey::Home && m_console.IsProjectionConnected()) {
+        phone = CurrentPhoneScreen();
+        m_logger.Write("INFO", "CONSOLE", std::string("Phone screen read from the picture: ") +
+            (phone == PhoneScreen::Dashboard ? "dashboard" : phone == PhoneScreen::Other ? "other (app or launcher)" : "unknown"));
+    }
+    ApplyConsoleEffect(m_console.Press(key, phone));
+}
+// Keys and taps go to the phone, the message (if any) becomes a line in the window log, and the
+// projection key may start the connection.
+void MainWindow::ApplyConsoleEffect(const ConsoleEffect& effect)
+{
+    for (const unsigned keycode : effect.phoneKeys) m_input->Tap(keycode);
+    for (const auto& [x, y] : effect.phoneTaps) TapPhone(x, y);
+    if (effect.retryDashboard) {
+        // The home key opened the app launcher, whose button leads to the dashboard: look again once the
+        // phone has drawn it.
+        QTimer::singleShot(1000, this, [this] {
+            if (m_console.IsProjectionConnected() && CurrentPhoneScreen() == PhoneScreen::Other) TapPhone(kDashboardButtonX, kDashboardButtonY);
+        });
+    }
+    if (!effect.message.empty()) {
+        m_logger.Write("INFO", "CONSOLE", effect.message);
+        ShowStep(Text(effect.message));
+    }
+    if (effect.connect) StartConnect();
+}
+// A short touch at a fixed spot of the phone's screen.
+void MainWindow::TapPhone(int x, int y)
+{
+    m_input->Touch(TouchAction::Down, x, y);
+    QTimer::singleShot(60, this, [this, x, y] { m_input->Touch(TouchAction::Up, x, y); });
 }
 void MainWindow::keyPressEvent(QKeyEvent* event) { if (!HandleKey(event, true)) QMainWindow::keyPressEvent(event); }
 void MainWindow::keyReleaseEvent(QKeyEvent* event) { if (!HandleKey(event, false)) QMainWindow::keyReleaseEvent(event); }
@@ -157,7 +223,10 @@ void MainWindow::Tick()
     { std::lock_guard lock(m_frameMutex); frame.swap(m_latestFrame); }
     if (frame) {
         m_video->SetFrame(*frame);
-        if (++m_displayedFrames == 1) m_logger.Write("INFO", "VIDEO", "First real Android Auto frame displayed in Qt");
+        if (++m_displayedFrames == 1) {
+            m_logger.Write("INFO", "VIDEO", "First real Android Auto frame displayed in Qt");
+            m_console.SetProjectionConnected(true);
+        }
         m_status->setText(QString("Android Auto: Video %1x%2 | %3 Bilder angezeigt").arg(frame->width).arg(frame->height).arg(m_displayedFrames));
         if (m_mode == TestMode::Projection && m_displayedFrames >= kProjectionTestFrames) { m_isStopRequested = true; QApplication::exit(0); }
     }
@@ -167,6 +236,8 @@ void MainWindow::Tick()
     if (m_state == State::Connecting && !m_isTestFinished) {
         if (m_mode == TestMode::Input) RunInputTest();
         else if (m_mode == TestMode::Audio) RunAudioTest();
+        else if (m_mode == TestMode::Console) RunConsoleTest();
+        else if (m_mode == TestMode::Keys) RunKeysTest();
     }
 }
 void MainWindow::StartConnect()
@@ -175,6 +246,7 @@ void MainWindow::StartConnect()
     m_isStopRequested = false;
     m_displayedFrames = 0;
     { std::lock_guard lock(m_frameMutex); m_latestFrame.reset(); }
+    m_console.SetProjectionConnected(false);
     m_video->ClearFrame("Verbinde Android Auto ...");
     m_status->clear();
     m_history->clear();
@@ -197,9 +269,10 @@ void MainWindow::RequestStop()
 }
 void MainWindow::FinishConnect(const AutoConnectResult& result)
 {
+    m_console.SetProjectionConnected(false);
     SetState(State::Idle);
     if (m_mode == TestMode::Projection) { QApplication::exit(m_displayedFrames >= kProjectionTestFrames ? 0 : 3); return; }
-    if (m_mode == TestMode::Input || m_mode == TestMode::Audio) { QApplication::exit(m_isTestFinished ? m_testExitCode : 3); return; }
+    if (m_mode == TestMode::Input || m_mode == TestMode::Audio || m_mode == TestMode::Console || m_mode == TestMode::Keys) { QApplication::exit(m_isTestFinished ? m_testExitCode : 3); return; }
     if (m_isCloseRequested) { close(); return; }
     { std::lock_guard lock(m_frameMutex); m_latestFrame.reset(); }
     m_video->ClearFrame(result.hasVideo || result.isStoppedByUser ? "Android Auto beendet." : "Android Auto konnte nicht verbunden werden.");
@@ -302,5 +375,117 @@ void MainWindow::RunAudioTest()
     }
     default: break;
     }
+}
+// Presses controller keys on the real phone and checks the Home logic step by step, looking at what the
+// phone really shows (not just at the controller's own state): Nav opens the map, Home brings the phone to
+// its dashboard, Home again reports the radio menu (a log line) and leaves the phone alone, Media leaves the
+// dashboard, Home returns to it. Pictures of the phone are saved for a person to look at.
+void MainWindow::RunConsoleTest()
+{
+    const qint64 elapsed = m_testClock.isValid() ? m_testClock.elapsed() : 0;
+    const auto expectScreen = [&](ConsoleController::Screen screen, const char* what) {
+        if (m_console.CurrentScreen() != screen) m_testProblems += std::string(what) + "; ";
+    };
+    const auto expectPhone = [&](PhoneScreen phone, const char* what) {
+        if (CurrentPhoneScreen() != phone) m_testProblems += std::string(what) + "; ";
+    };
+    const auto historyHas = [&](const char* text) { return m_history->toPlainText().contains(QString::fromUtf8(text)); };
+    switch (m_testStage) {
+    case 0:
+        if (m_displayedFrames >= kProjectionTestFrames && m_input->IsAttached()) {
+            PressConsole(ConsoleKey::Nav);
+            m_testClock.restart(); m_testStage = 1;
+        }
+        break;
+    case 1:  // the navigation app is showing; Home must bring the phone to its dashboard
+        if (elapsed >= 3000) {
+            SaveTestShot("console-1-nav.png");
+            expectPhone(PhoneScreen::Other, "the phone did not show an app after Nav");
+            PressConsole(ConsoleKey::Home);
+            m_testClock.restart(); m_testStage = 2;
+        }
+        break;
+    case 2:  // first Home: the phone shows its dashboard, no radio menu yet
+        if (elapsed >= 2500) {
+            SaveTestShot("console-2-home.png");
+            expectPhone(PhoneScreen::Dashboard, "first Home did not bring the phone to its dashboard");
+            expectScreen(ConsoleController::Screen::ProjectionHome, "first Home did not end on the phone's dashboard");
+            if (historyHas("Radio-Startmenue")) m_testProblems += "first Home already opened the radio menu; ";
+            if (!historyHas("Android-Auto-Startbildschirm")) m_testProblems += "first Home was not reported; ";
+            PressConsole(ConsoleKey::Home);
+            m_testClock.restart(); m_testStage = 3;
+        }
+        break;
+    case 3:  // second Home: the radio menu, only a log line; the phone must stay where it is
+        if (elapsed >= 800) {
+            SaveTestShot("console-3-second-home.png");
+            expectScreen(ConsoleController::Screen::RadioHome, "second Home did not open the radio menu");
+            expectPhone(PhoneScreen::Dashboard, "second Home changed what the phone shows");
+            if (!historyHas("Home: Radio-Startmenue")) m_testProblems += "radio menu line missing in the window log; ";
+            PressConsole(ConsoleKey::Media);
+            m_testClock.restart(); m_testStage = 4;
+        }
+        break;
+    case 4:  // Media launches something on the phone, so Home must go to the phone first again
+        if (elapsed >= 3000) {
+            SaveTestShot("console-4-media.png");
+            expectScreen(ConsoleController::Screen::Projection, "Media did not leave the dashboard");
+            expectPhone(PhoneScreen::Other, "the phone did not show an app after Media");
+            PressConsole(ConsoleKey::Home);
+            m_testClock.restart(); m_testStage = 5;
+        }
+        break;
+    case 5:
+        if (elapsed >= 2500) {
+            SaveTestShot("console-5-home-again.png");
+            expectScreen(ConsoleController::Screen::ProjectionHome, "Home after Media did not end on the phone's dashboard");
+            expectPhone(PhoneScreen::Dashboard, "Home after Media did not bring the phone to its dashboard");
+            PressConsole(ConsoleKey::Radio);   // only reported
+            if (!historyHas("Radio: noch keine Belegung")) m_testProblems += "radio key was not reported; ";
+            FinishTest(m_testProblems.empty() ? 0 : 6, m_testProblems.empty() ? "Console test: Home, Media, Nav and Radio behave as specified"
+                : "Console test: " + m_testProblems);
+        }
+        break;
+    default: break;
+    }
+}
+// Diagnostic: plays the script in HEADUNIT_TEST_KEYS on the real phone and saves a picture after every
+// step. Steps are separated by commas: a number taps that key code, "t:X:Y" taps the touchscreen at X,Y
+// (0..799, 0..479), "c:name" presses a controller key (home, media, ...). Used to find out what a key does
+// on a given phone.
+void MainWindow::RunKeysTest()
+{
+    const qint64 elapsed = m_testClock.isValid() ? m_testClock.elapsed() : 0;
+    if (m_testStage == 0) {
+        if (m_displayedFrames < kProjectionTestFrames || !m_input->IsAttached()) return;
+        const QByteArray script = qgetenv("HEADUNIT_TEST_KEYS");
+        for (const auto& part : script.split(',')) if (!part.trimmed().isEmpty()) m_testSteps.push_back(part.trimmed().toStdString());
+        m_testStage = 1;
+        m_testClock.restart();
+        SaveTestShot("keys-0-start.png");
+        return;
+    }
+    const std::size_t index = static_cast<std::size_t>(m_testStage - 1);
+    if (elapsed < 2800) return;
+    if (index > 0) SaveTestShot(("keys-" + std::to_string(index) + ".png").c_str());
+    if (index >= m_testSteps.size()) { FinishTest(0, "Keys test: " + std::to_string(m_testSteps.size()) + " steps played"); return; }
+    const std::string& step = m_testSteps[index];
+    m_logger.Write("INFO", "TEST", "Keys test step " + std::to_string(index + 1) + ": " + step);
+    if (step.rfind("t:", 0) == 0) {
+        int x = 0, y = 0;
+        if (sscanf_s(step.c_str(), "t:%d:%d", &x, &y) == 2) {
+            m_input->Touch(TouchAction::Down, x, y);
+            m_input->Touch(TouchAction::Up, x, y);
+        }
+    } else if (step.rfind("c:", 0) == 0) {
+        static const std::pair<const char*, ConsoleKey> names[] = {{"home", ConsoleKey::Home}, {"menu", ConsoleKey::Menu}, {"option", ConsoleKey::Option},
+            {"media", ConsoleKey::Media}, {"radio", ConsoleKey::Radio}, {"tel", ConsoleKey::Tel}, {"nav", ConsoleKey::Nav}, {"map", ConsoleKey::Map},
+            {"back", ConsoleKey::Back}, {"projection", ConsoleKey::Projection}};
+        for (const auto& [name, key] : names) if (step.substr(2) == name) PressConsole(key);
+    } else {
+        m_input->Tap(static_cast<unsigned>(std::strtoul(step.c_str(), nullptr, 10)));
+    }
+    ++m_testStage;
+    m_testClock.restart();
 }
 }
