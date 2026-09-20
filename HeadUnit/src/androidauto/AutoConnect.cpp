@@ -65,10 +65,11 @@ AutoConnectResult RunAutoConnect(const AutoConnectDeps& deps, Logger& logger, co
             continue;
         }
         if (result.needsRecovery && recoveries < kMaxRecoveries) {
-            // Accessory mode is up but Android Auto on the phone stays silent. Restarting the phone's
-            // USB connection (same as unplugging and replugging the cable) is what fixes that.
+            // Accessory mode is up but Android Auto on the phone stays silent, or the phone's USB link does not
+            // answer at all. Restarting the phone's USB connection (same as unplugging and replugging the cable)
+            // is what fixes both.
             ++recoveries;
-            step("Android Auto auf dem Handy antwortet nicht. Starte die USB-Verbindung des Handys neu (" +
+            step("Das Handy reagiert nicht. Starte die USB-Verbindung des Handys neu (" +
                 std::to_string(recoveries) + "/" + std::to_string(kMaxRecoveries) + ") - bitte die Windows-Abfrage (Administratorrechte) bestaetigen ...");
             const auto recovered = deps.recover();
             if (!recovered.IsUsable()) return failed(recovered.message + " Alternativ das Kabel einmal abziehen und wieder anstecken.");

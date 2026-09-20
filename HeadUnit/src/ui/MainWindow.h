@@ -1,5 +1,6 @@
 #pragma once
 #include "androidauto/ConsoleController.h"
+#include "androidauto/DisplayConfig.h"
 #include "androidauto/ProjectionInput.h"
 #include "audio/AudioTypes.h"
 #include "audio/WasapiAudioEngine.h"
@@ -14,6 +15,7 @@
 #include <mutex>
 #include <optional>
 class QCloseEvent;
+class QComboBox;
 class QKeyEvent;
 class QLabel;
 class QPlainTextEdit;
@@ -26,13 +28,17 @@ class VideoWidget;
 // One button connects (finding the phone, repairing the driver, starting Android Auto, restarting the
 // USB link when needed) and, while running, ends the session again. Next to the picture sits the
 // simulated centre console: rotary knob, hard keys and the audio display. The picture itself takes
-// mouse input as touch.
+// mouse input as touch. The display size (video resolution) is chosen next to the button and only
+// while nothing is connected: the phone is told the size once, when the connection starts.
 class MainWindow final : public QMainWindow {
 public:
     // The test modes run one scripted check against the real phone and exit with its result.
     enum class TestMode { None, Smoke, Projection, Input, Audio, Console, Keys };
     MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode = TestMode::None);
     ~MainWindow() override;
+    // Selects the display size for the next connection (ignored while a connection is running or for a
+    // size that is not offered). Not remembered: only a choice made in the window is.
+    void SetDisplay(const DisplayConfig& display);
 protected:
     void closeEvent(QCloseEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
@@ -64,10 +70,12 @@ private:
     ConsoleController m_console;
     std::shared_ptr<AudioState> m_audioState;
     std::unique_ptr<WasapiAudioEngine> m_audio;
+    DisplayConfig m_display{kDefaultDisplay};
     VideoWidget* m_video{};
     CarPanel* m_panel{};
     QLabel* m_status{};
     QLabel* m_step{};
+    QComboBox* m_displayChoice{};
     QPushButton* m_button{};
     QPlainTextEdit* m_history{};
     std::atomic_bool m_isStopRequested{};

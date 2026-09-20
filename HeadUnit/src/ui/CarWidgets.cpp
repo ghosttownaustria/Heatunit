@@ -34,8 +34,14 @@ VideoWidget::VideoWidget(QWidget* parent) : QWidget(parent)
 }
 void VideoWidget::SetFrame(const VideoFrame& frame)
 {
-    // Copied because the frame's buffer belongs to the caller.
-    m_image = QImage(frame.pixels.data(), frame.width, frame.height, frame.stride, QImage::Format_RGB888).copy();
+    // Copied because the frame's buffer belongs to the caller. Only the shown area is kept: a display of
+    // another shape than the phone's frame is fitted into it with black margins (see VideoLayout).
+    const QImage whole(frame.pixels.data(), frame.width, frame.height, frame.stride, QImage::Format_RGB888);
+    const VideoLayout layout = VideoLayoutOf(m_display);
+    if (layout.HasMargins() && frame.width == layout.codecWidth && frame.height == layout.codecHeight)
+        m_image = whole.copy(layout.Left(), layout.Top(), layout.width, layout.height);
+    else
+        m_image = whole.copy();
     update();
 }
 void VideoWidget::ClearFrame(const QString& message)
@@ -45,16 +51,33 @@ void VideoWidget::ClearFrame(const QString& message)
     m_isTouching = false;
     update();
 }
+void VideoWidget::SetDisplay(const DisplayConfig& display)
+{
+    m_display = display;
+    update();
+}
 void VideoWidget::paintEvent(QPaintEvent*)
 {
     QPainter painter(this);
     painter.fillRect(rect(), QColor(17, 17, 17));
     if (m_image.isNull()) {
+        // An empty screen of the chosen display's shape, so its size can be judged before connecting.
+        const QSize area = QSize(m_display.width, m_display.height).scaled(size() - QSize(24, 24), Qt::KeepAspectRatio);
+        const QRect screen(QPoint((width() - area.width()) / 2, (height() - area.height()) / 2), area);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(QPen(QColor(70, 78, 92), 1));
+        painter.setBrush(QColor(26, 29, 35));
+        painter.drawRoundedRect(screen, 6, 6);
         painter.setPen(QColor(221, 221, 221));
         QFont font = painter.font();
         font.setPointSize(14);
         painter.setFont(font);
-        painter.drawText(rect(), Qt::AlignCenter | Qt::TextWordWrap, m_message);
+        painter.drawText(screen.adjusted(12, 12, -12, -34), Qt::AlignCenter | Qt::TextWordWrap, m_message);
+        font.setPointSize(9);
+        painter.setFont(font);
+        painter.setPen(QColor(150, 158, 172));
+        painter.drawText(screen.adjusted(0, 0, -12, -10), Qt::AlignRight | Qt::AlignBottom,
+            QString("Display %1").arg(QString::fromStdString(DisplayText(m_display))));
         return;
     }
     const QSize shown = m_image.size().scaled(size(), Qt::KeepAspectRatio);
@@ -65,7 +88,7 @@ void VideoWidget::paintEvent(QPaintEvent*)
 bool VideoWidget::Report(TouchAction action, const QPointF& position, bool isClamped)
 {
     if (m_image.isNull() || !onTouch) return false;
-    const auto point = MapToTouch(width(), height(), m_image.width(), m_image.height(), position.x(), position.y(), isClamped);
+    const auto point = MapToTouch(width(), height(), m_image.width(), m_image.height(), position.x(), position.y(), isClamped, m_display);
     if (!point) return false;
     onTouch(action, point->first, point->second);
     return true;

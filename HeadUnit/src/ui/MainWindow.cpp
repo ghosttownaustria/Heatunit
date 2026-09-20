@@ -1,6 +1,7 @@
 #include "ui/MainWindow.h"
 #include "ui/CarWidgets.h"
 #include <QApplication>
+#include <QComboBox>
 #include <QDir>
 #include <QCloseEvent>
 #include <QHBoxLayout>
@@ -8,19 +9,30 @@
 #include <QLabel>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QSettings>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QtConcurrent/QtConcurrentRun>
 #include <array>
 #include <exception>
+#include <iterator>
 
 namespace headunit {
 namespace {
 QString Text(const std::string& value) { return QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size())); }
 constexpr unsigned kProjectionTestFrames = 10;
-// Middle of the phone's screen, for the scripted touch test.
-constexpr int kTestTouchX = kTouchWidth / 2;
-constexpr int kTestTouchY = kTouchHeight / 2;
+// The chosen display size is remembered between runs (per Windows user).
+constexpr const char* kSettingsOrganization = "HeadUnit";
+constexpr const char* kSettingsApplication = "HeadUnit";
+constexpr const char* kDisplaySetting = "display";
+QString DisplayChoiceText(const DisplayConfig& display)
+{
+    QString text = Text(DisplayText(display));
+    if (display.height == 720) text += " (HD)";
+    else if (display.height == 1080) text += " (Full HD)";
+    else if (display.height == 600) text += " (Ultrawide)";
+    return text;
+}
 }
 MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
     : m_backend(backend), m_logger(logger), m_mode(mode),
@@ -39,10 +51,24 @@ MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
         m_input->Touch(action, x, y);
     };
     left->addWidget(m_video, 1);
+    // The display size sits next to the button that connects: it is fixed once the connection starts.
+    auto* controls = new QHBoxLayout();
+    auto* displayLabel = new QLabel("Displaygroesse:", central);
+    m_displayChoice = new QComboBox(central);
+    m_displayChoice->setMinimumHeight(48);
+    m_displayChoice->setMinimumWidth(190);
+    m_displayChoice->setFocusPolicy(Qt::NoFocus);
+    m_displayChoice->setToolTip("Groesse des Android-Auto-Bildes (Aufloesung). Das Handy erfaehrt sie beim Verbinden, "
+        "darum laesst sie sich nur einstellen, solange keine Verbindung besteht.");
+    for (const auto& display : kDisplays) m_displayChoice->addItem(DisplayChoiceText(display));
+    displayLabel->setBuddy(m_displayChoice);
     m_button = new QPushButton(central);
     m_button->setMinimumHeight(48);
     m_button->setFocusPolicy(Qt::NoFocus);
-    left->addWidget(m_button);
+    controls->addWidget(displayLabel);
+    controls->addWidget(m_displayChoice);
+    controls->addWidget(m_button, 1);
+    left->addLayout(controls);
     m_step = new QLabel("Handy per USB-Kabel anschliessen, entsperren und auf Android Auto verbinden klicken.", central);
     m_step->setWordWrap(true);
     m_step->setTextFormat(Qt::PlainText);
@@ -67,6 +93,20 @@ MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
     root->addWidget(m_panel);
     setCentralWidget(central);
     SetState(State::Idle);
+    if (m_mode == TestMode::None || m_mode == TestMode::Smoke) {
+        // The scripted runs against the phone always start from the default (or --display), whatever was chosen last.
+        const QSettings settings(kSettingsOrganization, kSettingsApplication);
+        if (const auto saved = ParseDisplay(settings.value(kDisplaySetting).toString().toStdString())) SetDisplay(*saved);
+    }
+    // `activated` only fires for a choice made by the user, not for SetDisplay.
+    connect(m_displayChoice, &QComboBox::activated, this, [this](int index) {
+        if (m_state != State::Idle || index < 0 || index >= static_cast<int>(std::size(kDisplays))) return;
+        SetDisplay(kDisplays[index]);
+        QSettings(kSettingsOrganization, kSettingsApplication).setValue(kDisplaySetting, Text(DisplayText(m_display)));
+        const std::string message = "Displaygroesse " + DisplayText(m_display) + ": gilt ab der naechsten Verbindung";
+        m_logger.Write("INFO", "UI", message);
+        ShowStep(Text(message));
+    });
     connect(m_button, &QPushButton::clicked, this, &MainWindow::OnButton);
     auto* tickTimer = new QTimer(this);
     connect(tickTimer, &QTimer::timeout, this, &MainWindow::Tick);
@@ -74,6 +114,7 @@ MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
     connect(&m_watcher, &QFutureWatcher<AutoConnectResult>::finished, this, [this] { FinishConnect(m_watcher.result()); });
     connect(&m_scanWatcher, &QFutureWatcher<UsbScanResult>::finished, this, [this] {
         const auto result = m_scanWatcher.result();
+        SaveTestShot("window-idle.png", true);
         QTimer::singleShot(250, this, [errors = result.errors.size()] { QApplication::exit(errors == 0 ? 0 : 2); });
     });
     if (m_mode == TestMode::Smoke) {
@@ -184,7 +225,9 @@ void MainWindow::ApplyConsoleEffect(const ConsoleEffect& effect)
         // The home key opened the app launcher, whose button leads to the dashboard: look again once the
         // phone has drawn it.
         QTimer::singleShot(1000, this, [this] {
-            if (m_console.IsProjectionConnected() && CurrentPhoneScreen() == PhoneScreen::Other) TapPhone(kDashboardButtonX, kDashboardButtonY);
+            if (!m_console.IsProjectionConnected() || CurrentPhoneScreen() != PhoneScreen::Other) return;
+            const auto [x, y] = DashboardButtonPosition(m_display);
+            TapPhone(x, y);
         });
     }
     if (!effect.message.empty()) {
@@ -206,6 +249,17 @@ void MainWindow::SetState(State state)
     m_state = state;
     m_button->setEnabled(state != State::Stopping);
     m_button->setText(state == State::Idle ? "Android Auto verbinden" : state == State::Connecting ? "Verbindung beenden" : "Beende ...");
+    // The phone learns the display size when the connection starts; afterwards it can no longer change.
+    m_displayChoice->setEnabled(state == State::Idle);
+}
+void MainWindow::SetDisplay(const DisplayConfig& display)
+{
+    if (m_state != State::Idle || !IsSupportedDisplay(display)) return;
+    m_display = display;
+    m_console.SetDisplay(display);
+    m_video->SetDisplay(display);
+    for (int index = 0; index < static_cast<int>(std::size(kDisplays)); ++index)
+        if (kDisplays[index] == display) m_displayChoice->setCurrentIndex(index);
 }
 void MainWindow::OnButton()
 {
@@ -227,7 +281,9 @@ void MainWindow::Tick()
             m_logger.Write("INFO", "VIDEO", "First real Android Auto frame displayed in Qt");
             m_console.SetProjectionConnected(true);
         }
-        m_status->setText(QString("Android Auto: Video %1x%2 | %3 Bilder angezeigt").arg(frame->width).arg(frame->height).arg(m_displayedFrames));
+        // A display of another shape than the phone's frame shows only part of it: name both.
+        const QString shownArea = VideoLayoutOf(m_display).HasMargins() ? ", Anzeige " + Text(DisplayText(m_display)) : QString();
+        m_status->setText(QString("Android Auto: Video %1x%2%3 | %4 Bilder angezeigt").arg(frame->width).arg(frame->height).arg(shownArea).arg(m_displayedFrames));
         if (m_mode == TestMode::Projection && m_displayedFrames >= kProjectionTestFrames) { m_isStopRequested = true; QApplication::exit(0); }
     }
     std::array<AudioState::Meter, kAudioKindCount> meters;
@@ -251,8 +307,10 @@ void MainWindow::StartConnect()
     m_status->clear();
     m_history->clear();
     SetState(State::Connecting);
-    m_watcher.setFuture(QtConcurrent::run([this] {
+    m_logger.Write("INFO", "UI", "Display size for this connection: " + DisplayText(m_display));
+    m_watcher.setFuture(QtConcurrent::run([this, display = m_display] {
         ProjectionCallbacks callbacks;
+        callbacks.display = display;
         callbacks.onStatus = [this](const std::string& status) { QMetaObject::invokeMethod(this, [this, status] { ShowStep(Text(status)); }, Qt::QueuedConnection); };
         callbacks.onFrame = [this](VideoFrame frame) { std::lock_guard lock(m_frameMutex); m_latestFrame = std::move(frame); };
         callbacks.input = m_input;
@@ -323,12 +381,12 @@ void MainWindow::RunInputTest()
         if (elapsed >= 2500) {
             m_testFrames[2] = m_displayedFrames;
             SaveTestShot("input-2-after-rotary.png");
-            m_input->Touch(TouchAction::Down, kTestTouchX, kTestTouchY);
+            m_input->Touch(TouchAction::Down, VideoLayoutOf(m_display).width / 2, VideoLayoutOf(m_display).height / 2);
             m_testClock.restart(); m_testStage = 4;
         }
         break;
     case 4:
-        if (elapsed >= 120) { m_input->Touch(TouchAction::Up, kTestTouchX, kTestTouchY); m_testClock.restart(); m_testStage = 5; }
+        if (elapsed >= 120) { m_input->Touch(TouchAction::Up, VideoLayoutOf(m_display).width / 2, VideoLayoutOf(m_display).height / 2); m_testClock.restart(); m_testStage = 5; }
         break;
     case 5:  // go back to the home screen
         if (elapsed >= 2500) { m_testFrames[3] = m_displayedFrames; SaveTestShot("input-3-after-touch.png"); m_input->Tap(keys::Home); m_testClock.restart(); m_testStage = 6; }
@@ -370,6 +428,12 @@ void MainWindow::RunAudioTest()
         } else if (elapsed >= 25000) {
             m_input->Tap(keys::MediaPause);
             FinishTest(5, "Audio test: no media audio within 25 seconds (" + counts + "); the phone may have nothing to play");
+        } else if (media == 0 && elapsed >= 5000 * static_cast<qint64>(m_testFrames[0] + 1)) {
+            // The first Play can arrive before the phone's media app is ready for it (or find it paused
+            // by the last run): ask again every 5 seconds. Play while already playing does nothing.
+            // (m_testFrames[0] counts the repeats here; the audio test has no use for frame counts.)
+            ++m_testFrames[0];
+            m_input->Tap(keys::MediaPlay);
         }
         break;
     }
@@ -377,9 +441,11 @@ void MainWindow::RunAudioTest()
     }
 }
 // Presses controller keys on the real phone and checks the Home logic step by step, looking at what the
-// phone really shows (not just at the controller's own state): Nav opens the map, Home brings the phone to
-// its dashboard, Home again reports the radio menu (a log line) and leaves the phone alone, Media leaves the
-// dashboard, Home returns to it. Pictures of the phone are saved for a person to look at.
+// phone really shows (not just at the controller's own state): Media opens the media app, Home brings the
+// phone to its dashboard, Home again reports the radio menu (a log line) and leaves the phone alone, Media
+// leaves the dashboard again, Home returns to it. Nav comes last and only has to leave the radio menu: on a
+// wide display the phone shows the map in its dashboard, on a narrow one as an app, so the picture is saved
+// and read but not judged. Pictures of the phone are saved for a person to look at.
 void MainWindow::RunConsoleTest()
 {
     const qint64 elapsed = m_testClock.isValid() ? m_testClock.elapsed() : 0;
@@ -393,14 +459,14 @@ void MainWindow::RunConsoleTest()
     switch (m_testStage) {
     case 0:
         if (m_displayedFrames >= kProjectionTestFrames && m_input->IsAttached()) {
-            PressConsole(ConsoleKey::Nav);
+            PressConsole(ConsoleKey::Media);
             m_testClock.restart(); m_testStage = 1;
         }
         break;
-    case 1:  // the navigation app is showing; Home must bring the phone to its dashboard
+    case 1:  // the media app is showing; Home must bring the phone to its dashboard
         if (elapsed >= 3000) {
-            SaveTestShot("console-1-nav.png");
-            expectPhone(PhoneScreen::Other, "the phone did not show an app after Nav");
+            SaveTestShot("console-1-media.png");
+            expectPhone(PhoneScreen::Other, "the phone did not show an app after Media");
             PressConsole(ConsoleKey::Home);
             m_testClock.restart(); m_testStage = 2;
         }
@@ -428,7 +494,7 @@ void MainWindow::RunConsoleTest()
         break;
     case 4:  // Media launches something on the phone, so Home must go to the phone first again
         if (elapsed >= 3000) {
-            SaveTestShot("console-4-media.png");
+            SaveTestShot("console-4-media-again.png");
             expectScreen(ConsoleController::Screen::Projection, "Media did not leave the dashboard");
             expectPhone(PhoneScreen::Other, "the phone did not show an app after Media");
             PressConsole(ConsoleKey::Home);
@@ -442,7 +508,20 @@ void MainWindow::RunConsoleTest()
             expectPhone(PhoneScreen::Dashboard, "Home after Media did not bring the phone to its dashboard");
             PressConsole(ConsoleKey::Radio);   // only reported
             if (!historyHas("Radio: noch keine Belegung")) m_testProblems += "radio key was not reported; ";
-            FinishTest(m_testProblems.empty() ? 0 : 6, m_testProblems.empty() ? "Console test: Home, Media, Nav and Radio behave as specified"
+            expectScreen(ConsoleController::Screen::RadioHome, "the radio key did not open the radio menu");
+            PressConsole(ConsoleKey::Nav);
+            m_testClock.restart(); m_testStage = 6;
+        }
+        break;
+    case 6:  // Nav leaves the radio menu for the phone; where the phone puts the map depends on the display
+        if (elapsed >= 3000) {
+            SaveTestShot("console-6-nav.png");
+            expectScreen(ConsoleController::Screen::Projection, "Nav did not leave the radio menu");
+            const PhoneScreen phone = CurrentPhoneScreen();
+            m_logger.Write("INFO", "TEST", std::string("After Nav the phone shows ") + (phone == PhoneScreen::Dashboard ? "its dashboard (map card)" :
+                phone == PhoneScreen::Other ? "an app (map)" : "an unknown screen"));
+            if (phone == PhoneScreen::Unknown) m_testProblems += "the phone's picture could not be read after Nav; ";
+            FinishTest(m_testProblems.empty() ? 0 : 6, m_testProblems.empty() ? "Console test: Home, Media, Radio and Nav behave as specified"
                 : "Console test: " + m_testProblems);
         }
         break;

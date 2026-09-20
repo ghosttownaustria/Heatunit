@@ -15,6 +15,19 @@ starten und das Video anzeigen. Auf dem Handy nur die Android-Auto-Hinweise best
 Waehrend der Sitzung heisst derselbe Knopf **Verbindung beenden** (oder das Fenster
 schliessen): Das Handy bekommt ein Goodbye, dann wird die USB-Schnittstelle freigegeben.
 
+**Displaygroesse.** Solange keine Verbindung besteht, laesst sich neben dem Verbinden-Knopf die Displaygroesse
+waehlen: 800 x 480, 1280 x 720 (HD), 1600 x 600 (Ultrawide) oder 1920 x 1080 (Full HD). Das Handy erfaehrt sie
+beim Verbinden (Video-Aufloesung, Touchflaeche und passende Bilddichte), darum ist die Auswahl waehrend einer
+Verbindung gesperrt. Die Wahl wird gemerkt (Windows-Benutzer, Registry `HKCU\Software\HeadUnit`); das leere
+Bildfeld zeigt schon vor dem Verbinden die Form des gewaehlten Displays.
+Android Auto kennt nur feste Video-Aufloesungen. Ein Display anderer Form, wie 1600 x 600, wird in das
+naechstgroessere Bild eingepasst: Das Handy bekommt 1920 x 1080 mit 360 Pixel Rand (oben und unten je 180),
+zeichnet seine Oberflaeche nur in den mittleren 1920 x 720 grossen Streifen (Bilddichte 240 dpi) und die App
+zeigt nur diesen Streifen. Touch-Positionen zaehlen in Pixeln dieses Streifens. Weitere Groessen lassen sich
+nach demselben Prinzip in `src/androidauto/DisplayConfig.h` ergaenzen.
+Mit `HeadUnit.exe --display 1280x720` startet ein einzelner Lauf mit
+einer Groesse, ohne sie zu merken (auch fuer die `--test-...`-Laeufe, die sonst immer 800 x 480 nehmen).
+
 **Bedienen wie im Auto.** Neben dem Bild sitzt eine simulierte Mittelkonsole:
 - **Touch:** Mit der Maus direkt auf dem Bild klicken und ziehen. Die Position wird auf das
   Touchdisplay des Handys umgerechnet (das Bild behaelt sein Seitenverhaeltnis, Klicks auf
@@ -53,7 +66,9 @@ ihren Ton). Das Mikrofon (Sprachbefehle, Telefonate) ist noch nicht angebunden.
   SuperSpeed).
 - Wechselt das Handy nicht in den Android-Auto-Modus (gesperrt, Hinweis am Handy nicht
   bestaetigt), fragt die App bis zu zweimal neu an und sagt, was am Handy zu tun ist.
-- Antwortet Android Auto auf dem Handy nach ca. 20 Sekunden nicht, startet die App die
+- Antwortet Android Auto auf dem Handy nach ca. 20 Sekunden nicht, oder reagiert die USB-Verbindung des
+  Handys gar nicht mehr (z. B. nach langer Pause im Accessory-Modus: Windows meldet "Ein an das System
+  angeschlossenes Geraet funktioniert nicht"), startet die App die
   USB-Verbindung des Handys neu (wie Kabel abziehen und anstecken), prueft den Treiber
   und versucht es erneut (bis zu zweimal). Dafuer kommt die Windows-Abfrage.
 - Klappt auch das nicht, steht im Fenster, was zu tun ist (meist: Handy entsperren
@@ -76,7 +91,7 @@ native VS-Projekte; Protobuf-Dateien und DLL-Kopien werden automatisch erzeugt.
 `--start-accessory` (Accessory-Modus starten und Bulk-Paar pruefen), `--repair-driver`
 (WinUSB wiederherstellen), `--recover-phone` (USB-Verbindung des Handys neu starten und
 Treiber reparieren), `--test-projection` (kompletter Ablauf, erfolgreich nach zehn
-angezeigten Videobildern), `--test-input` (schickt Regler-, Tasten- und Touch-Eingaben ans Handy), `--test-audio` (startet Wiedergabe leise und prueft, dass Ton am Ausgabegeraet ankommt), `--test-console` (Nav, Home, Home, Media, Home, Radio: prueft die Zwei-Stufen-Logik von Home am echten Handybild), `--test-keys` (Diagnose: spielt die Schritte aus `HEADUNIT_TEST_KEYS` ab (Zahl = Tastencode, `t:X:Y` = Tipp aufs Display, `c:name` = Konsolentaste), durch Komma getrennt, z. B. `3,t:42:438,c:home`, und speichert nach jedem Schritt ein Bild). Mit `HEADUNIT_TEST_SHOTS=<Ordner>` speichern die Tests Bilder des Handys und des Fensters. Details: [Windows-Verbindung](docs/windows_connection.md).
+angezeigten Videobildern), `--test-input` (schickt Regler-, Tasten- und Touch-Eingaben ans Handy), `--test-audio` (startet Wiedergabe leise und prueft, dass Ton am Ausgabegeraet ankommt), `--test-console` (Media, Home, Home, Media, Home, Radio, Nav: prueft die Zwei-Stufen-Logik von Home am echten Handybild), `--test-keys` (Diagnose: spielt die Schritte aus `HEADUNIT_TEST_KEYS` ab (Zahl = Tastencode, `t:X:Y` = Tipp aufs Display, `c:name` = Konsolentaste), durch Komma getrennt, z. B. `3,t:42:438,c:home`, und speichert nach jedem Schritt ein Bild). Mit `HEADUNIT_TEST_SHOTS=<Ordner>` speichern die Tests Bilder des Handys und des Fensters. Details: [Windows-Verbindung](docs/windows_connection.md).
 
 ## Visual Studio 2026: oeffnen, bauen, starten
 

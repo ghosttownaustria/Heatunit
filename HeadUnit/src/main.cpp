@@ -3,18 +3,31 @@
 #include "usb/AndroidUsbProbe.h"
 #include "usb/DriverRepair.h"
 #include "androidauto/AndroidDeviceDetector.h"
+#include "androidauto/DisplayConfig.h"
 #include "ui/MainWindow.h"
 #include <QApplication>
 #include <filesystem>
 #include <iostream>
+#include <optional>
 #include <string_view>
 
 int main(int argc, char* argv[])
 {
     bool isScanOnly = false, isSmokeTest = false, isUsbProbe = false, isStartAccessory = false, isProjectionTest = false, isRepairDriver = false, isRecoverPhone = false, isInputTest = false, isAudioTest = false, isConsoleTest = false, isKeysTest = false;
+    std::optional<headunit::DisplayConfig> display;
     for (int index = 1; index < argc; ++index) {
         const std::string_view argument(argv[index]);
-        if (argument == "--scan") isScanOnly = true;
+        if (argument == "--display") {
+            display = index + 1 < argc ? headunit::ParseDisplay(argv[index + 1]) : std::nullopt;
+            if (!display) {
+                std::cerr << "--display needs one of these sizes:";
+                for (const auto& known : headunit::kDisplays) std::cerr << ' ' << known.width << 'x' << known.height;
+                std::cerr << '\n';
+                return 1;
+            }
+            ++index;
+        }
+        else if (argument == "--scan") isScanOnly = true;
         else if (argument == "--repair-driver") isRepairDriver = true;
         else if (argument == "--recover-phone") isRecoverPhone = true;
         else if (argument == "--smoke-test") isSmokeTest = true;
@@ -26,8 +39,9 @@ int main(int argc, char* argv[])
         else if (argument == "--test-console") isConsoleTest = true;
         else if (argument == "--test-keys") isKeysTest = true;
         else if (argument == "--help") {
-            std::cout << "HeadUnit [--scan | --smoke-test | --probe-usb | --start-accessory | --test-projection | --test-input | --test-audio | --test-console | --test-keys | --repair-driver | --recover-phone]\n"
+            std::cout << "HeadUnit [--scan | --smoke-test | --probe-usb | --start-accessory | --test-projection | --test-input | --test-audio | --test-console | --test-keys | --repair-driver | --recover-phone] [--display 800x480|1280x720|1600x600|1920x1080]\n"
                          "Logs: ./headunit.log (includes USB serial numbers)\n"
+                         "--display picks the display size for this run (the window's own choice is remembered, this one is not)\n"
                          "--repair-driver rebinds the phone to WinUSB (needs administrator rights; the app starts it itself when needed)\n";
             return 0;
         } else { std::cerr << "Unknown option: " << argument << '\n'; return 1; }
@@ -64,6 +78,7 @@ int main(int argc, char* argv[])
         QApplication application(argc, argv);
         using Mode = headunit::MainWindow::TestMode;
         headunit::MainWindow window(backend, logger, isSmokeTest ? Mode::Smoke : isProjectionTest ? Mode::Projection : isInputTest ? Mode::Input : isAudioTest ? Mode::Audio : isConsoleTest ? Mode::Console : isKeysTest ? Mode::Keys : Mode::None);
+        if (display) window.SetDisplay(*display);
         window.show();
         logger.Write("INFO", "UI", "Qt " QT_VERSION_STR " window initialized");
         const auto result = application.exec();

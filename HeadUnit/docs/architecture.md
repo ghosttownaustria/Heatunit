@@ -85,6 +85,21 @@ bounded ring buffer, applies the shared volume/mute gain and reports levels back
 Qt widgets without moc; the portable parts (touch mapping, input bus, PCM helpers) are header-only
 and unit-tested in CoreTests.
 
+Display size: `DisplayConfig` (portable) is the one place that knows the offered sizes (800x480, 1280x720,
+1600x600, 1920x1080), the fixed Android Auto resolutions that carry them, the density and how to parse/print
+them. `VideoLayoutOf` maps a display to a `VideoLayout`: the frame the phone encodes (smallest fixed
+resolution that holds the display), the margins that fit the display's shape into it, and the shown area.
+`MainWindow` holds the chosen size (combo box, only enabled while idle, remembered with `QSettings`,
+`--display` override for a run) and hands it to the session in `ProjectionCallbacks::display`;
+`DisplayService.h` turns it into the video service's `VideoConfiguration` (resolution, margins, density), and
+the session announces the shown area as the touchscreen. Video and touch therefore share one coordinate
+space: the pixels of the shown area, which `VideoWidget::SetFrame` cuts out of each decoded frame (the phone
+draws only there and leaves the margins black). The size cannot change while a session runs. The window passes
+it on to `VideoWidget` (crop, touch mapping, shape of the empty screen) and `ConsoleController` (where Home
+taps). `DetectPhoneScreen` and `DashboardButtonPosition` scale the 800x480 layout by `shown height / 480`,
+anchored at the left and bottom edges of the shown area, because the density keeps the phone's layout
+height constant.
+
 Hard keys: `CarPanel` reports controller keys (`ConsoleKey`: Home, Menu, Option, Media, Radio, Tel,
 Nav, Map, Back, Projection) to `MainWindow::PressConsole`, which asks the portable `ConsoleController`
 what the key means and gets a `ConsoleEffect` back: car keys and touch taps for the phone, one line for

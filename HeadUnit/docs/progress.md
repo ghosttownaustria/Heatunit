@@ -1,5 +1,67 @@
 # Progress
 
+## 2026-09-20 (even later): 1600x600 display
+
+- **New size 1600 x 600 (Ultrawide)** in the list (800x480, 1280x720, 1600x600, 1920x1080). Android Auto has no
+  1600x600 resolution, so the display is fitted into a fixed one with the video configuration's margins:
+  `VideoLayoutOf` picks the smallest fixed resolution that holds the display (1920x1080) and fits the display's
+  shape inside it (height margin 360, width margin 0, sizes kept even). Density follows the shown height (720
+  -> 240 dpi, so the phone's layout height stays 480 units).
+- **Measured on the Samsung SM-F776B** (raw frames saved by `--test-keys`, with a temporary switch that has
+  been removed again): with codec 1920x1080 and height margin 360 the phone still sends the full 1920x1080
+  frame, draws its interface only in the centred 1920x720 strip (y 180..899) and leaves the rest black. Touch
+  coordinates count in pixels of that strip: a tap at strip position (60,347) hit the Spotify icon whatever
+  touchscreen size was advertised, while the same icon addressed with frame coordinates (60,527) hit the
+  microphone icon (and opened the Google Assistant on the phone for a moment; no microphone is connected).
+  So the app advertises the strip as the touchscreen, crops each frame to the strip (`VideoWidget::SetFrame`,
+  so the picture, the touch mapping, the screenshots and the phone-screen reading all see the strip) and sends
+  strip coordinates. The window scales the 1920x720 strip to whatever room the picture has (8:3).
+- **Wide layout:** on this display the phone moves its navigation bar to a rail at the left and shows the dashboard
+  as a big map card next to the media card. The button at the bottom left of the rail is at the same place as
+  on 720 px high displays (63,657), shows nine dots on the dashboard and the framed symbol elsewhere, so the
+  Home logic needed no change. The Nav key does not open the map as an app there (the map already is the big
+  card), so `--test-console` now starts with Media (opens an app in every layout) and only reads, not judges,
+  the picture after Nav at the end.
+- **Verified on the phone at 1600x600:** frames 1920x1080 with the strip cropped correctly, `--test-console`
+  (Home read "other" -> tapped -> read "dashboard", second Home only logged the radio menu, Media -> Home
+  -> dashboard, Radio, Nav), `--test-input` (rotary, keys and a touch tap in the middle of the strip reach the
+  phone).
+- **Tests:** CoreTests cover the layout of every offered size and of other shapes (a taller one such as
+  1024x600 gets a width margin, sizes that no frame holds and non-positive sizes get none), touch mapping onto
+  the 1920x720 strip, the picture reading and the Home tap for 1600x600; ProtocolTests check the video
+  configuration built for it (1920x1080, height margin 360, 240 dpi). A test found that a size of 0x0 was given
+  a frame; fixed.
+
+## 2026-09-20 (later): selectable display size
+
+- **Feature:** while nothing is connected, a combo box next to the connect button offers 800x480, 1280x720
+  (HD) and 1920x1080 (Full HD). The size is announced to the phone once, in the service discovery: the video
+  resolution constant, the touchscreen size and a screen density that grows with the height
+  (`160 * height / 480`, so 240 dpi at 720p and 360 dpi at 1080p), which keeps the phone's interface the same
+  size in layout units at every resolution. During a connection the combo box is disabled. The choice is
+  remembered per Windows user (`HKCU\Software\HeadUnit\HeadUnit`, value `display`); `--display WxH` overrides it
+  for one run without saving, and all scripted phone tests ignore the remembered value (default 800x480 unless
+  `--display` is given). The empty picture area shows a screen of the chosen shape and "Display W x H".
+  Android Auto only has fixed resolutions; other shapes need margins in the video configuration (added
+  afterwards for 1600x600, see the section above).
+- **Code:** `DisplayConfig.h` (portable list, density, text/parse), `DisplayService.h` (video configuration for
+  the service discovery), `MapToTouch` takes the display, `DetectPhoneScreen` and the Home tap position now scale
+  with the display height (`LayoutScale`, anchored at the left/bottom edge, so wide 16:9 pictures work),
+  `ConsoleController::SetDisplay`. The old `kTouchWidth/kTouchHeight` constants are gone.
+- **Verified on the Samsung SM-F776B:** `--test-console` at 1280x720 (frames arrive as 1280x720; the dashboard
+  button sits at 63,657 as computed; Home reads "other" then "dashboard", second Home only logs the radio menu),
+  `--test-console` at 1920x1080 (frames 1920x1080, same Home sequence), `--test-input` at 1280x720 (rotary,
+  keys and a touch tap in the middle of the picture reach the phone), and `--test-projection` / `--test-audio` at
+  the default size. Picking a size in the real window was driven through the window's own popup: the value
+  is written to the registry and loaded again at the next start.
+- **Also fixed:** a phone whose USB link stopped answering (accessory device `18D1:2D00` idle for a long time;
+  Windows: "device does not work", `LIBUSB_ERROR_TIMEOUT` when reading the serial number) ended the one-button
+  flow with an error. That failure now counts like a silent Android Auto: the connection ladder restarts the
+  phone's USB link through the elevated helper and tries again (which recovered the phone during the tests above).
+- **Tests:** CoreTests cover the size list, parsing (valid and invalid texts), density, touch mapping for the
+  other sizes, the picture reading and Home tap position at all three sizes; ProtocolTests cover the video
+  configuration built for each size (resolution constant, density, frame rate, margins).
+
 ## 2026-09-20: BMW-style hard keys and a two-step Home
 
 - **Keys:** the console follows a BMW iDrive multimedia controller: Media, Radio, Menu, Tel, Nav, Back,

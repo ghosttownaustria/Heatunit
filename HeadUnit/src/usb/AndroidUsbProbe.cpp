@@ -213,7 +213,13 @@ static UsbProbeResult RunAndroidUsb(const UsbDevice& selected, Logger& logger, b
         if (targetDescriptor.iSerialNumber != 0 && !selected.serial.empty() && selected.serial.front() != '<') {
             unsigned char serial[256]{};
             const auto length = libusb_get_string_descriptor_ascii(handle.get(), targetDescriptor.iSerialNumber, serial, sizeof(serial));
-            if (length < 0) return finish(UsbProbeState::Failed, "Cannot verify selected phone serial: " + Error(length));
+            if (length < 0) {
+                // A phone that can be opened but does not answer a descriptor request has a wedged USB link
+                // (seen after a long idle time in accessory mode, Windows: "device does not work"). Restarting
+                // the link, like unplugging the cable, is the cure.
+                const bool isWedged = length == LIBUSB_ERROR_TIMEOUT || length == LIBUSB_ERROR_IO || length == LIBUSB_ERROR_PIPE;
+                return finish(UsbProbeState::Failed, "Cannot verify selected phone serial: " + Error(length), false, false, isWedged);
+            }
             if (std::string(reinterpret_cast<char*>(serial), length) != selected.serial)
                 return finish(UsbProbeState::Failed, "Device identity changed. Rescan and select the phone again.");
         }

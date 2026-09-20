@@ -1,5 +1,6 @@
 #pragma once
 #include "androidauto/ConsoleController.h"
+#include "androidauto/DisplayConfig.h"
 #include "androidauto/ProjectionInput.h"
 #include "audio/AudioTypes.h"
 #include "video/VideoDecoder.h"
@@ -22,7 +23,11 @@ public:
     void ClearFrame(const QString& message);
     bool HasFrame() const { return !m_image.isNull(); }
     const QImage& Image() const { return m_image; }
-    // Position in touchscreen coordinates (0..kTouchWidth-1, 0..kTouchHeight-1).
+    // The display the phone is given: its shown area is the touchscreen that mouse positions are mapped to
+    // (and the part of each frame that is kept), and without a picture the widget shows an empty screen of
+    // the same shape.
+    void SetDisplay(const DisplayConfig& display);
+    // Position in touchscreen coordinates of the display (pixels of its shown area).
     std::function<void(TouchAction, int, int)> onTouch;
     QSize sizeHint() const override { return {800, 480}; }
     QSize minimumSizeHint() const override { return {400, 240}; }
@@ -35,6 +40,7 @@ private:
     bool Report(TouchAction action, const QPointF& position, bool isClamped);
     QImage m_image;
     QString m_message;
+    DisplayConfig m_display{kDefaultDisplay};
     bool m_isTouching{};
     QElapsedTimer m_moveClock;   // paces move events while a finger is down
 };

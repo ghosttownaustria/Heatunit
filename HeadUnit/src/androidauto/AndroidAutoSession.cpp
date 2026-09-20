@@ -2,6 +2,7 @@
 // Copyright (C) 2018 f1x.studio (Michal Szwaj).
 // Upstream revisions and local changes: third_party/aasdk/PATCHES.md.
 #include "androidauto/AndroidAutoSession.h"
+#include "androidauto/DisplayService.h"
 #include "androidauto/InputReports.h"
 #include <aasdk/Channel/Control/ControlServiceChannel.hpp>
 #include <aasdk/Channel/Control/IControlServiceChannelEventHandler.hpp>
@@ -321,7 +322,14 @@ public:
         ReceiveControl();
     }
     void onServiceDiscoveryRequest(const ctrl::ServiceDiscoveryRequest& request) override {
-        Status("Service discovery received from " + request.device_name() + "; advertising video, audio, microphone, sensors and touch");
+        const DisplayConfig display = m_callbacks.display;
+        if (!VideoResolutionOf(display)) { End("Unsupported display size " + DisplayText(display)); return; }
+        const VideoLayout layout = VideoLayoutOf(display);
+        Status("Service discovery received from " + request.device_name() + "; advertising video " + DisplayText(display) + " at " +
+            std::to_string(DisplayDensity(display)) + " dpi" +
+            (layout.HasMargins() ? " (" + std::to_string(layout.codecWidth) + "x" + std::to_string(layout.codecHeight) + " frame, margins " +
+                std::to_string(layout.marginWidth) + "x" + std::to_string(layout.marginHeight) + ")" : std::string()) +
+            ", audio, microphone, sensors and touch");
         ctrl::ServiceDiscoveryResponse response;
         response.mutable_channels()->Reserve(8);
         response.set_display_name("HeadUnit Windows PoC");
@@ -354,10 +362,7 @@ public:
         auto* videoService = channel->mutable_media_sink_service();
         videoService->set_available_type(media::MEDIA_CODEC_VIDEO_H264_BP);
         videoService->set_available_while_in_call(true);
-        auto* configuration = videoService->add_video_configs();
-        configuration->set_codec_resolution(sink::VIDEO_800x480);
-        configuration->set_frame_rate(sink::VIDEO_FPS_30);
-        configuration->set_width_margin(0); configuration->set_height_margin(0); configuration->set_density(160);
+        *videoService->add_video_configs() = BuildVideoConfiguration(display);
         channel = response.add_channels();
         channel->set_id(static_cast<unsigned>(ChannelId::MEDIA_SOURCE_MICROPHONE));
         auto* microphone = channel->mutable_media_source_service();
@@ -373,7 +378,8 @@ public:
         channel = response.add_channels();
         channel->set_id(static_cast<unsigned>(ChannelId::INPUT_SOURCE));
         auto* touch = channel->mutable_input_source_service()->add_touchscreen();
-        touch->set_width(kTouchWidth); touch->set_height(kTouchHeight);
+        // Touch positions are pixels of the shown area (the phone does not count the margins).
+        touch->set_width(layout.width); touch->set_height(layout.height);
         touch->set_type(aap_protobuf::service::inputsource::message::CAPACITIVE);
         for (const auto keycode : keys::Supported) channel->mutable_input_source_service()->add_keycodes_supported(static_cast<int>(keycode));
         if (!response.IsInitialized()) { End("Invalid service description: " + response.InitializationErrorString()); return; }

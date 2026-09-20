@@ -1,4 +1,5 @@
 #pragma once
+#include "androidauto/DisplayConfig.h"
 #include "androidauto/PhoneScreenDetector.h"
 #include "androidauto/ProjectionInput.h"
 #include <string>
@@ -46,6 +47,9 @@ public:
         m_isConnected = isConnected;
         m_screen = isConnected ? Screen::Projection : Screen::RadioHome;
     }
+    // The display announced to the phone; the taps of a key press are in its touch coordinates.
+    void SetDisplay(const DisplayConfig& display) { m_display = display; }
+    const DisplayConfig& Display() const { return m_display; }
 
     // `phone` is where the phone's picture says it is; only Home looks at it.
     ConsoleEffect Press(ConsoleKey key, PhoneScreen phone = PhoneScreen::Unknown) {
@@ -85,9 +89,9 @@ private:
     // Brings the phone to its dashboard. The dashboard button is tapped when the picture shows it; when
     // the picture is not readable the phone's own home key is sent and the button is tapped after a look
     // at the resulting picture.
-    static void GoToDashboard(ConsoleEffect& effect, PhoneScreen phone) {
+    void GoToDashboard(ConsoleEffect& effect, PhoneScreen phone) const {
         if (phone == PhoneScreen::Other) {
-            effect.phoneTaps.emplace_back(kDashboardButtonX, kDashboardButtonY);
+            effect.phoneTaps.push_back(DashboardButtonPosition(m_display));
         } else if (phone == PhoneScreen::Unknown) {
             effect.phoneKeys.push_back(keys::Home);
             effect.retryDashboard = true;
@@ -144,5 +148,6 @@ private:
     }
     bool m_isConnected{};
     Screen m_screen{Screen::RadioHome};
+    DisplayConfig m_display{kDefaultDisplay};
 };
 }

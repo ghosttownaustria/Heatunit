@@ -1,4 +1,5 @@
 #pragma once
+#include "androidauto/DisplayConfig.h"
 #include <algorithm>
 #include <cstdint>
 #include <functional>
@@ -9,11 +10,6 @@
 #include <variant>
 
 namespace headunit {
-// The touchscreen the headunit advertises to the phone. The video is 800x480 as well, so
-// video pixels and touch coordinates are the same thing.
-constexpr int kTouchWidth = 800;
-constexpr int kTouchHeight = 480;
-
 // Android key codes the simulated car controls send. Values are Android's KeyEvent codes;
 // the 0x10000 range are Android Auto's own car keys.
 namespace keys {
@@ -77,11 +73,12 @@ private:
     std::uint64_t m_token{};
 };
 
-// Maps a position in a widget that shows the video letterboxed (aspect ratio kept, centered)
-// to touchscreen coordinates. Outside the picture there is no position, unless `clamp` is set
-// (a finger that is already down keeps reporting when it leaves the picture).
+// Maps a position in a widget that shows the picture (the shown area of the video) letterboxed (aspect ratio
+// kept, centered) to coordinates of the touchscreen announced to the phone for `display`, which are pixels of
+// that shown area. Outside the picture there is no position, unless `clamp` is set (a finger that is already
+// down keeps reporting when it leaves the picture).
 inline std::optional<std::pair<int, int>> MapToTouch(int widgetWidth, int widgetHeight, int videoWidth, int videoHeight,
-    double x, double y, bool clamp)
+    double x, double y, bool clamp, const DisplayConfig& display = kDefaultDisplay)
 {
     if (widgetWidth <= 0 || widgetHeight <= 0 || videoWidth <= 0 || videoHeight <= 0) return std::nullopt;
     const double scale = std::min(static_cast<double>(widgetWidth) / videoWidth, static_cast<double>(widgetHeight) / videoHeight);
@@ -91,8 +88,9 @@ inline std::optional<std::pair<int, int>> MapToTouch(int widgetWidth, int widget
     if (!clamp && (u < 0 || u >= 1 || v < 0 || v >= 1)) return std::nullopt;
     u = std::clamp(u, 0.0, 1.0);
     v = std::clamp(v, 0.0, 1.0);
-    const int touchX = std::min(kTouchWidth - 1, static_cast<int>(u * kTouchWidth));
-    const int touchY = std::min(kTouchHeight - 1, static_cast<int>(v * kTouchHeight));
+    const auto touchscreen = VideoLayoutOf(display);
+    const int touchX = std::min(touchscreen.width - 1, static_cast<int>(u * touchscreen.width));
+    const int touchY = std::min(touchscreen.height - 1, static_cast<int>(v * touchscreen.height));
     return std::make_pair(touchX, touchY);
 }
 }

@@ -1,4 +1,5 @@
 #pragma once
+#include "androidauto/DisplayConfig.h"
 #include "androidauto/ProjectionInput.h"
 #include "audio/AudioTypes.h"
 #include "logging/Logger.h"
@@ -10,6 +11,9 @@
 namespace aasdk::transport { class ITransport; }
 namespace headunit {
 struct ProjectionCallbacks {
+    // The display size announced to the phone (video resolution, touchscreen and density). It is fixed
+    // for the whole session.
+    DisplayConfig display{kDefaultDisplay};
     std::function<void(const std::string&)> onStatus;
     std::function<void(VideoFrame)> onFrame;
     // Touch, keys and rotary input from the window; the session attaches to it while it runs.

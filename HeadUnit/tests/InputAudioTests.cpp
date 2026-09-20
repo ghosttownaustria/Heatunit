@@ -1,4 +1,5 @@
 #include "androidauto/AndroidAutoSession.h"
+#include "androidauto/DisplayService.h"
 #include "androidauto/InputReports.h"
 #include <aasdk/Transport/ITransport.hpp>
 #include <atomic>
@@ -48,6 +49,30 @@ void TestInputReports() {
     Require(parsed.ParseFromString(down.SerializeAsString()) && parsed.touch_event().pointer_data(0).x() == 123, "Touch report did not survive serialization");
 }
 
+// The display size reaches the phone as the video service's resolution and density.
+void TestDisplayService() {
+    namespace sink = aap_protobuf::service::media::sink::message;
+    const auto standard = BuildVideoConfiguration({800, 480});
+    Require(standard.codec_resolution() == sink::VIDEO_800x480 && standard.density() == 160 && standard.frame_rate() == sink::VIDEO_FPS_30 &&
+        standard.width_margin() == 0 && standard.height_margin() == 0, "The 800x480 video configuration is wrong");
+    const auto hd = BuildVideoConfiguration({1280, 720});
+    Require(hd.codec_resolution() == sink::VIDEO_1280x720 && hd.density() == 240, "The 1280x720 video configuration is wrong");
+    const auto fullHd = BuildVideoConfiguration({1920, 1080});
+    Require(fullHd.codec_resolution() == sink::VIDEO_1920x1080 && fullHd.density() == 360 && fullHd.width_margin() == 0 && fullHd.height_margin() == 0,
+        "The 1920x1080 video configuration is wrong");
+    // The 1600x600 display rides in a 1920x1080 frame with a 360 px height margin; the phone lays its interface out at 240 dpi in the 1920x720 area.
+    const auto ultrawide = BuildVideoConfiguration({1600, 600});
+    Require(ultrawide.codec_resolution() == sink::VIDEO_1920x1080 && ultrawide.width_margin() == 0 && ultrawide.height_margin() == 360 &&
+        ultrawide.density() == 240 && ultrawide.frame_rate() == sink::VIDEO_FPS_30, "The 1600x600 video configuration is wrong");
+    for (const auto& display : kDisplays) Require(VideoResolutionOf(display).has_value(), "An offered display has no video resolution");
+    Require(!VideoResolutionOf({3840, 2160}) && !VideoResolutionOf({1920, 1200}) && !VideoResolutionOf({0, 0}), "A display that no frame holds got a video resolution");
+    Require(VideoResolutionOf({1600, 600}) == std::optional<sink::VideoCodecResolutionType>(sink::VIDEO_1920x1080), "The video resolution of 1600x600 is wrong");
+    Require(VideoResolutionOf({1280, 720}) == std::optional<sink::VideoCodecResolutionType>(sink::VIDEO_1280x720), "The video resolution lookup is wrong");
+    sink::VideoConfiguration parsed;
+    Require(parsed.ParseFromString(hd.SerializeAsString()) && parsed.codec_resolution() == sink::VIDEO_1280x720 && parsed.density() == 240,
+        "The video configuration did not survive serialization");
+}
+
 // A session attaches to the window's input bus while it runs and detaches when it ends, whatever
 // the reason; a leftover attachment would send the next session's events into a dead one.
 void TestSessionInputLifecycle() {
@@ -77,5 +102,6 @@ void TestSessionInputLifecycle() {
 
 void RunInputAudioTests() {
     TestInputReports();
+    TestDisplayService();
     TestSessionInputLifecycle();
 }
