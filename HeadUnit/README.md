@@ -32,21 +32,25 @@ einer Groesse, ohne sie zu merken (auch fuer die `--test-...`-Laeufe, die sonst 
 - **Touch:** Mit der Maus direkt auf dem Bild klicken und ziehen. Die Position wird auf das
   Touchdisplay des Handys umgerechnet (das Bild behaelt sein Seitenverhaeltnis, Klicks auf
   die schwarzen Raender zaehlen nicht).
-- **Drehregler:** Mausrad auf dem Regler oder mit der Maus im Kreis ziehen dreht (ein Rastpunkt
-  alle 15 Grad), ein Klick ohne Ziehen drueckt ihn. Darum die vier Pfeiltasten.
-- **Tasten** (angelehnt an ein BMW-iDrive-Multimedia-Bedienteil): Menu, Home, Back, Option um den
-  Drehregler; Media, Radio, Tel, Nav, Map; **CarPlay / Android Auto**; Leiser, Stumm, Lauter;
-  Titel zurueck/vor und Play/Pause. Media, Tel, Nav und Map rufen die entsprechende App auf dem Handy
-  auf (Map und Nav oeffnen beide die Navigation), Back ist die Zurueck-Taste des Handys, Option
-  sendet dessen Menue-Taste. Radio und Menu haben noch keine Belegung, weil es kein eigenes
-  Betriebssystem gibt: sie schreiben nur eine Zeile ins Fenster-Log.
+- **Aufbau der Konsole:** Oben eine Reihe **MEDIA, TEL, NAV** und das Handy-Symbol (**CarPlay / Android
+  Auto**), darunter **HOME** links und **BACK** rechts, dann der grosse runde Regler mit vier Pfeilen. Alle
+  uebrigen Tasten stehen darunter im Abschnitt **Weitere Tasten**: MENU, OPTION, RADIO, MAP, Titel zurueck/vor
+  und Play/Pause, Leiser, Stumm, Lauter, danach die Audio-Anzeige.
+- **Runder Regler:** Mausrad auf dem Regler oder mit der Maus im Kreis ziehen dreht (ein Rastpunkt
+  alle 15 Grad). Ein Klick ohne Ziehen auf einen der vier **Pfeile** am Rand ist die Pfeiltaste in diese
+  Richtung, ein Klick auf den **Kreis in der Mitte** drueckt den Regler (Enter). Der Pfeil unter der Maus
+  leuchtet auf. Ein Klick, der auf einem anderen Bereich endet als er begann, zaehlt nicht.
+- **Tasten** (angelehnt an ein BMW-iDrive-Multimedia-Bedienteil): Media, Tel, Nav und Map rufen die
+  entsprechende App auf dem Handy auf (Map und Nav oeffnen beide die Navigation), Back ist die
+  Zurueck-Taste des Handys, Option sendet dessen Menue-Taste. Radio und Menu haben noch keine Belegung,
+  weil es kein eigenes Betriebssystem gibt: sie schreiben nur eine Zeile ins Fenster-Log.
 - **Home** hat zwei Stufen, solange ein Handy uebertragen wird: Beim ersten Druck wechselt das Handy auf
   seinen Startbildschirm (Karte, Medien, Telefon-Karten, z. B. Maps und Spotify). Der zweite Druck
   oeffnet das Home-Menue des Radios (nur ein Log-Eintrag), der dritte geht zurueck zum Handy-Startbildschirm.
   Ohne verbundenes Handy meldet Home nur das Radio-Menue. Ob das Handy gerade auf seinem Startbildschirm
   ist, liest die App am Symbol unten links im Bild ab.
-- **CarPlay / Android Auto** startet die Verbindung, wenn noch keine besteht, sonst holt die Taste das Handy in den
-  Vordergrund.
+- Das **Handy-Symbol** (CarPlay / Android Auto) startet die Verbindung, wenn noch keine besteht, sonst holt die
+  Taste das Handy in den Vordergrund.
 - **Audio-Anzeige:** Lautstaerke (30 Stufen), Stumm und je ein Pegel fuer Medien, Navigation und
   System. Die Anzeige zeigt, welche Tonspur des Handys gerade Audio liefert. Lautstaerke und Stumm
   wirken in der App (der Windows-Regler bleibt unberuehrt); mehr Lautstaerke schaltet Stumm aus.

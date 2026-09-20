@@ -1,5 +1,25 @@
 # Progress
 
+## 2026-09-20 (last): console layout from the user's sketch
+
+- **Layout** (`CarPanel`): top row MEDIA, TEL, NAV and the projection key as a phone-with-play symbol
+  (tooltip "CarPlay / Android Auto", the old wide text button is gone), HOME at the left and BACK at the right
+  below it, then a large round controller (260 px). Everything else (MENU, OPTION, RADIO, MAP, track skip and
+  play/pause, Leiser/Stumm/Lauter) is in a separate section "WEITERE TASTEN" underneath, followed by the audio
+  display. The panel needs about 684 px of height.
+- **The round controller now carries the four arrows** (`RotaryKnob`, zones in the portable `ui/KnobZones.h`):
+  an arrow drawn at each side of the disc, a click without dragging on one of them (the rim outside half the
+  radius, four 90 degree sectors) sends that direction key, a click on the inner circle presses the controller
+  (DPAD_CENTER), dragging around it or the mouse wheel still turns it (detents of 15 degrees, no turning right
+  at the middle). A click that ends in another zone than it began is dropped; the zone under the mouse lights up
+  and per-zone tooltips explain the places. The separate arrow buttons are gone. Arrows now send down and up
+  together when the click ends (before: down on press, up on release), so a mouse cannot hold a direction key;
+  the keyboard arrows still repeat.
+- **Checked** with a scratch program that drives the real `CarPanel` with synthetic mouse and wheel events
+  (not part of the project): every arrow, the middle, the outside, drag turns in both directions, wobble,
+  cancelled clicks, the wheel, all buttons and their console/media keys, and the position of the sections; plus
+  screenshots of the normal, hovered and pressed states. CoreTests cover the zones.
+
 ## 2026-09-20 (even later): 1600x600 display
 
 - **New size 1600 x 600 (Ultrawide)** in the list (800x480, 1280x720, 1600x600, 1920x1080). Android Auto has no

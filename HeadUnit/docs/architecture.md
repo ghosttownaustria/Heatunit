@@ -100,6 +100,11 @@ taps). `DetectPhoneScreen` and `DashboardButtonPosition` scale the 800x480 layou
 anchored at the left and bottom edges of the shown area, because the density keeps the phone's layout
 height constant.
 
+Panel layout: `CarPanel` has the controller keys (MEDIA, TEL, NAV, the projection key, HOME, BACK) and the round
+`RotaryKnob` at the top and all other keys plus the audio display in a separate section below. The knob has five
+click zones (four arrows on the rim, the push button in the middle), classified by the portable `KnobZoneAt`
+in `ui/KnobZones.h`; dragging around it and the mouse wheel turn it.
+
 Hard keys: `CarPanel` reports controller keys (`ConsoleKey`: Home, Menu, Option, Media, Radio, Tel,
 Nav, Map, Back, Projection) to `MainWindow::PressConsole`, which asks the portable `ConsoleController`
 what the key means and gets a `ConsoleEffect` back: car keys and touch taps for the phone, one line for

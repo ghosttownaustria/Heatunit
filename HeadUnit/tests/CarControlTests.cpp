@@ -2,6 +2,7 @@
 #include "androidauto/DisplayConfig.h"
 #include "androidauto/ProjectionInput.h"
 #include "audio/AudioTypes.h"
+#include "ui/KnobZones.h"
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -500,7 +501,39 @@ void TestDashboardButtonOnDisplays() {
 }
 }
 
+// The round controller: four arrows on its rim, a push button in the middle, nothing outside.
+void TestKnobZones() {
+    constexpr double radius = 100;
+    Check(KnobZoneAt(0, 0, radius) == KnobZone::Centre, "The middle of the controller is not its push button");
+    Check(KnobZoneAt(0, -80, radius) == KnobZone::Up && KnobZoneAt(80, 0, radius) == KnobZone::Right &&
+        KnobZoneAt(0, 80, radius) == KnobZone::Down && KnobZoneAt(-80, 0, radius) == KnobZone::Left, "The arrows are not where they are drawn");
+    // The push button ends at half the radius.
+    Check(KnobZoneAt(0, -49, radius) == KnobZone::Centre && KnobZoneAt(0, -51, radius) == KnobZone::Up &&
+        KnobZoneAt(-49, 0, radius) == KnobZone::Centre && KnobZoneAt(-51, 0, radius) == KnobZone::Left, "The push button has the wrong size");
+    // The arrows share the rim in four 90 degree sectors: the larger distance from the middle wins.
+    Check(KnobZoneAt(60, -50, radius) == KnobZone::Right && KnobZoneAt(50, -60, radius) == KnobZone::Up &&
+        KnobZoneAt(50, 60, radius) == KnobZone::Down && KnobZoneAt(60, 50, radius) == KnobZone::Right &&
+        KnobZoneAt(-50, 60, radius) == KnobZone::Down && KnobZoneAt(-60, 50, radius) == KnobZone::Left &&
+        KnobZoneAt(-60, -50, radius) == KnobZone::Left && KnobZoneAt(-50, -60, radius) == KnobZone::Up, "The sectors of the arrows are wrong");
+    // Rim included, everything beyond it is no zone; so is a controller without a size.
+    Check(KnobZoneAt(0, -100, radius) == KnobZone::Up && KnobZoneAt(0, -101, radius) == KnobZone::None &&
+        KnobZoneAt(75, 75, radius) == KnobZone::None && KnobZoneAt(1, 1, 0) == KnobZone::None && KnobZoneAt(1, 1, -5) == KnobZone::None,
+        "A click outside the controller hit a zone");
+    // All the way round: an arrow with a key on the rim, the push button (no key) inside.
+    for (int degrees = 0; degrees < 360; degrees += 5) {
+        const double radians = degrees * 3.14159265358979323846 / 180.0;
+        const KnobZone rim = KnobZoneAt(std::sin(radians) * 80, -std::cos(radians) * 80, radius);
+        const KnobZone inside = KnobZoneAt(std::sin(radians) * 30, -std::cos(radians) * 30, radius);
+        Check(rim != KnobZone::None && rim != KnobZone::Centre && KnobZoneKey(rim) != 0, "A point on the rim is not an arrow");
+        Check(inside == KnobZone::Centre && KnobZoneKey(inside) == 0, "A point near the middle is not the push button");
+    }
+    Check(KnobZoneKey(KnobZone::Up) == keys::DpadUp && KnobZoneKey(KnobZone::Right) == keys::DpadRight &&
+        KnobZoneKey(KnobZone::Down) == keys::DpadDown && KnobZoneKey(KnobZone::Left) == keys::DpadLeft, "An arrow sends the wrong key");
+    Check(KnobZoneKey(KnobZone::Centre) == 0 && KnobZoneKey(KnobZone::None) == 0, "The middle or nothing sends an arrow key");
+}
+
 void TestCarControls() {
+    TestKnobZones();
     TestTouchMapping();
     TestTouchMappingOtherDisplays();
     TestDisplayConfig();

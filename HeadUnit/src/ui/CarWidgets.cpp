@@ -1,11 +1,17 @@
 #include "ui/CarWidgets.h"
+#include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
+#include <QHelpEvent>
+#include <QIcon>
 #include <QLabel>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPainterPath>
+#include <QPixmap>
 #include <QPushButton>
 #include <QRadialGradient>
+#include <QToolTip>
 #include <QVBoxLayout>
 #include <QWheelEvent>
 #include <algorithm>
@@ -24,6 +30,33 @@ const char* const kPanelStyle =
     "QPushButton { background: #2b303a; color: #e8ecf2; border: 1px solid #4a5364; border-radius: 6px; padding: 6px 4px; }"
     "QPushButton:hover { background: #363d4a; }"
     "QPushButton:pressed { background: #4c8dff; border-color: #8ab4ff; color: white; }";
+// The projection key's symbol: a phone with a play triangle, drawn at twice the size so it stays sharp.
+QIcon ProjectionIcon(const QColor& colour)
+{
+    constexpr int kLogical = 32;
+    QPixmap pixmap(kLogical * 2, kLogical * 2);
+    pixmap.setDevicePixelRatio(2.0);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing);
+    const QPen pen(colour, 2.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+    painter.setPen(pen);
+    painter.setBrush(Qt::NoBrush);
+    painter.drawRoundedRect(QRectF(6, 3, 15, 26), 3.2, 3.2);            // the phone
+    painter.drawLine(QPointF(10.5, 24), QPointF(13.5, 24));              // its home bar
+    // The play triangle overlaps the phone's edge: clear the edge under it first.
+    const QPolygonF triangle({QPointF(17, 17), QPointF(28.5, 23), QPointF(17, 29)});
+    painter.setCompositionMode(QPainter::CompositionMode_Clear);
+    painter.setPen(QPen(Qt::black, 6, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    painter.setBrush(Qt::black);
+    painter.drawPolygon(triangle);
+    painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+    painter.setPen(pen);
+    painter.setBrush(Qt::NoBrush);
+    painter.drawPolygon(triangle);
+    painter.end();
+    return QIcon(pixmap);
+}
 }
 
 VideoWidget::VideoWidget(QWidget* parent) : QWidget(parent)
@@ -116,9 +149,45 @@ void VideoWidget::mouseReleaseEvent(QMouseEvent* event)
 
 RotaryKnob::RotaryKnob(QWidget* parent) : QWidget(parent)
 {
-    setFixedSize(150, 150);
-    setToolTip("Drehregler: Mausrad oder ziehen = drehen, klicken = druecken");
+    setFixedSize(kSize, kSize);
+    setMouseTracking(true);   // the arrow under the mouse lights up
     setCursor(Qt::PointingHandCursor);
+}
+namespace {
+const char* ZoneTip(KnobZone zone)
+{
+    switch (zone) {
+    case KnobZone::Up: return "Nach oben (Pfeil hoch)";
+    case KnobZone::Right: return "Nach rechts (Pfeil rechts)";
+    case KnobZone::Down: return "Nach unten (Pfeil runter)";
+    case KnobZone::Left: return "Nach links (Pfeil links)";
+    case KnobZone::Centre: return "Regler druecken: auswaehlen (Enter)";
+    default: return "";
+    }
+}
+}
+KnobZone RotaryKnob::ZoneAt(const QPointF& position) const
+{
+    const QPointF centre = rect().center() + QPointF(0.5, 0.5);
+    return KnobZoneAt(position.x() - centre.x(), position.y() - centre.y(), std::min(width(), height()) / 2.0 - 4);
+}
+bool RotaryKnob::event(QEvent* event)
+{
+    // One tooltip per place of the controller: the arrows, the middle and the turning itself.
+    if (event->type() == QEvent::ToolTip) {
+        const auto* help = static_cast<QHelpEvent*>(event);
+        const KnobZone zone = ZoneAt(help->pos());
+        if (zone == KnobZone::None) QToolTip::hideText();
+        else QToolTip::showText(help->globalPos(), QString::fromUtf8(ZoneTip(zone)) + "\nDrehen: Mausrad oder im Kreis ziehen", this);
+        return true;
+    }
+    return QWidget::event(event);
+}
+void RotaryKnob::leaveEvent(QEvent* event)
+{
+    m_hoverZone = KnobZone::None;
+    update();
+    QWidget::leaveEvent(event);
 }
 void RotaryKnob::Detent(int direction)
 {
@@ -133,13 +202,21 @@ void RotaryKnob::mousePressEvent(QMouseEvent* event)
     m_isPressed = true;
     m_isDragging = false;
     m_carry = 0;
+    m_pressZone = ZoneAt(event->position());
     m_lastAngle = AngleAt(rect().center(), event->position());
     update();
 }
 void RotaryKnob::mouseMoveEvent(QMouseEvent* event)
 {
-    if (!m_isPressed) return;
-    const double now = AngleAt(rect().center(), event->position());
+    if (!m_isPressed) {
+        const KnobZone zone = ZoneAt(event->position());
+        if (zone != m_hoverZone) { m_hoverZone = zone; update(); }
+        return;
+    }
+    const QPointF centre = rect().center();
+    // Right at the middle a tiny movement is a huge turn: no turning there.
+    if (std::hypot(event->position().x() - centre.x(), event->position().y() - centre.y()) < 10) return;
+    const double now = AngleAt(centre, event->position());
     double delta = now - m_lastAngle;
     while (delta > 180) delta -= 360;
     while (delta < -180) delta += 360;
@@ -152,8 +229,15 @@ void RotaryKnob::mouseReleaseEvent(QMouseEvent* event)
 {
     if (event->button() != Qt::LeftButton || !m_isPressed) return;
     m_isPressed = false;
-    // A click that never turned the knob is a press of its centre button.
-    if (!m_isDragging && onPress) onPress();
+    const KnobZone pressed = m_pressZone;
+    m_pressZone = KnobZone::None;
+    m_hoverZone = ZoneAt(event->position());
+    // A click that never turned the knob and ends where it began is a key: the arrow that was clicked or,
+    // in the middle, the controller's push button.
+    if (!m_isDragging && pressed != KnobZone::None && pressed == m_hoverZone) {
+        if (pressed == KnobZone::Centre) { if (onPress) onPress(); }
+        else if (onNudge) onNudge(KnobZoneKey(pressed));
+    }
     update();
 }
 void RotaryKnob::wheelEvent(QWheelEvent* event)
@@ -170,30 +254,65 @@ void RotaryKnob::paintEvent(QPaintEvent*)
     painter.setRenderHint(QPainter::Antialiasing);
     const QPointF centre = rect().center() + QPointF(0.5, 0.5);
     const double radius = std::min(width(), height()) / 2.0 - 4;
-    QRadialGradient body(centre - QPointF(radius * 0.3, radius * 0.4), radius * 1.4);
-    body.setColorAt(0, QColor(84, 92, 108));
-    body.setColorAt(1, QColor(28, 31, 38));
-    painter.setPen(QPen(QColor(110, 118, 134), 2));
+    const QColor accent(76, 141, 255);
+    const bool isDown = m_isPressed && !m_isDragging;   // a click that has not turned the knob so far
+    // The disc with its rim.
+    QRadialGradient body(centre - QPointF(radius * 0.3, radius * 0.4), radius * 1.5);
+    body.setColorAt(0, QColor(70, 77, 92));
+    body.setColorAt(1, QColor(30, 34, 42));
+    painter.setPen(QPen(QColor(150, 158, 174), 3));
     painter.setBrush(body);
     painter.drawEllipse(centre, radius, radius);
+    // The arrow under the mouse, or being clicked, lights up as a sector of the disc.
+    const KnobZone lit = isDown ? m_pressZone : m_hoverZone;
+    if (lit != KnobZone::None && lit != KnobZone::Centre) {
+        const int start = lit == KnobZone::Up ? 45 : lit == KnobZone::Left ? 135 : lit == KnobZone::Down ? 225 : 315;   // degrees, counter-clockwise from 3 o'clock
+        const double inset = radius - 2;
+        const double innerRadius = radius * kKnobCentreRatio;
+        const QRectF outerBox(centre.x() - inset, centre.y() - inset, 2 * inset, 2 * inset);
+        const QRectF innerBox(centre.x() - innerRadius, centre.y() - innerRadius, 2 * innerRadius, 2 * innerRadius);
+        QPainterPath sector;
+        sector.arcMoveTo(outerBox, start);
+        sector.arcTo(outerBox, start, 90);
+        sector.arcTo(innerBox, start + 90, -90);
+        sector.closeSubpath();
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(isDown ? QColor(76, 141, 255, 110) : QColor(255, 255, 255, 26));
+        painter.drawPath(sector);
+    }
     // The knurled rim turns with the knob so the movement can be seen.
-    painter.setPen(QPen(QColor(150, 158, 174), 2));
+    painter.setPen(QPen(QColor(116, 124, 140), 2));
     for (int i = 0; i < 360 / static_cast<int>(kDetentDegrees); ++i) {
         const double angle = (m_angle + i * kDetentDegrees) * kPi / 180.0;
-        const QPointF outer(centre.x() + std::sin(angle) * (radius - 2), centre.y() - std::cos(angle) * (radius - 2));
-        const QPointF inner(centre.x() + std::sin(angle) * (radius - 9), centre.y() - std::cos(angle) * (radius - 9));
+        const QPointF outer(centre.x() + std::sin(angle) * (radius - 4), centre.y() - std::cos(angle) * (radius - 4));
+        const QPointF inner(centre.x() + std::sin(angle) * (radius - 10), centre.y() - std::cos(angle) * (radius - 10));
         painter.drawLine(inner, outer);
     }
+    // The four arrows, tips pointing to the rim.
+    const auto arrow = [&](KnobZone zone, double towardsX, double towardsY) {
+        const double distance = radius * 0.74, reach = radius * 0.06, leg = radius * 0.11;
+        const QColor colour = zone == lit ? (isDown ? accent.lighter(150) : QColor(255, 255, 255)) : QColor(214, 221, 233);
+        painter.setPen(QPen(colour, 5.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter.setBrush(Qt::NoBrush);
+        const QPointF tip(centre.x() + towardsX * (distance + reach), centre.y() + towardsY * (distance + reach));
+        const QPointF base(centre.x() + towardsX * (distance - reach), centre.y() + towardsY * (distance - reach));
+        const QPointF side(-towardsY, towardsX);
+        painter.drawPolyline(QPolygonF({base + side * leg, tip, base - side * leg}));
+    };
+    arrow(KnobZone::Up, 0, -1);
+    arrow(KnobZone::Right, 1, 0);
+    arrow(KnobZone::Down, 0, 1);
+    arrow(KnobZone::Left, -1, 0);
     // Centre push button.
-    const double cap = radius * 0.58;
-    painter.setPen(QPen(QColor(90, 98, 114), 2));
-    painter.setBrush(m_isPressed && !m_isDragging ? QColor(76, 141, 255) : QColor(52, 58, 70));
+    const double cap = radius * (kKnobCentreRatio - 0.06);
+    painter.setPen(QPen(QColor(92, 100, 116), 2));
+    painter.setBrush(isDown && m_pressZone == KnobZone::Centre ? accent : (m_hoverZone == KnobZone::Centre && !m_isPressed) ? QColor(64, 72, 88) : QColor(46, 52, 64));
     painter.drawEllipse(centre, cap, cap);
     // Marker on the cap.
     const double marker = m_angle * kPi / 180.0;
     painter.setPen(Qt::NoPen);
     painter.setBrush(QColor(255, 196, 64));
-    painter.drawEllipse(QPointF(centre.x() + std::sin(marker) * (cap - 9), centre.y() - std::cos(marker) * (cap - 9)), 4.5, 4.5);
+    painter.drawEllipse(QPointF(centre.x() + std::sin(marker) * (cap - 11), centre.y() - std::cos(marker) * (cap - 11)), 5, 5);
 }
 
 AudioDisplay::AudioDisplay(QWidget* parent) : QWidget(parent)
@@ -274,10 +393,78 @@ CarPanel::CarPanel(QWidget* parent) : QWidget(parent)
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(6, 6, 6, 6);
     layout->setSpacing(8);
-    m_display = new AudioDisplay(this);
-    layout->addWidget(m_display);
+    constexpr int kKeyHeight = 38;
+
+    // The controller itself: MEDIA, TEL, NAV and the projection key in one row, HOME and BACK below,
+    // then the round controller with its four arrows.
+    auto* top = new QGridLayout();
+    top->setSpacing(6);
+    const auto hotKey = [&](const char* text, ConsoleKey key, const char* tip, int column) {
+        auto* button = AddConsoleButton(text, key, tip);
+        button->setFixedHeight(kKeyHeight);
+        button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        top->addWidget(button, 0, column);
+        top->setColumnStretch(column, 1);
+        return button;
+    };
+    hotKey("MEDIA", ConsoleKey::Media, "Medien (Spotify o.ae. auf dem Handy), Taste F3", 0);
+    hotKey("TEL", ConsoleKey::Tel, "Telefon auf dem Handy, Taste F5", 1);
+    hotKey("NAV", ConsoleKey::Nav, "Navigation auf dem Handy, Taste F6", 2);
+    auto* projection = hotKey("", ConsoleKey::Projection, "CarPlay / Android Auto: Projektion nach vorn holen; ohne Verbindung: verbinden (Taste F8)", 3);
+    projection->setIcon(ProjectionIcon(QColor(232, 236, 242)));
+    projection->setIconSize(QSize(28, 28));
+    layout->addLayout(top);
+
+    auto* home = new QHBoxLayout();
+    const auto sideKey = [&](const char* text, ConsoleKey key, const char* tip) {
+        auto* button = AddConsoleButton(text, key, tip);
+        button->setFixedSize(96, kKeyHeight);
+        home->addWidget(button);
+    };
+    sideKey("HOME", ConsoleKey::Home, "Android-Auto-Startbildschirm; nochmal: Radio-Startmenue (Pos1)");
+    home->addStretch(1);
+    sideKey("BACK", ConsoleKey::Back, "Zurueck (Esc)");
+    layout->addLayout(home);
+
+    m_knob = new RotaryKnob(this);
+    m_knob->onRotate = [this](int detents) { if (onRotate) onRotate(detents); };
+    m_knob->onPress = [this] { if (onKey) { onKey(keys::DpadCenter, true); onKey(keys::DpadCenter, false); } };
+    m_knob->onNudge = [this](unsigned keycode) { if (onKey) { onKey(keycode, true); onKey(keycode, false); } };
+    layout->addWidget(m_knob, 0, Qt::AlignHCenter);
+
+    // Everything else in a section of its own.
+    auto* heading = new QHBoxLayout();
+    const auto rule = [&] {
+        auto* line = new QFrame(this);
+        line->setFrameShape(QFrame::HLine);
+        line->setStyleSheet("color: #3a4252;");
+        return line;
+    };
+    auto* caption = new QLabel("WEITERE TASTEN", this);
+    caption->setStyleSheet("color: #8590a5; font-size: 10px;");
+    heading->addWidget(rule(), 1);
+    heading->addWidget(caption);
+    heading->addWidget(rule(), 1);
+    layout->addLayout(heading);
+
+    auto* more = new QGridLayout();
+    more->setSpacing(6);
+    more->addWidget(AddConsoleButton("MENU", ConsoleKey::Menu, "Hauptmenue des Radios (noch ohne Funktion), Taste F1"), 0, 0);
+    more->addWidget(AddConsoleButton("OPTION", ConsoleKey::Option, "Optionen/Kontextmenue der aktuellen Ansicht (F2)"), 0, 1);
+    more->addWidget(AddConsoleButton("RADIO", ConsoleKey::Radio, "Radio (noch ohne Funktion), Taste F4"), 0, 2);
+    more->addWidget(AddConsoleButton("MAP", ConsoleKey::Map, "Karte auf dem Handy, Taste F7"), 0, 3);
+    layout->addLayout(more);
+
+    // Track skip and play/pause go straight to the phone's media session.
+    auto* skip = new QHBoxLayout();
+    skip->setSpacing(6);
+    skip->addWidget(AddKeyButton("◀◀ Titel", keys::MediaPrevious, "Voriger Titel (Bild hoch)"));
+    skip->addWidget(AddKeyButton("Play/Pause", keys::MediaPlayPause, "Wiedergabe/Pause (Leertaste)"));
+    skip->addWidget(AddKeyButton("Titel ▶▶", keys::MediaNext, "Naechster Titel (Bild runter)"));
+    layout->addLayout(skip);
 
     auto* volume = new QHBoxLayout();
+    volume->setSpacing(6);
     auto* down = AddPlainButton("Leiser  -", "Lautstaerke verringern (Taste -)");
     auto* mute = AddPlainButton("Stumm", "Ton aus/an (Taste M)");
     auto* up = AddPlainButton("Lauter  +", "Lautstaerke erhoehen (Taste +)");
@@ -289,56 +476,8 @@ CarPanel::CarPanel(QWidget* parent) : QWidget(parent)
     volume->addWidget(up);
     layout->addLayout(volume);
 
-    // The controller: rotary knob in the middle, the four nudge keys around it and MENU / HOME / BACK /
-    // OPTION in the corners, as on a BMW iDrive controller.
-    auto* pad = new QGridLayout();
-    pad->setSpacing(4);
-    m_knob = new RotaryKnob(this);
-    m_knob->onRotate = [this](int detents) { if (onRotate) onRotate(detents); };
-    m_knob->onPress = [this] { if (onKey) { onKey(keys::DpadCenter, true); onKey(keys::DpadCenter, false); } };
-    const auto nudge = [&](const char* text, unsigned keycode, const char* tip, int row, int column) {
-        auto* button = AddKeyButton(text, keycode, tip);
-        button->setFixedSize(52, 36);
-        button->setStyleSheet("font-size: 18px;");
-        pad->addWidget(button, row, column, Qt::AlignCenter);
-    };
-    const auto corner = [&](const char* text, ConsoleKey key, const char* tip, int row, int column) {
-        auto* button = AddConsoleButton(text, key, tip);
-        button->setFixedSize(70, 36);
-        pad->addWidget(button, row, column, Qt::AlignCenter);
-    };
-    corner("MENU", ConsoleKey::Menu, "Hauptmenue des Radios (noch ohne Funktion), Taste F1", 0, 0);
-    nudge("▲", keys::DpadUp, "Nach oben (Pfeil hoch)", 0, 1);
-    corner("HOME", ConsoleKey::Home, "Android-Auto-Startbildschirm; nochmal: Radio-Startmenue (Pos1)", 0, 2);
-    nudge("◀", keys::DpadLeft, "Nach links (Pfeil links)", 1, 0);
-    pad->addWidget(m_knob, 1, 1, Qt::AlignCenter);
-    nudge("▶", keys::DpadRight, "Nach rechts (Pfeil rechts)", 1, 2);
-    corner("BACK", ConsoleKey::Back, "Zurueck (Esc)", 2, 0);
-    nudge("▼", keys::DpadDown, "Nach unten (Pfeil runter)", 2, 1);
-    corner("OPTION", ConsoleKey::Option, "Optionen/Kontextmenue der aktuellen Ansicht (F2)", 2, 2);
-    pad->setAlignment(Qt::AlignHCenter);
-    layout->addLayout(pad);
-
-    // Hot keys.
-    auto* hot = new QGridLayout();
-    hot->setSpacing(6);
-    hot->addWidget(AddConsoleButton("MEDIA", ConsoleKey::Media, "Medien (Spotify o.ae. auf dem Handy), Taste F3"), 0, 0);
-    hot->addWidget(AddConsoleButton("RADIO", ConsoleKey::Radio, "Radio (noch ohne Funktion), Taste F4"), 0, 1);
-    hot->addWidget(AddConsoleButton("TEL", ConsoleKey::Tel, "Telefon auf dem Handy, Taste F5"), 0, 2);
-    hot->addWidget(AddConsoleButton("NAV", ConsoleKey::Nav, "Navigation auf dem Handy, Taste F6"), 1, 0);
-    hot->addWidget(AddConsoleButton("MAP", ConsoleKey::Map, "Karte auf dem Handy, Taste F7"), 1, 1);
-    layout->addLayout(hot);
-    auto* projection = AddConsoleButton("CarPlay / Android Auto", ConsoleKey::Projection, "Projektion nach vorn holen; ohne Verbindung: verbinden (Taste F8)");
-    projection->setMinimumHeight(36);
-    layout->addWidget(projection);
-
-    // Track skip and play/pause go straight to the phone's media session.
-    auto* skip = new QHBoxLayout();
-    skip->setSpacing(6);
-    skip->addWidget(AddKeyButton("◀◀ Titel", keys::MediaPrevious, "Voriger Titel (Bild hoch)"));
-    skip->addWidget(AddKeyButton("Play/Pause", keys::MediaPlayPause, "Wiedergabe/Pause (Leertaste)"));
-    skip->addWidget(AddKeyButton("Titel ▶▶", keys::MediaNext, "Naechster Titel (Bild runter)"));
-    layout->addLayout(skip);
+    m_display = new AudioDisplay(this);
+    layout->addWidget(m_display);
     layout->addStretch(1);
 }
 QPushButton* CarPanel::AddConsoleButton(const QString& text, ConsoleKey key, const QString& tip)
