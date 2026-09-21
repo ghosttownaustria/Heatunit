@@ -1,8 +1,14 @@
-# HeadUnit: Windows Android Auto PoC
+# HeadUnit: Android Auto PoC (Windows und Linux)
 
-C++20 / Visual Studio 2026 x64 / Qt 6. USB discovery, AOA mode switching, Android
+C++20 / Qt 6, ein Quellbaum fuer Windows (Visual Studio 2026 x64) und Linux (CMake, siehe [Linux](docs/linux.md)).
+Was sich pro System unterscheidet (USB-Suche, Treiber-Zugriff, Audioausgang), steckt hinter kleinen Schnittstellen,
+siehe [Architektur](docs/architecture.md#platform-layer). Der Rest dieser Datei beschreibt die Bedienung und den
+Windows-Build; unter Linux gilt dieselbe Bedienung. Die Windows-Schritte "Treiber reparieren" und die
+Administrator-Abfrage entfallen dort, dafuer braucht Linux einmalig eine udev-Regel.
+
+Status: USB discovery, AOA mode switching, Android
 Auto version/TLS negotiation, service and H.264 channel handling, FFmpeg decoding
-and Qt video rendering are implemented. Real phone testing (Samsung SM-F776B) has
+and Qt video rendering are implemented. Real phone testing (Samsung SM-F776B, on Windows) has
 confirmed version 1.7, TLS, service discovery and projected video, including repeated
 sessions and a clean stop. Touch (mouse), a simulated rotary knob with hard keys, and phone audio
 over WASAPI with a simulated audio display work on hardware. There is no simulated phone data or AA screen.
@@ -58,7 +64,8 @@ einer Groesse, ohne sie zu merken (auch fuer die `--test-...`-Laeufe, die sonst 
   F3 Media, F4 Radio, F5 Tel, F6 Nav, F7 Map, F8 CarPlay / Android Auto, Leertaste (Play/Pause),
   Bild hoch/runter (Titel), +/- (Lautstaerke), M (Stumm).
 Der Ton laeuft ueber das Standard-Ausgabegeraet von Windows (WASAPI, andere Programme behalten
-ihren Ton). Das Mikrofon (Sprachbefehle, Telefonate) ist noch nicht angebunden.
+ihren Ton), unter Linux ueber PulseAudio/PipeWire oder ALSA. Das Mikrofon (Sprachbefehle, Telefonate) ist noch
+nicht angebunden.
 
 **Wenn etwas klemmt, versucht die App es selbst:**
 - Das Handy im Accessory-Modus bekommt Android Auto per AOA-Neustart neu gestartet,
@@ -95,7 +102,7 @@ native VS-Projekte; Protobuf-Dateien und DLL-Kopien werden automatisch erzeugt.
 `--start-accessory` (Accessory-Modus starten und Bulk-Paar pruefen), `--repair-driver`
 (WinUSB wiederherstellen), `--recover-phone` (USB-Verbindung des Handys neu starten und
 Treiber reparieren), `--test-projection` (kompletter Ablauf, erfolgreich nach zehn
-angezeigten Videobildern), `--test-input` (schickt Regler-, Tasten- und Touch-Eingaben ans Handy), `--test-audio` (startet Wiedergabe leise und prueft, dass Ton am Ausgabegeraet ankommt), `--test-console` (Media, Home, Home, Media, Home, Radio, Nav: prueft die Zwei-Stufen-Logik von Home am echten Handybild), `--test-keys` (Diagnose: spielt die Schritte aus `HEADUNIT_TEST_KEYS` ab (Zahl = Tastencode, `t:X:Y` = Tipp aufs Display, `c:name` = Konsolentaste), durch Komma getrennt, z. B. `3,t:42:438,c:home`, und speichert nach jedem Schritt ein Bild). Mit `HEADUNIT_TEST_SHOTS=<Ordner>` speichern die Tests Bilder des Handys und des Fensters. Details: [Windows-Verbindung](docs/windows_connection.md).
+angezeigten Videobildern), `--test-input` (schickt Regler-, Tasten- und Touch-Eingaben ans Handy), `--test-audio` (startet Wiedergabe leise und prueft, dass Ton am Ausgabegeraet ankommt), `--test-tone` (spielt zwei Sekunden leisen Ton ueber den Audioausgang, ohne Handy), `--test-console` (Media, Home, Home, Media, Home, Radio, Nav: prueft die Zwei-Stufen-Logik von Home am echten Handybild), `--test-keys` (Diagnose: spielt die Schritte aus `HEADUNIT_TEST_KEYS` ab (Zahl = Tastencode, `t:X:Y` = Tipp aufs Display, `c:name` = Konsolentaste), durch Komma getrennt, z. B. `3,t:42:438,c:home`, und speichert nach jedem Schritt ein Bild). Mit `HEADUNIT_TEST_SHOTS=<Ordner>` speichern die Tests Bilder des Handys und des Fensters. Details: [Windows-Verbindung](docs/windows_connection.md).
 
 ## Visual Studio 2026: oeffnen, bauen, starten
 
@@ -141,9 +148,29 @@ Qt-Modulen/Plugins `msbuild/Qt.props` und `msbuild/Qt.targets` erweitern. Fuer
 Weitergabe an einen anderen PC den passenden VC++ Redistributable mit einplanen;
 Debug ist fuer die lokale Entwicklung gedacht.
 
-## Optional: existing CMake build
+## Linux
 
-CMake remains available for portability and the older VS2022 build path.
+Kurzfassung (Debian, Ubuntu, Raspberry Pi OS; Pakete, Erste Inbetriebnahme und Fehlersuche stehen in
+[docs/linux.md](docs/linux.md)):
+
+```sh
+sudo apt install build-essential cmake ninja-build pkg-config qt6-base-dev libboost-dev libssl-dev \
+    libprotobuf-dev protobuf-compiler libusb-1.0-0-dev libavcodec-dev libavutil-dev libswscale-dev
+cd HeadUnit
+cmake --preset linux-debug && cmake --build --preset linux-debug && ctest --preset linux-debug
+bash scripts/install-udev-rules.sh     # einmalig: Zugriff aufs Handy ohne root, danach Handy neu stecken
+./out/build/linux-debug/HeadUnit
+```
+
+Die Linux-Teile (USB-Suche ueber libusb, Audio ueber miniaudio, Zugriffspruefung statt Treiber-Reparatur) sind auf
+einem Windows-Rechner fuer Linux (x86-64, teils ARM64/ARM32) uebersetzt und ohne neue Warnungen geprueft, aber noch
+nicht auf einem Linux-Rechner gebaut oder mit einem Handy ausgefuehrt worden: siehe "Stand der Pruefung" in
+docs/linux.md.
+
+## CMake (Windows und Linux)
+
+CMake baut dieselben Quellen wie die Visual-Studio-Projekte: unter Linux ist es der einzige Weg, unter Windows
+eine Alternative zu `HeadUnit.sln` (und der Weg fuer Visual Studio 2022).
 
 Install Visual Studio 2022 with Desktop development with C++, Windows SDK and
 CMake tools. Use the **Developer PowerShell for VS 2022**. Qt must be the x64

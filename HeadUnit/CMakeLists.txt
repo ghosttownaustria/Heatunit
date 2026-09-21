@@ -3,8 +3,14 @@ project(HeadUnit VERSION 0.1.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
-option(HEADUNIT_BUILD_APP "Build the Qt USB diagnostic application" ON)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+option(HEADUNIT_BUILD_APP "Build the Qt application (needs Qt 6, the protocol dependencies, libusb and FFmpeg)" ON)
+option(HEADUNIT_INSTALL_UDEV_RULES "Linux: install the udev rule for phone access with the program (for packagers; users run scripts/install-udev-rules.sh)" OFF)
+set(HEADUNIT_AUDIO_BACKEND "auto" CACHE STRING "Audio output: auto (WASAPI on Windows, miniaudio elsewhere), wasapi or miniaudio")
+set_property(CACHE HEADUNIT_AUDIO_BACKEND PROPERTY STRINGS auto wasapi miniaudio)
 include(CTest)
+
+# The portable core: no Qt, no operating system API.
 add_library(headunit_core src/usb/UsbDescriptors.cpp src/androidauto/AndroidDeviceDetector.cpp src/androidauto/AoaNegotiator.cpp src/androidauto/AutoConnect.cpp src/logging/Logger.cpp)
 target_include_directories(headunit_core PUBLIC src)
 if(MSVC)
@@ -12,47 +18,94 @@ if(MSVC)
 else()
   target_compile_options(headunit_core PUBLIC -Wall -Wextra -Wpedantic)
 endif()
+
 if(HEADUNIT_BUILD_APP)
-  if(NOT WIN32)
-    message(FATAL_ERROR "The diagnostic backend currently supports Windows only. Core tests: -DHEADUNIT_BUILD_APP=OFF")
-  endif()
-  if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
+  if(WIN32 AND NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
     message(FATAL_ERROR "Use an x64 compiler and x64 Qt kit")
   endif()
-  find_package(Qt6 6.8 REQUIRED COMPONENTS Widgets Concurrent)
+  if(HEADUNIT_AUDIO_BACKEND STREQUAL "wasapi" AND NOT WIN32)
+    message(FATAL_ERROR "HEADUNIT_AUDIO_BACKEND=wasapi needs Windows")
+  endif()
+  if(HEADUNIT_AUDIO_BACKEND STREQUAL "miniaudio" OR (HEADUNIT_AUDIO_BACKEND STREQUAL "auto" AND NOT WIN32))
+    set(HEADUNIT_USE_MINIAUDIO ON)
+  else()
+    set(HEADUNIT_USE_MINIAUDIO OFF)
+  endif()
+
+  find_package(Threads REQUIRED)
+  find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Concurrent)
   include(cmake/Protocol.cmake)
-  add_library(libusb SHARED IMPORTED)
-  set_target_properties(libusb PROPERTIES
-    IMPORTED_IMPLIB "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libusb/x64/libusb-1.0.lib"
-    IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libusb/x64/libusb-1.0.dll"
-    INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/third_party/libusb/include")
-  add_library(headunit_usb src/usb/WindowsUsbBackend.cpp src/usb/AndroidUsbProbe.cpp
-    src/usb/ProjectionTransport.cpp src/usb/DriverRepair.cpp src/usb/AutoConnectSystem.cpp src/androidauto/AndroidAutoSession.cpp
-    src/androidauto/InputReports.cpp src/audio/WasapiAudioEngine.cpp)
-  target_link_libraries(headunit_usb PRIVATE libusb headunit_aasdk headunit_video)
-  target_link_libraries(headunit_usb PUBLIC headunit_core PRIVATE setupapi)
-  target_compile_definitions(headunit_usb PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+  include(cmake/Libusb.cmake)
+
+  # Everything that talks to the phone and the sound output. The sources shared by all platforms come first;
+  # what differs per platform is the discovery backend (WindowsUsbBackend; libusb everywhere, LibusbUsbBackend),
+  # the driver repair and the audio engine.
+  set(HEADUNIT_USB_SOURCES src/usb/AndroidUsbProbe.cpp src/usb/ProjectionTransport.cpp src/usb/AutoConnectSystem.cpp
+    src/usb/UsbLogging.cpp src/usb/LibusbUsbBackend.cpp src/usb/UsbBackendFactory.cpp
+    src/androidauto/AndroidAutoSession.cpp src/androidauto/InputReports.cpp src/audio/AudioEngineFactory.cpp)
+  if(WIN32)
+    list(APPEND HEADUNIT_USB_SOURCES src/usb/WindowsUsbBackend.cpp src/usb/DriverRepair.cpp)
+  else()
+    list(APPEND HEADUNIT_USB_SOURCES src/usb/DriverRepairLinux.cpp)
+  endif()
+  if(HEADUNIT_USE_MINIAUDIO)
+    list(APPEND HEADUNIT_USB_SOURCES src/audio/MiniaudioEngine.cpp src/audio/MiniaudioImpl.cpp)
+  else()
+    list(APPEND HEADUNIT_USB_SOURCES src/audio/WasapiAudioEngine.cpp)
+  endif()
+  add_library(headunit_usb ${HEADUNIT_USB_SOURCES})
+  target_link_libraries(headunit_usb PRIVATE headunit_libusb headunit_aasdk headunit_video)
+  target_link_libraries(headunit_usb PUBLIC headunit_core Threads::Threads)
+  if(WIN32)
+    target_link_libraries(headunit_usb PRIVATE setupapi)
+    target_compile_definitions(headunit_usb PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+  endif()
+  if(HEADUNIT_USE_MINIAUDIO)
+    target_compile_definitions(headunit_usb PRIVATE HEADUNIT_AUDIO_MINIAUDIO)
+    # miniaudio loads the sound system libraries (PulseAudio, ALSA, ...) at run time.
+    target_include_directories(headunit_usb SYSTEM PRIVATE third_party/miniaudio)
+    target_link_libraries(headunit_usb PRIVATE ${CMAKE_DL_LIBS})
+    if(NOT WIN32)
+      target_link_libraries(headunit_usb PRIVATE m)
+    endif()
+    # Third-party code: its warnings are not ours to fix.
+    set_source_files_properties(src/audio/MiniaudioImpl.cpp PROPERTIES COMPILE_OPTIONS "$<IF:$<CXX_COMPILER_ID:MSVC>,/w,-w>")
+  endif()
+
   add_executable(HeadUnit src/main.cpp src/ui/MainWindow.cpp src/ui/CarWidgets.cpp)
   target_link_libraries(HeadUnit PRIVATE headunit_usb Qt6::Widgets Qt6::Concurrent)
-  add_custom_command(TARGET HeadUnit POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "$<TARGET_FILE:libusb>" "$<TARGET_FILE_DIR:HeadUnit>")
-  add_custom_command(TARGET HeadUnit POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory
-    "${HEADUNIT_DEPS}/$<IF:$<CONFIG:Debug>,debug/bin,bin>" "$<TARGET_FILE_DIR:HeadUnit>")
-  install(FILES "$<TARGET_FILE:libusb>" DESTINATION bin)
-  install(DIRECTORY "${HEADUNIT_DEPS}/$<IF:$<CONFIG:Debug>,debug/bin,bin>/" DESTINATION bin FILES_MATCHING PATTERN "*.dll")
-  install(TARGETS HeadUnit RUNTIME DESTINATION bin)
-  qt_generate_deploy_app_script(TARGET HeadUnit OUTPUT_SCRIPT deployScript NO_UNSUPPORTED_PLATFORM_ERROR)
-  install(SCRIPT ${deployScript})
+
+  if(WIN32)
+    add_custom_command(TARGET HeadUnit POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "$<TARGET_FILE:libusb>" "$<TARGET_FILE_DIR:HeadUnit>")
+    add_custom_command(TARGET HeadUnit POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory
+      "${HEADUNIT_DEPS}/$<IF:$<CONFIG:Debug>,debug/bin,bin>" "$<TARGET_FILE_DIR:HeadUnit>")
+    install(FILES "$<TARGET_FILE:libusb>" DESTINATION bin)
+    install(DIRECTORY "${HEADUNIT_DEPS}/$<IF:$<CONFIG:Debug>,debug/bin,bin>/" DESTINATION bin FILES_MATCHING PATTERN "*.dll")
+    install(TARGETS HeadUnit RUNTIME DESTINATION bin)
+    qt_generate_deploy_app_script(TARGET HeadUnit OUTPUT_SCRIPT deployScript NO_UNSUPPORTED_PLATFORM_ERROR)
+    install(SCRIPT ${deployScript})
+  else()
+    # The libraries come from the system's packages; nothing is deployed next to the program.
+    include(GNUInstallDirs)
+    install(TARGETS HeadUnit RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+    if(HEADUNIT_INSTALL_UDEV_RULES)
+      install(FILES packaging/linux/70-headunit-android.rules DESTINATION lib/udev/rules.d)
+    endif()
+  endif()
 endif()
+
 if(BUILD_TESTING)
   add_executable(CoreTests tests/CoreTests.cpp tests/AoaTests.cpp tests/AutoConnectTests.cpp tests/CarControlTests.cpp)
   target_link_libraries(CoreTests PRIVATE headunit_core)
   add_test(NAME CoreTests COMMAND CoreTests)
   if(HEADUNIT_BUILD_APP)
     add_executable(ProtocolTests tests/ProtocolTests.cpp tests/InputAudioTests.cpp src/androidauto/AndroidAutoSession.cpp src/androidauto/InputReports.cpp src/usb/ProjectionTransport.cpp)
-    target_link_libraries(ProtocolTests PRIVATE headunit_aasdk headunit_video headunit_core libusb)
+    target_link_libraries(ProtocolTests PRIVATE headunit_aasdk headunit_video headunit_core headunit_libusb Threads::Threads)
     add_test(NAME ProtocolTests COMMAND ProtocolTests)
-    add_custom_command(TARGET ProtocolTests POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory
-      "${HEADUNIT_DEPS}/$<IF:$<CONFIG:Debug>,debug/bin,bin>" "$<TARGET_FILE_DIR:ProtocolTests>")
+    if(WIN32)
+      add_custom_command(TARGET ProtocolTests POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${HEADUNIT_DEPS}/$<IF:$<CONFIG:Debug>,debug/bin,bin>" "$<TARGET_FILE_DIR:ProtocolTests>")
+    endif()
   endif()
 endif()

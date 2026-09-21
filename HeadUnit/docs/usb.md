@@ -1,5 +1,15 @@
 # USB discovery and diagnostics
 
+`CreateUsbBackend()` picks the backend of the platform. **Linux** uses `LibusbUsbBackend`: it lists what
+libusb has cached (device descriptors and every configuration descriptor, no device access) and takes the
+manufacturer, product and serial strings from `/sys/bus/usb/devices/<bus>-<ports>/`, which the kernel filled when it
+enumerated the device and which everyone may read. Only when a string is not there does it open the device, which
+needs the udev rule (`docs/linux.md`); a device that cannot be opened then shows `<unavailable>` plus a warning. Root
+hubs are skipped, as the Windows backend only lists what hangs on the hub ports. The location is
+`usb:<bus>-<port>.<port>` (the sysfs name). `HEADUNIT_USB_BACKEND=libusb` selects it on Windows as well; there it
+cannot read the strings of a phone that is bound to Samsung's driver, which is why Windows uses its own backend.
+Both write their lines through `LogUsbDevice`, so logs look the same.
+
 WindowsUsbBackend enumerates `GUID_DEVINTERFACE_USB_HUB` through SetupAPI, opens
 each present hub and queries its ports. External and root hubs are included.
 It reads `USB_NODE_CONNECTION_INFORMATION_EX`, device strings and every available

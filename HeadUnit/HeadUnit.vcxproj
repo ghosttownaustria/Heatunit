@@ -46,13 +46,22 @@
     <ClCompile Include="src\ui\CarWidgets.cpp" />
     <ClCompile Include="src\androidauto\InputReports.cpp" />
     <ClCompile Include="src\audio\WasapiAudioEngine.cpp" />
+    <ClCompile Include="src\audio\AudioEngineFactory.cpp" />
     <ClInclude Include="src\ui\CarWidgets.h" />
     <ClInclude Include="src\androidauto\InputReports.h" />
     <ClInclude Include="src\androidauto\ProjectionInput.h" />
+    <ClInclude Include="src\audio\AudioEngine.h" />
     <ClInclude Include="src\audio\AudioTypes.h" />
     <ClInclude Include="src\audio\WasapiAudioEngine.h" />
+    <ClInclude Include="src\platform\Environment.h" />
     <ClCompile Include="src\usb\UsbDescriptors.cpp" />
+    <ClCompile Include="src\usb\UsbLogging.cpp" />
+    <ClCompile Include="src\usb\UsbBackendFactory.cpp" />
+    <ClCompile Include="src\usb\LibusbUsbBackend.cpp" />
     <ClCompile Include="src\usb\WindowsUsbBackend.cpp" />
+    <ClInclude Include="src\usb\UsbLogging.h" />
+    <ClInclude Include="src\usb\UsbBackendFactory.h" />
+    <ClInclude Include="src\usb\LibusbUsbBackend.h" />
     <ClInclude Include="src\androidauto\AndroidDeviceDetector.h" />
     <ClInclude Include="src\logging\Logger.h" />
     <ClInclude Include="src\ui\MainWindow.h" />
@@ -60,11 +69,19 @@
     <ClInclude Include="src\usb\UsbDescriptors.h" />
     <ClInclude Include="src\usb\UsbTypes.h" />
     <ClInclude Include="src\usb\WindowsUsbBackend.h" />
+    <!-- Other platforms' sources (Linux driver check, miniaudio output); the native Windows build does not compile them. -->
+    <None Include="src\usb\DriverRepairLinux.cpp" />
+    <None Include="src\audio\MiniaudioEngine.cpp" />
+    <None Include="src\audio\MiniaudioEngine.h" />
+    <None Include="src\audio\MiniaudioImpl.cpp" />
+    <None Include="src\audio\MiniaudioConfig.h" />
     <None Include="README.md" />
+    <None Include="CMakeLists.txt" />
     <None Include="docs\architecture.md" />
     <None Include="docs\android_auto.md" />
     <None Include="docs\usb.md" />
     <None Include="docs\windows_connection.md" />
+    <None Include="docs\linux.md" />
     <None Include="docs\dependencies.md" />
     <None Include="docs\progress.md" />
   </ItemGroup>

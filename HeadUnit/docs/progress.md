@@ -1,5 +1,55 @@
 # Progress
 
+## 2026-09-21: one code base for Windows and Linux
+
+Goal: the same C++ sources build and run reliably on Windows and Linux, not two projects. The survey showed that
+the code was already portable except for three operating system concerns, so the work was to put those behind
+interfaces and to make the build portable. Details: [architecture](architecture.md#platform-layer), [linux](linux.md).
+
+- **USB discovery:** `CreateUsbBackend()` returns `WindowsUsbBackend` on Windows (unchanged behaviour) and the new
+  `LibusbUsbBackend` elsewhere: libusb's cached descriptors, strings from sysfs so that a phone that cannot be opened
+  yet still shows its name and serial number. Shared device logging moved to `UsbLogging.cpp`.
+- **Driver access:** `DriverRepair.h` keeps its contract (plus `RepairOutcome::AccessDenied`); `DriverRepair.cpp` stays
+  the Windows implementation, `DriverRepairLinux.cpp` detects a missing udev rule (which only an administrator can
+  add: `scripts/install-udev-rules.sh`, `packaging/linux/70-headunit-android.rules`) and restarts the USB link on a
+  best-effort basis (libusb reset, then sysfs `authorized` for root). `AndroidUsbProbe.cpp` gives per-platform advice,
+  never sets `canRepairDriver` on Linux and detaches kernel drivers from the accessory interface.
+- **Audio:** `IAudioEngine` + `CreateAudioEngine()`; `WasapiAudioEngine` (only its header changed) on Windows,
+  `MiniaudioEngine` (vendored miniaudio 0.11.25, PulseAudio/PipeWire, ALSA, JACK chosen at run time, device opened on
+  the stream's own thread) elsewhere. New phone-independent check `HeadUnit --test-tone`.
+- **Smaller portability fixes:** `sscanf_s` -> `std::from_chars`; `getenv` -> `GetEnv` (also removes a C4996
+  warning); the log file falls back to the user's state directory when the working directory is read-only;
+  Windows-only wording in `AutoConnect` is shown only where the administrator prompt exists
+  (`AutoConnectDeps::needsAdminPrompt`, with a unit test); `.vscode/settings.json` no longer holds an absolute path of
+  an older checkout; `.gitattributes` keeps LF in shell scripts and udev rules.
+- **Build:** `CMakeLists.txt`, `cmake/Protocol.cmake` and the new `cmake/Libusb.cmake` build the same sources on both
+  systems (vcpkg tree on Windows, system packages through pkg-config/`find_package` on Linux); presets `linux-debug`,
+  `linux-release`, `linux-core-only` were added and the Windows presets are only offered on Windows. The MSBuild
+  projects list the new sources. `.github/workflows/build.yml` builds and tests Linux fully and the portable core on
+  Windows.
+
+Verified on this Windows machine: MSBuild Debug x64 with 0 errors and no warnings from own sources; `CoreTests` (with
+the new AutoConnect test) and `ProtocolTests` pass; `--scan` lists the same 15 USB devices with the same 47
+interfaces and 40 endpoints through the native backend and through `HEADUNIT_USB_BACKEND=libusb`; `--test-tone`
+through WASAPI plays all 384000 bytes without drops; `--smoke-test` opens the Qt window; the log falls back to
+`%LOCALAPPDATA%\HeadUnit` when the working directory is read-only. The CMake path on Windows (`windows-vs2022` preset,
+Visual Studio 2022 generator, built in a temporary directory) configures, builds and passes `ctest` (2 of 2). With
+`-DHEADUNIT_AUDIO_BACKEND=miniaudio` (the Linux audio engine, on Windows running on top of WASAPI) `--test-tone` also
+delivers all 384000 bytes, and `HEADUNIT_AUDIO_DEVICE` switches between output devices (four search words, three
+different devices).
+
+Verified for Linux by cross-compiling only (zig 0.16 / clang with libc++ against the same Boost, OpenSSL, protobuf,
+FFmpeg, libusb and Qt headers): every application source and test compiles for x86-64 with `-Wall -Wextra` and no
+new warnings (three sign-compare warnings in `ProtocolTests.cpp` predate this work); the libusb backend, the Linux driver
+check, the USB probe, the miniaudio engine, the logger, `AutoConnect` and `main` also compile for ARM64 and ARM32; the
+AASDK sources compile for x86-64; the UI sources also compile against the Qt 6.4.3 headers; all `#include` spellings
+match the file names in their case.
+**Not verified:** nothing has been linked or run on Linux (no Linux environment was available), so the udev rule,
+sysfs string reading, the PulseAudio/ALSA paths, the CMake Linux branches and the USB restart on Linux are unproven
+until the first run there; the checklist is in [linux.md](linux.md). The Windows behaviour with a real phone was not
+re-tested after the refactoring (no phone connected); the Windows code paths for the phone are unchanged except for
+the shared logging and the `AdviseOnOpenFailure` helper, which keeps the texts and flags.
+
 ## 2026-09-20 (last): console layout from the user's sketch
 
 - **Layout** (`CarPanel`): top row MEDIA, TEL, NAV and the projection key as a phone-with-play symbol

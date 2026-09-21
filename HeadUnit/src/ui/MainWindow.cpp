@@ -14,14 +14,25 @@
 #include <QVBoxLayout>
 #include <QtConcurrent/QtConcurrentRun>
 #include <array>
+#include <charconv>
+#include <cstdlib>
 #include <exception>
 #include <iterator>
+#include <system_error>
 
 namespace headunit {
 namespace {
 QString Text(const std::string& value) { return QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size())); }
+// The touch step of the --test-keys script, "t:X:Y".
+bool ParseTapStep(const std::string& step, int& x, int& y)
+{
+    const char* const end = step.data() + step.size();
+    const auto first = std::from_chars(step.data() + 2, end, x);
+    if (first.ec != std::errc{} || first.ptr == end || *first.ptr != ':') return false;
+    return std::from_chars(first.ptr + 1, end, y).ec == std::errc{};
+}
 constexpr unsigned kProjectionTestFrames = 10;
-// The chosen display size is remembered between runs (per Windows user).
+// The chosen display size is remembered between runs, per user (QSettings: registry on Windows, ~/.config on Linux).
 constexpr const char* kSettingsOrganization = "HeadUnit";
 constexpr const char* kSettingsApplication = "HeadUnit";
 constexpr const char* kDisplaySetting = "display";
@@ -37,7 +48,7 @@ QString DisplayChoiceText(const DisplayConfig& display)
 MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
     : m_backend(backend), m_logger(logger), m_mode(mode),
       m_input(std::make_shared<ProjectionInput>()), m_audioState(std::make_shared<AudioState>()),
-      m_audio(std::make_unique<WasapiAudioEngine>(m_audioState, logger))
+      m_audio(CreateAudioEngine(m_audioState, logger))
 {
     setWindowTitle("Android Auto Headunit");
     resize(1240, 800);
@@ -552,7 +563,7 @@ void MainWindow::RunKeysTest()
     m_logger.Write("INFO", "TEST", "Keys test step " + std::to_string(index + 1) + ": " + step);
     if (step.rfind("t:", 0) == 0) {
         int x = 0, y = 0;
-        if (sscanf_s(step.c_str(), "t:%d:%d", &x, &y) == 2) {
+        if (ParseTapStep(step, x, y)) {
             m_input->Touch(TouchAction::Down, x, y);
             m_input->Touch(TouchAction::Up, x, y);
         }

@@ -1,0 +1,47 @@
+name: build
+
+# One source tree, two platforms: every push builds and tests the Linux application with the system's
+# libraries, and the portable core on Windows. The full Windows build (Qt, vcpkg's FFmpeg and protobuf) is
+# too slow for CI without a dependency cache; it is built with HeadUnit.sln (README.md).
+on:
+  push:
+  pull_request:
+
+jobs:
+  linux:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: HeadUnit
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build pkg-config qt6-base-dev libboost-dev libssl-dev \
+            libprotobuf-dev protobuf-compiler libusb-1.0-0-dev libavcodec-dev libavutil-dev libswscale-dev
+      - name: Configure
+        run: cmake --preset linux-release
+      - name: Build
+        run: cmake --build --preset linux-release
+      - name: Test
+        run: ctest --preset linux-release
+      - name: Start without a display or a phone
+        run: |
+          ./out/build/linux-release/HeadUnit --help
+          # Searches the USB bus through libusb (the runner has no phone; a scan without errors is the result).
+          ./out/build/linux-release/HeadUnit --scan
+
+  windows-core:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: HeadUnit
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake --preset core-only
+      - name: Build
+        run: cmake --build --preset core-debug
+      - name: Test
+        run: ctest --preset core-debug

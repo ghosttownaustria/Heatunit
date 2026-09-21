@@ -10,6 +10,9 @@ AutoConnectResult ConnectPhoneAutomatically(IUsbBackend& backend, Logger& logger
     deps.connect = [&](const UsbDevice& phone) { return ConnectAndroidAuto(phone, logger, isStopRequested, callbacks); };
     deps.repair = [&] { return RepairPhoneDriverElevated(logger); };
     deps.recover = [&] { return RecoverPhoneElevated(logger); };
+#ifdef _WIN32
+    deps.needsAdminPrompt = true;
+#endif
     // Sleeps in small slices so the Stop button takes effect within 100 ms.
     deps.wait = [&](std::chrono::milliseconds time) {
         for (auto left = time; left.count() > 0 && !isStopRequested; left -= std::chrono::milliseconds(100))

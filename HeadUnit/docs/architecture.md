@@ -1,10 +1,12 @@
 # Architecture
 
-Windows development now has a native VS2026 entry point at `../HeadUnit.sln`
+Windows development has a native VS2026 entry point at `../HeadUnit.sln`
 (relative to HeadUnit/). It builds the same sources directly with MSBuild; the
 application includes the core and USB sources, while CoreTests builds just the
-portable sources. Shared settings live in `msbuild/`. CMake targets below remain
-available independently for portability.
+portable sources. Shared settings live in `msbuild/`. `CMakeLists.txt` builds the very same
+sources on Windows (VS generator) and on Linux (Ninja, system libraries, see
+[linux.md](linux.md)); there is one code base, not a Windows and a Linux project. What differs per
+platform is listed under [Platform layer](#platform-layer).
 
 Discovery, AOA control, a persistent protocol session and the video pipeline are
 implemented and hardware-verified with a Samsung phone: projected video, touch,
@@ -13,10 +15,12 @@ rotary/key input and audio playback all work. Microphone capture is not implemen
 ```text
 main (composition/lifetime)
   +-- Logger (console + UTF-8 file, mutex, UTC timestamps)
-  +-- WindowsUsbBackend : IUsbBackend
-  |     +-- SetupAPI: enumerate present hubs
-  |     +-- Windows USB hub IOCTLs: descriptors
-  |     +-- platform-neutral descriptor parser
+  +-- CreateUsbBackend() -> IUsbBackend
+  |     +-- Windows: WindowsUsbBackend
+  |     |     +-- SetupAPI: enumerate present hubs
+  |     |     +-- Windows USB hub IOCTLs: descriptors
+  |     |     +-- platform-neutral descriptor parser
+  |     +-- Linux: LibusbUsbBackend (libusb descriptors, strings from sysfs)
   +-- MainWindow (Qt Widgets)
         +-- QtConcurrent worker -> IUsbBackend -> UsbScanResult
         +-- AndroidDeviceDetector -> evidence/reason
@@ -28,7 +32,8 @@ main (composition/lifetime)
 ```
 
 `headunit_core` has no Qt or Windows headers. Plain C++ value types carry device
-data and errors. `headunit_usb` is the Windows adapter. `HeadUnit` composes both
+data and errors. `headunit_usb` is the adapter to the operating system (discovery, the libusb
+session, driver repair, audio output). `HeadUnit` composes both
 with Qt Widgets/Concurrent. USB work runs outside the GUI thread; only one scan
 runs at a time. Closing waits for the current scan before destroying its backend
 and logger. Windows handles and SetupAPI device sets have RAII deleters.
@@ -68,19 +73,47 @@ one, preventing a growing GUI event backlog. Only the first displayed real frame
 produces the video-ready log. The hardware smoke test requires ten displayed
 frames, rather than treating USB/TLS readiness as projection success.
 
-Linux migration: replace discovery with a libusb backend; reuse data structures,
-detector, tests and Qt UI. The planned libusb transport can support both platforms,
-but Windows needs appropriate interface driver bindings. Raspberry Pi graphics
-and codec acceleration are separate decoder/renderer decisions. Core can already
-be built without Qt/Windows using `-DHEADUNIT_BUILD_APP=OFF`; a Linux build has not
-been executed in this workspace.
+## Platform layer
+
+Only three things need the operating system, and each hides behind a small interface that
+`main`/`MainWindow`/`AutoConnect` use without knowing the platform. Everything else (session, transport,
+AASDK, decoder, Qt UI, detector, tests) is shared and contains no platform `#ifdef`s beyond error texts.
+
+| Concern | Interface | Windows | Linux |
+| --- | --- | --- | --- |
+| USB discovery (device list, descriptors, strings) | `IUsbBackend`, `CreateUsbBackend()` | `WindowsUsbBackend`: SetupAPI + hub IOCTLs. Reads the strings of a phone that is bound to another vendor's driver | `LibusbUsbBackend`: descriptors from libusb's cache, strings from sysfs (no device access needed), otherwise from an opened handle |
+| What the OS needs before libusb may open the phone | `RepairPhoneDriverNow/Elevated`, `RecoverPhoneNow/Elevated` (`DriverRepair.h`) | `DriverRepair.cpp`: rebind WinUSB, restart the device node, both elevated through UAC | `DriverRepairLinux.cpp`: nothing to repair; detects a missing udev rule (`RepairOutcome::AccessDenied`) and restarts the USB link by libusb reset or sysfs `authorized` |
+| Sound output | `IAudioEngine`, `CreateAudioEngine()` | `WasapiAudioEngine` (shared mode) | `MiniaudioEngine`: PulseAudio/PipeWire, ALSA, JACK, chosen at run time |
+
+`LibusbUsbBackend` compiles everywhere (Windows too, selectable with `HEADUNIT_USB_BACKEND=libusb`), as does
+`MiniaudioEngine` (`-DHEADUNIT_AUDIO_BACKEND=miniaudio`), which keeps the Linux paths testable on the development
+machine. The build selects the rest by file: `CMakeLists.txt` adds `WindowsUsbBackend.cpp`/`DriverRepair.cpp`/
+`WasapiAudioEngine.cpp` on Windows and `DriverRepairLinux.cpp`/`MiniaudioEngine.cpp`/`MiniaudioImpl.cpp` elsewhere;
+`HeadUnit.vcxproj` lists the Windows ones (the Linux ones are `None` items). The choice per call happens in the two
+factories (`UsbBackendFactory.cpp`, `AudioEngineFactory.cpp`).
+
+The libusb session is the same everywhere. What it needs from the platform is small: on Linux the open of an
+accessory device is retried until the device node gets its access rights (udev applies them a moment after the
+node appears), and a kernel driver that holds the accessory interface is detached while it is claimed
+(`libusb_set_auto_detach_kernel_driver`, a no-op on Windows). `AndroidUsbProbe.cpp` keeps the platform specific advice in
+`AdviseOnOpenFailure`: on Windows a failed open means a wrong driver and `canRepairDriver` starts the repair; on
+Linux it means missing access rights, which only an administrator can grant, so it is reported and never repaired.
+`AutoConnectDeps::needsAdminPrompt` tells the flow whether its step messages should mention Windows' administrator
+prompt.
+
+Other platform helpers: `platform/Environment.h` (`GetEnv`, MSVC deprecates `getenv`), `DefaultLogPath` (the working
+directory when writable, otherwise the user's state directory). Raspberry Pi graphics and codec acceleration
+remain separate decoder/renderer decisions; FFmpeg's software H.264 decoder is used everywhere. The core builds
+without Qt or any library using `-DHEADUNIT_BUILD_APP=OFF`.
 
 Input and audio: the window owns a `ProjectionInput` (GUI thread -> protocol thread) and an
-`AudioState` plus `WasapiAudioEngine`. `ProjectionCallbacks` hands them to the session, which attaches
+`AudioState` plus an `IAudioEngine`. `ProjectionCallbacks` hands them to the session, which attaches
 to the input bus while it runs and turns `InputEvent`s into `InputReport` messages on its strand
 (dropped until the phone has opened the input channel). The audio sinks write PCM into
 `IPcmOutput`s opened lazily on the first sample; each WASAPI stream has its own render thread and a
-bounded ring buffer, applies the shared volume/mute gain and reports levels back for the display.
+bounded ring buffer, applies the shared volume/mute gain and reports levels back for the display
+(WASAPI polls the device from that thread; miniaudio pulls from the ring in its callback, and its stream opens the
+device on its own thread so a sound server that hangs cannot stall the protocol thread).
 `CarPanel` (rotary knob, keys, audio display) and `VideoWidget` (picture and touch mapping) are plain
 Qt widgets without moc; the portable parts (touch mapping, input bus, PCM helpers) are header-only
 and unit-tested in CoreTests.

@@ -2,8 +2,8 @@
 #include "androidauto/ConsoleController.h"
 #include "androidauto/DisplayConfig.h"
 #include "androidauto/ProjectionInput.h"
+#include "audio/AudioEngine.h"
 #include "audio/AudioTypes.h"
-#include "audio/WasapiAudioEngine.h"
 #include "usb/AutoConnectSystem.h"
 #include "usb/IUsbBackend.h"
 #include "logging/Logger.h"
@@ -69,7 +69,7 @@ private:
     std::shared_ptr<ProjectionInput> m_input;
     ConsoleController m_console;
     std::shared_ptr<AudioState> m_audioState;
-    std::unique_ptr<WasapiAudioEngine> m_audio;
+    std::unique_ptr<IAudioEngine> m_audio;
     DisplayConfig m_display{kDefaultDisplay};
     VideoWidget* m_video{};
     CarPanel* m_panel{};

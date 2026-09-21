@@ -3,7 +3,9 @@
   <ItemGroup>
     <Filter Include="src" />
     <Filter Include="src\androidauto" />
+    <Filter Include="src\audio" />
     <Filter Include="src\logging" />
+    <Filter Include="src\platform" />
     <Filter Include="src\ui" />
     <Filter Include="src\usb" />
     <Filter Include="docs" />
@@ -29,6 +31,21 @@
     <ClInclude Include="src\usb\WindowsUsbBackend.h"><Filter>src\usb</Filter></ClInclude>
     <ClInclude Include="src\usb\IUsbBackend.h"><Filter>src\usb</Filter></ClInclude>
     <ClInclude Include="src\usb\UsbTypes.h"><Filter>src\usb</Filter></ClInclude>
+    <ClCompile Include="src\usb\UsbLogging.cpp"><Filter>src\usb</Filter></ClCompile>
+    <ClInclude Include="src\usb\UsbLogging.h"><Filter>src\usb</Filter></ClInclude>
+    <ClCompile Include="src\usb\UsbBackendFactory.cpp"><Filter>src\usb</Filter></ClCompile>
+    <ClInclude Include="src\usb\UsbBackendFactory.h"><Filter>src\usb</Filter></ClInclude>
+    <ClCompile Include="src\usb\LibusbUsbBackend.cpp"><Filter>src\usb</Filter></ClCompile>
+    <ClInclude Include="src\usb\LibusbUsbBackend.h"><Filter>src\usb</Filter></ClInclude>
+    <None Include="src\usb\DriverRepairLinux.cpp"><Filter>src\usb</Filter></None>
+    <ClCompile Include="src\audio\AudioEngineFactory.cpp"><Filter>src\audio</Filter></ClCompile>
+    <ClInclude Include="src\audio\AudioEngine.h"><Filter>src\audio</Filter></ClInclude>
+    <None Include="src\audio\MiniaudioEngine.cpp"><Filter>src\audio</Filter></None>
+    <None Include="src\audio\MiniaudioEngine.h"><Filter>src\audio</Filter></None>
+    <None Include="src\audio\MiniaudioImpl.cpp"><Filter>src\audio</Filter></None>
+    <None Include="src\audio\MiniaudioConfig.h"><Filter>src\audio</Filter></None>
+    <ClInclude Include="src\platform\Environment.h"><Filter>src\platform</Filter></ClInclude>
+    <None Include="docs\linux.md"><Filter>docs</Filter></None>
     <None Include="docs\architecture.md"><Filter>docs</Filter></None>
     <None Include="docs\android_auto.md"><Filter>docs</Filter></None>
     <None Include="docs\usb.md"><Filter>docs</Filter></None>

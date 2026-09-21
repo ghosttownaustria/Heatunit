@@ -4,6 +4,7 @@
 #include "androidauto/AndroidAutoSession.h"
 #include "androidauto/DisplayService.h"
 #include "androidauto/InputReports.h"
+#include "platform/Environment.h"
 #include <aasdk/Channel/Control/ControlServiceChannel.hpp>
 #include <aasdk/Channel/Control/IControlServiceChannelEventHandler.hpp>
 #include <aasdk/Channel/MediaSink/Video/VideoMediaSinkService.hpp>
@@ -578,7 +579,7 @@ private:
 }
 ProjectionResult RunAndroidAutoSession(std::shared_ptr<aasdk::transport::ITransport> transport,
     Logger& logger, std::atomic_bool& isStopRequested, ProjectionCallbacks callbacks) {
-    if (std::getenv("HEADUNIT_PROTOCOL_TRACE"))
+    if (GetEnv("HEADUNIT_PROTOCOL_TRACE"))
         aasdk::common::ModernLogger::getInstance().setLevel(aasdk::common::LogLevel::DEBUG);
     boost::asio::io_context io;
     auto session = std::make_shared<Session>(io, transport, logger, isStopRequested, std::move(callbacks));
