@@ -4,6 +4,9 @@ Dieselben Quellen wie unter Windows: kein zweites Projekt. Was sich pro Plattfor
 kleinen Schnittstellen (USB-Suche, Treiber-Reparatur, Audioausgang) und wird in `CMakeLists.txt` ausgewaehlt.
 Siehe [Architektur](architecture.md#platform-layer).
 
+Neuer Rechner ohne alles: [Schritt-fuer-Schritt-Anleitung](linux-setup.md); Bauen und Starten in einem Schritt:
+`bash BuildAndRun.sh` im Wurzelordner des Repositorys (`--help` zeigt die Optionen).
+
 Ziel: Debian 12 / Ubuntu 22.04 oder neuer und Raspberry Pi OS (Bookworm), auf x86-64, ARM64 und 32-Bit-ARM.
 Voraussetzung: C++20-Compiler (GCC 11 oder neuer), CMake 3.24 oder neuer, Qt 6.4 oder neuer.
 
