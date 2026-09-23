@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <unordered_map>
+
 #include "aasdk/Messenger/MessageId.hpp"
 #include "aasdk/Channel/Channel.hpp"
 #include "IAudioMediaSinkService.hpp"
