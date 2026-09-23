@@ -66,10 +66,27 @@ std::string MacOf(const std::string& interfaceName)
     std::ifstream file("/sys/class/net/" + interfaceName + "/address");
     std::string mac;
     std::getline(file, mac);
+    // Lower case, as Android writes BSSIDs in its scan results (and as sysfs has it already).
     mac = Trimmed(mac);
-    std::transform(mac.begin(), mac.end(), mac.begin(), [](unsigned char c) { return static_cast<char>(std::toupper(c)); });
+    std::transform(mac.begin(), mac.end(), mac.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     return mac;
 }
+
+bool HasConnectionProfile()
+{
+    const auto listing = RunCommand({"nmcli", "-t", "-f", "NAME", "connection", "show"}, 10s);
+    std::istringstream lines(listing.output);
+    for (std::string line; std::getline(lines, line);)
+        if (Trimmed(line) == kConnectionName) return true;
+    return false;
+}
+}
+
+void RemoveLeftoverHotspot(Logger& logger)
+{
+    if (!HasConnectionProfile()) return;
+    RunCommand({"nmcli", "connection", "delete", "id", kConnectionName}, 20s);
+    logger.Write("INFO", "WLAN", "Removed the hotspot an earlier run left behind");
 }
 
 std::string Hotspot::Start(const HotspotConfig& config, HotspotInfo& info)

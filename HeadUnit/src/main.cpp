@@ -12,6 +12,11 @@
 #include <QCoreApplication>
 #endif
 #include <QApplication>
+#ifndef _WIN32
+#include <QTimer>
+#include <atomic>
+#include <csignal>
+#endif
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -22,6 +27,11 @@
 #include <vector>
 
 namespace {
+#ifndef _WIN32
+// Set by Ctrl+C (SIGINT) or a service stop (SIGTERM); the window then closes as if its close button was pressed.
+std::atomic_bool g_isCloseRequested{false};
+void RequestClose(int) { g_isCloseRequested = true; }
+#endif
 // Plays two seconds of a quiet 440 Hz tone through this platform's audio engine, at the pace of a live stream:
 // a check of the sound output that needs no phone. Succeeds when the output device took most of the audio.
 int RunToneTest(headunit::Logger& logger)
@@ -146,12 +156,24 @@ int main(int argc, char* argv[])
             return result.state == headunit::UsbProbeState::AoaAvailable || result.state == headunit::UsbProbeState::AccessoryAvailable ||
                 result.state == headunit::UsbProbeState::AccessoryTransportReady ? 0 : 3;
         }
+#ifdef HEADUNIT_WIRELESS
+        // A run that was killed cannot take its hotspot down; NetworkManager would keep it on the air until the next reboot.
+        headunit::RemoveLeftoverHotspot(logger);
+#endif
         QApplication application(argc, argv);
         using Mode = headunit::MainWindow::TestMode;
         headunit::MainWindow window(backend, logger, isSmokeTest ? Mode::Smoke : isProjectionTest ? Mode::Projection : isInputTest ? Mode::Input : isAudioTest ? Mode::Audio : isConsoleTest ? Mode::Console : isKeysTest ? Mode::Keys : Mode::None);
         if (display) window.SetDisplay(*display);
         window.show();
         if (isWireless) window.StartWirelessConnect();
+#ifndef _WIN32
+        // Closing properly ends a running session and takes the wireless mode's hotspot down again.
+        std::signal(SIGINT, RequestClose);
+        std::signal(SIGTERM, RequestClose);
+        QTimer closeWatch;
+        QObject::connect(&closeWatch, &QTimer::timeout, &window, [&window] { if (g_isCloseRequested.exchange(false)) window.close(); });
+        closeWatch.start(200);
+#endif
         logger.Write("INFO", "UI", "Qt " QT_VERSION_STR " window initialized");
         const auto result = application.exec();
         logger.Write("INFO", "APP", "Event loop stopped");

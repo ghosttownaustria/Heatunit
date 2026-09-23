@@ -18,10 +18,15 @@ struct HotspotInfo {
     std::string ipAddress;       // the head unit's address in the hotspot network
 };
 
+// A run that was killed (Ctrl+C, crash) cannot take its hotspot down, and NetworkManager keeps it up until the next
+// reboot. Removes it; nothing happens when there is none or NetworkManager is missing.
+void RemoveLeftoverHotspot(Logger& logger);
+
 // The Wi-Fi network the phone joins for wireless Android Auto, made by NetworkManager (nmcli): the head unit's
 // Wi-Fi chip becomes an access point, and NetworkManager hands out addresses (ipv4.method shared).
 // While it runs, the same chip cannot be a Wi-Fi client, so an SSH session over Wi-Fi ends. The previous
-// Wi-Fi connection returns when the hotspot is stopped.
+// Wi-Fi connection returns when the hotspot is stopped. Start and Stop may run on another thread than the one that
+// made the object, but not at the same time.
 class Hotspot {
 public:
     explicit Hotspot(Logger& logger) : m_logger(logger) {}

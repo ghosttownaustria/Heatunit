@@ -2,16 +2,15 @@
 #include "platform/Environment.h"
 #include "wireless/BluetoothService.h"
 #include "wireless/SocketTransport.h"
+#include "wireless/WirelessLink.h"
 #include "wireless/WirelessProtocol.h"
 #include <QSettings>
 #include <QString>
-#include <cerrno>
 #include <charconv>
+#include <future>
 #include <iostream>
 #include <memory>
-#include <poll.h>
 #include <random>
-#include <sys/socket.h>
 #include <thread>
 #include <unistd.h>
 
@@ -55,79 +54,18 @@ std::string RememberedPassword()
     return password;
 }
 
-struct WirelessLink {
-    int tcpFd{-1};              // the phone's TCP connection, or -1
-    bool hasSentInfo{};         // the phone asked for the Wi-Fi details and got them
-    std::string peer;           // the phone's address in the Wi-Fi network
-    std::string message;        // why there is no connection
-};
-
-// The conversation with the phone over Bluetooth, and the wait for the phone to show up on the Wi-Fi. Success is the
-// TCP connection. Without a listening socket (the Bluetooth test) it ends a few seconds after the Wi-Fi details went out.
-WirelessLink EstablishWirelessLink(int rfcommFd, int listenFd, const WifiCredentials& credentials, Logger& logger,
-    const std::atomic_bool& isStopRequested, std::chrono::seconds timeout)
+// nmcli needs a few seconds to bring the access point up. It runs on its own thread meanwhile, because this one has
+// to keep answering BlueZ (the phone's Bluetooth link waits for those answers).
+std::string StartHotspot(Hotspot& hotspot, const HotspotConfig& config, HotspotInfo& network, BluetoothService& bluetooth, Logger& logger)
 {
-    WirelessLink link;
-    WirelessHandshake handshake(credentials);
-    WirelessFrameParser parser;
-    const auto sendAll = [&](const std::vector<WirelessMessage>& messages) {
-        for (const auto& message : messages) {
-            const auto bytes = EncodeWirelessMessage(message);
-            std::size_t offset = 0;
-            while (offset < bytes.size()) {
-                const auto sent = ::send(rfcommFd, bytes.data() + offset, bytes.size() - offset, MSG_NOSIGNAL);
-                if (sent < 0 && errno == EINTR) continue;
-                if (sent <= 0) return false;
-                offset += static_cast<std::size_t>(sent);
-            }
-        }
-        return true;
-    };
-    const auto step = [&](const WirelessHandshakeStep& result) {
-        if (!result.note.empty()) logger.Write("INFO", "WLAN", result.note);
-        return sendAll(result.reply);
-    };
-    if (!step(handshake.Start())) { link.message = "Die Bluetooth-Verbindung zum Handy brach beim Senden ab."; return link; }
-
-    const auto deadline = std::chrono::steady_clock::now() + timeout;
-    std::chrono::steady_clock::time_point infoSentAt{};
-    while (!isStopRequested && std::chrono::steady_clock::now() < deadline) {
-        pollfd waiting[2] = {{rfcommFd, POLLIN, 0}, {listenFd, POLLIN, 0}};   // a negative descriptor is skipped by poll
-        const int ready = ::poll(waiting, 2, 200);
-        if (ready < 0 && errno == EINTR) continue;
-        if (ready < 0) { link.message = "Interner Fehler beim Warten auf das Handy."; return link; }
-        if (waiting[1].revents & POLLIN) {
-            link.tcpFd = AcceptTcp(listenFd, 0, link.peer);
-            if (link.tcpFd >= 0) {
-                link.hasSentInfo = handshake.HasSentInfo();
-                logger.Write("INFO", "WLAN", "The phone opened the wireless connection from " + link.peer);
-                return link;
-            }
-        }
-        if (waiting[0].revents & (POLLIN | POLLHUP | POLLERR)) {
-            std::uint8_t buffer[1024];
-            const auto got = ::recv(rfcommFd, buffer, sizeof(buffer), 0);
-            if (got > 0) {
-                for (const auto& message : parser.Feed(buffer, static_cast<std::size_t>(got))) {
-                    if (!step(handshake.OnMessage(message))) { link.message = "Die Bluetooth-Verbindung zum Handy brach beim Senden ab."; return link; }
-                    if (handshake.IsFailed()) { link.message = handshake.Failure() + ". Ist das WLAN am Handy an?"; return link; }
-                }
-                if (handshake.HasSentInfo() && infoSentAt == std::chrono::steady_clock::time_point{}) infoSentAt = std::chrono::steady_clock::now();
-            } else if (got == 0 || (errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK)) {
-                link.hasSentInfo = handshake.HasSentInfo();
-                link.message = "Das Handy hat die Bluetooth-Verbindung beendet, bevor es im WLAN war.";
-                return link;
-            }
-        }
-        if (listenFd < 0 && infoSentAt != std::chrono::steady_clock::time_point{} && std::chrono::steady_clock::now() > infoSentAt + 5s) {
-            link.hasSentInfo = true;
-            link.message = "Die WLAN-Daten sind beim Handy angekommen.";
-            return link;
-        }
-    }
-    link.hasSentInfo = handshake.HasSentInfo();
-    link.message = isStopRequested ? "Abgebrochen." : "Zeitueberschreitung: Das Handy ist dem WLAN nicht beigetreten.";
-    return link;
+    const auto started = std::chrono::steady_clock::now();
+    auto starting = std::async(std::launch::async, [&] { return hotspot.Start(config, network); });
+    while (starting.wait_for(0ms) != std::future_status::ready) bluetooth.Pump(100ms);
+    auto error = starting.get();
+    if (error.empty())
+        logger.Write("INFO", "WLAN", "Hotspot ready after " +
+            std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count()) + " ms");
+    return error;
 }
 }
 
@@ -159,39 +97,44 @@ AutoConnectResult ConnectWirelessAndroidAuto(Logger& logger, std::atomic_bool& i
         if (callbacks.onStatus) callbacks.onStatus(text);
     };
     const auto settings = LoadWirelessSettings();
+    RemoveLeftoverHotspot(logger);
 
-    report("Starte den WLAN-Hotspot '" + settings.hotspot.ssid + "' (der WLAN-Chip wird dabei zum Hotspot: eine SSH-Verbindung ueber WLAN bricht ab, Ethernet bleibt).");
-    Hotspot hotspot(logger);
-    HotspotInfo network;
-    if (const auto error = hotspot.Start(settings.hotspot, network); !error.empty()) { result.message = error; return result; }
-
+    report("Schalte Bluetooth ein ...");
+    BluetoothService bluetooth(logger);
+    if (const auto error = bluetooth.Start(settings.bluetoothName); !error.empty()) { result.message = error; return result; }
     std::string listenError;
     Socket listener(ListenTcp(kWirelessPort, listenError));
     if (listener.fd < 0) { result.message = listenError; return result; }
+    report("Bereit: per Bluetooth sichtbar als '" + settings.bluetoothName + "'. Erstes Mal: am Handy in den Bluetooth-Einstellungen koppeln. "
+        "Das WLAN startet erst, wenn das Handy Android Auto aufbaut.");
 
-    BluetoothService bluetooth(logger);
-    if (const auto error = bluetooth.Start(settings.bluetoothName); !error.empty()) { result.message = error; return result; }
-    report("Bereit. Erstes Mal: am Handy in den Bluetooth-Einstellungen '" + settings.bluetoothName + "' koppeln. Danach verbindet sich das Handy von selbst.");
-
-    const WifiCredentials credentials{network.ssid, network.password, network.bssid, network.ipAddress, kWirelessPort};
+    Hotspot hotspot(logger);
     while (!isStopRequested) {
         Socket phone(bluetooth.WaitForPhone(500ms));
         if (phone.fd < 0) continue;
-        report("Handy per Bluetooth verbunden; uebergebe die WLAN-Daten ...");
+        report("Handy baut Android Auto auf; starte das WLAN '" + settings.hotspot.ssid + "' (einige Sekunden) ...");
+        HotspotInfo network;
+        if (const auto error = StartHotspot(hotspot, settings.hotspot, network, bluetooth, logger); !error.empty()) { result.message = error; return result; }
+        if (isStopRequested) break;
+
+        report("WLAN laeuft; das Handy bekommt die Zugangsdaten ueber Bluetooth ...");
+        const WifiCredentials credentials{network.ssid, network.password, network.bssid, network.ipAddress, kWirelessPort};
         auto link = EstablishWirelessLink(phone.fd, listener.fd, credentials, logger, isStopRequested, 60s);
         if (link.tcpFd < 0) {
+            hotspot.Stop();
             if (isStopRequested) break;
-            report(link.message + " Warte erneut auf das Handy.");
+            report(link.message + " WLAN wieder aus; warte erneut auf das Handy.");
             continue;
         }
         report("Handy im WLAN verbunden (" + link.peer + "); starte Android Auto.");
         // The Bluetooth link stays open until the session is over: the phone treats it as the car being connected.
         const auto session = RunAndroidAutoSession(std::make_shared<SocketTransport>(link.tcpFd), logger, isStopRequested, callbacks);
+        hotspot.Stop();
         result.hasVideo = session.hasVideo;
         result.isStoppedByUser = session.isStoppedByUser;
         result.message = session.message;
         if (session.hasVideo || session.isStoppedByUser) return result;
-        report("Die Sitzung endete ohne Bild (" + session.message + "). Warte erneut auf das Handy.");
+        report("Die Sitzung endete ohne Bild (" + session.message + "). WLAN wieder aus; warte erneut auf das Handy.");
     }
     result.isStoppedByUser = true;
     result.message = "Kabellose Verbindung beendet.";
@@ -208,7 +151,8 @@ int RunBluetoothTest(Logger& logger, std::chrono::seconds duration)
         return 3;
     }
     std::cout << "Bluetooth sichtbar als '" << settings.bluetoothName << "' fuer " << duration.count()
-              << " Sekunden. Am Handy in den Bluetooth-Einstellungen koppeln und Android Auto starten; Details in headunit.log.\n" << std::flush;
+              << " Sekunden. Am Handy in den Bluetooth-Einstellungen koppeln und Android Auto starten; Details in headunit.log.\n"
+              << "(Ohne WLAN: das Handy bekommt Platzhalter-Zugangsdaten und kann nicht beitreten. Der Test prueft nur Bluetooth.)\n" << std::flush;
     const WifiCredentials placeholder{settings.hotspot.ssid, settings.hotspot.password, "00:00:00:00:00:00", "10.42.0.1", kWirelessPort};
     const std::atomic_bool neverStopped{false};
     const auto end = std::chrono::steady_clock::now() + duration;
@@ -227,6 +171,7 @@ int RunBluetoothTest(Logger& logger, std::chrono::seconds duration)
 int RunHotspotTest(Logger& logger, std::chrono::seconds duration)
 {
     const auto settings = LoadWirelessSettings();
+    RemoveLeftoverHotspot(logger);
     Hotspot hotspot(logger);
     HotspotInfo network;
     if (const auto error = hotspot.Start(settings.hotspot, network); !error.empty()) {

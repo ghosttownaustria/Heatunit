@@ -20,6 +20,12 @@ constexpr std::uint16_t kWirelessPort = 5288;
 // The Bluetooth service the phone looks for on a car.
 constexpr const char* kAndroidAutoWirelessUuid = "4de17a00-52cb-11e6-bdf4-0800200c9a66";
 
+// The security mode as the phone reads it in the Wi-Fi details. Android numbers the modes as bit flags (WPA 4, WPA2 8,
+// both 12, enterprise +16); the imported enum WifiSecurityMode numbers them 0 to 9 instead, so its WPA2_PERSONAL (5) is
+// a value the phone does not know, and the phone then never joins the network. 8 is what the implementations that work
+// with real phones send (openauto's Bluetooth service, WirelessAndroidAutoDongle).
+constexpr int kWifiSecurityWpa2Personal = 8;
+
 // Message ids of aap_protobuf.aaw.MessageId.
 enum class WirelessMessageId : std::uint16_t {
     StartRequest = 1, InfoRequest = 2, InfoResponse = 3, VersionRequest = 4, VersionResponse = 5, ConnectionStatus = 6, StartResponse = 7,

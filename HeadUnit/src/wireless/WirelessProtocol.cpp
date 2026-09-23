@@ -12,7 +12,11 @@ namespace aaw = aap_protobuf::aaw;
 namespace {
 constexpr std::size_t kHeaderSize = 4;
 WirelessMessage Make(WirelessMessageId id, std::string payload) { return {static_cast<std::uint16_t>(id), std::move(payload)}; }
-std::string StatusText(int status) { return std::to_string(status); }
+std::string StatusText(aaw::Status status)
+{
+    const std::string name(aaw::Status_Name(status));
+    return std::to_string(static_cast<int>(status)) + (name.empty() ? std::string() : " " + name);
+}
 }
 
 std::vector<std::uint8_t> EncodeWirelessMessage(const WirelessMessage& message)
@@ -68,7 +72,8 @@ WirelessHandshakeStep WirelessHandshake::OnMessage(const WirelessMessage& messag
         response.set_ssid(m_credentials.ssid);
         response.set_password(m_credentials.password);
         response.set_bssid(m_credentials.bssid);
-        response.set_security_mode(wifi::WPA2_PERSONAL);
+        // Android's numbering, not the imported enum's (see kWifiSecurityWpa2Personal); there this value is named WPA2_ENTERPRISE.
+        response.set_security_mode(static_cast<wifi::WifiSecurityMode>(kWifiSecurityWpa2Personal));
         response.set_access_point_type(wifi::DYNAMIC);
         m_hasSentInfo = true;
         return {{Make(WirelessMessageId::InfoResponse, response.SerializeAsString())},
@@ -82,7 +87,8 @@ WirelessHandshakeStep WirelessHandshake::OnMessage(const WirelessMessage& messag
             m_failure = "The phone could not start the wireless connection (status " + StatusText(response.status()) + ")";
             return {{}, m_failure};
         }
-        return {{}, "The phone answered the start request (status " + StatusText(response.status()) + ")"};
+        return {{}, "The phone answered the start request (status " + StatusText(response.status()) +
+            (response.has_ip_address() ? ", " + response.ip_address() + ":" + std::to_string(response.port()) : std::string()) + ")"};
     }
     case WirelessMessageId::ConnectionStatus: {
         aaw::WifiConnectionStatus status;

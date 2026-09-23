@@ -86,7 +86,7 @@ if(HEADUNIT_BUILD_APP)
   if(HEADUNIT_WIRELESS_ENABLED)
     # Linux only: the Bluetooth service, the hotspot and the TCP transport of wireless Android Auto. The D-Bus objects
     # need moc, so this is the one target that runs it (the rest of the code base has no Q_OBJECT).
-    add_library(headunit_wireless src/wireless/WirelessProtocol.cpp src/wireless/SystemCommand.cpp src/wireless/Hotspot.cpp
+    add_library(headunit_wireless src/wireless/WirelessProtocol.cpp src/wireless/WirelessLink.cpp src/wireless/SystemCommand.cpp src/wireless/Hotspot.cpp
       src/wireless/SocketTransport.cpp src/wireless/BluetoothService.cpp src/wireless/WirelessConnect.cpp)
     set_target_properties(headunit_wireless PROPERTIES AUTOMOC ON)
     target_link_libraries(headunit_wireless PUBLIC headunit_usb headunit_aasdk Qt6::Core Qt6::DBus)
@@ -128,8 +128,8 @@ if(BUILD_TESTING)
     target_link_libraries(ProtocolTests PRIVATE headunit_aasdk headunit_video headunit_core headunit_libusb Threads::Threads)
     add_test(NAME ProtocolTests COMMAND ProtocolTests)
     if(HEADUNIT_WIRELESS_ENABLED)
-      # The parts of wireless Android Auto that need neither Qt nor a phone: message framing, the conversation, the socket transport.
-      target_sources(ProtocolTests PRIVATE tests/WirelessTests.cpp src/wireless/WirelessProtocol.cpp src/wireless/SocketTransport.cpp)
+      # The parts of wireless Android Auto that need neither Qt nor a phone: message framing, the conversation (against a simulated phone), the socket transport.
+      target_sources(ProtocolTests PRIVATE tests/WirelessTests.cpp src/wireless/WirelessProtocol.cpp src/wireless/WirelessLink.cpp src/wireless/SocketTransport.cpp)
       target_compile_definitions(ProtocolTests PRIVATE HEADUNIT_WIRELESS_TESTS)
     endif()
     if(WIN32)

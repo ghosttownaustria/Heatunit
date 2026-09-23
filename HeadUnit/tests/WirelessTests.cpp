@@ -1,15 +1,21 @@
 // Wireless Android Auto without a phone: the message framing and conversation of the Bluetooth link, and the
 // socket transport of the Wi-Fi link (over a socketpair). Linux only, like the code it tests.
+#include "logging/Logger.h"
 #include "wireless/SocketTransport.h"
+#include "wireless/WirelessLink.h"
 #include "wireless/WirelessProtocol.h"
 #include <aap_protobuf/aaw/Status.pb.h>
 #include <aap_protobuf/aaw/WifiConnectionStatus.pb.h>
 #include <aap_protobuf/aaw/WifiInfoResponse.pb.h>
 #include <aap_protobuf/aaw/WifiStartRequest.pb.h>
 #include <aap_protobuf/aaw/WifiStartResponse.pb.h>
+#include <arpa/inet.h>
 #include <boost/asio.hpp>
 #include <chrono>
+#include <deque>
+#include <filesystem>
 #include <functional>
+#include <netinet/in.h>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -76,7 +82,9 @@ void TestHandshake()
     aaw::WifiInfoResponse response;
     Require(response.ParseFromString(infoMessage->payload), "The info response could not be read back");
     Require(response.ssid() == "HEATUNIT-AA" && response.password() == "secret-password" && response.bssid() == "DC:A6:32:01:02:03", "The info response carries the network");
-    Require(response.security_mode() == aap_protobuf::service::wifiprojection::message::WPA2_PERSONAL, "The network is WPA2");
+    // Android's numbering: WPA2 personal is 8. The imported enum's WPA2_PERSONAL (5) is unknown to the phone.
+    Require(static_cast<int>(response.security_mode()) == kWifiSecurityWpa2Personal && kWifiSecurityWpa2Personal == 8, "The network must be announced as WPA2 in Android's numbering (8)");
+    Require(infoMessage->payload.find(std::string("\x20\x08", 2)) != std::string::npos, "Field 4 (security mode) must be the varint 8 on the wire");
     Require(handshake.HasSentInfo() && !handshake.IsFailed(), "State after the info response");
 
     aaw::WifiStartResponse good;
@@ -197,10 +205,152 @@ void TestStopWakesReader()
 }
 }
 
+// A phone at the other end of the "Bluetooth" socket (a socketpair): reads what the head unit says, answers like a phone.
+class FakePhone {
+public:
+    explicit FakePhone(int fd) : m_fd(fd) {}
+    WirelessMessage Read()
+    {
+        while (m_pending.empty()) {
+            std::uint8_t buffer[512];
+            const auto got = ::recv(m_fd, buffer, sizeof(buffer), 0);
+            if (got <= 0) throw std::runtime_error("the head unit closed the Bluetooth socket");
+            for (auto& message : m_parser.Feed(buffer, static_cast<std::size_t>(got))) m_pending.push_back(std::move(message));
+        }
+        auto message = std::move(m_pending.front());
+        m_pending.pop_front();
+        return message;
+    }
+    void Send(WirelessMessageId id, const std::string& payload = {})
+    {
+        const auto bytes = EncodeWirelessMessage({static_cast<std::uint16_t>(id), payload});
+        Require(::send(m_fd, bytes.data(), bytes.size(), MSG_NOSIGNAL) == static_cast<ssize_t>(bytes.size()), "the fake phone could not send");
+    }
+    // The usual start: the start request arrives, the phone asks for the network and gets it.
+    void AskForNetwork(std::uint16_t port)
+    {
+        const auto start = Read();
+        aaw::WifiStartRequest request;
+        Require(start.id == static_cast<std::uint16_t>(WirelessMessageId::StartRequest) && request.ParseFromString(start.payload), "expected the start request");
+        Require(request.ip_address() == "127.0.0.1" && request.port() == port, "the start request names the wrong address");
+        Send(WirelessMessageId::InfoRequest);
+        const auto info = Read();
+        aaw::WifiInfoResponse response;
+        Require(info.id == static_cast<std::uint16_t>(WirelessMessageId::InfoResponse) && response.ParseFromString(info.payload), "expected the Wi-Fi details");
+        Require(response.ssid() == "HEATUNIT-AA" && static_cast<int>(response.security_mode()) == 8, "the Wi-Fi details are wrong");
+    }
+private:
+    int m_fd;
+    WirelessFrameParser m_parser;
+    std::deque<WirelessMessage> m_pending;
+};
+
+std::uint16_t PortOf(int listenFd)
+{
+    sockaddr_in address{};
+    socklen_t length = sizeof(address);
+    Require(::getsockname(listenFd, reinterpret_cast<sockaddr*>(&address), &length) == 0, "getsockname failed");
+    return ntohs(address.sin_port);
+}
+
+int ConnectLocal(std::uint16_t port)
+{
+    const int fd = ::socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    sockaddr_in address{};
+    address.sin_family = AF_INET;
+    address.sin_port = htons(port);
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    if (fd >= 0 && ::connect(fd, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) == 0) return fd;
+    if (fd >= 0) ::close(fd);
+    return -1;
+}
+
+struct LinkRun {
+    WirelessLink link;
+    std::string phoneProblem;
+    std::chrono::milliseconds duration{};
+};
+
+// The head unit's side against a fake phone that runs `phone` on its own thread.
+LinkRun RunLink(const std::function<void(FakePhone&, int btFd, std::uint16_t port)>& phone)
+{
+    static Logger logger(std::filesystem::temp_directory_path() / "headunit-wireless-tests.log");
+    int bluetooth[2];
+    Require(::socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, bluetooth) == 0, "socketpair failed");
+    std::string error;
+    const int listener = ListenTcp(0, error);
+    Require(listener >= 0, "ListenTcp failed");
+    const auto port = PortOf(listener);
+    LinkRun run;
+    std::thread phoneThread([&] {
+        try { FakePhone fake(bluetooth[1]); phone(fake, bluetooth[1], port); }
+        catch (const std::exception& problem) { run.phoneProblem = problem.what(); }
+    });
+    const std::atomic_bool isStopRequested{false};
+    const auto begin = std::chrono::steady_clock::now();
+    run.link = EstablishWirelessLink(bluetooth[0], listener, {"HEATUNIT-AA", "secret-password", "dc:a6:32:01:02:03", "127.0.0.1", port},
+        logger, isStopRequested, std::chrono::seconds(5));
+    run.duration = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - begin);
+    ::shutdown(bluetooth[0], SHUT_RDWR);   // releases a fake phone that still waits
+    phoneThread.join();
+    if (run.link.tcpFd >= 0) ::close(run.link.tcpFd);
+    ::close(bluetooth[0]);
+    ::close(bluetooth[1]);
+    ::close(listener);
+    return run;
+}
+
+void TestLinkConnects()
+{
+    int phoneTcp = -1;
+    const auto run = RunLink([&](FakePhone& phone, int btFd, std::uint16_t port) {
+        phone.AskForNetwork(port);
+        aaw::WifiStartResponse started;
+        started.set_status(aaw::STATUS_SUCCESS);
+        phone.Send(WirelessMessageId::StartResponse, started.SerializeAsString());
+        // Some phones hang up Bluetooth once they know the network; the TCP connection still follows.
+        ::shutdown(btFd, SHUT_RDWR);
+        phoneTcp = ConnectLocal(port);
+        Require(phoneTcp >= 0, "the fake phone could not connect over TCP");
+    });
+    if (phoneTcp >= 0) ::close(phoneTcp);
+    Require(run.phoneProblem.empty(), ("Fake phone: " + run.phoneProblem).c_str());
+    Require(run.link.tcpFd >= 0 && run.link.hasSentInfo && run.link.peer == "127.0.0.1", ("The link was not established: " + run.link.message).c_str());
+}
+
+void TestLinkPhoneCannotJoin()
+{
+    const auto run = RunLink([](FakePhone& phone, int, std::uint16_t port) {
+        phone.AskForNetwork(port);
+        aaw::WifiConnectionStatus status;
+        status.set_status(aaw::STATUS_WIFI_INCORRECT_CREDENTIALS);
+        phone.Send(WirelessMessageId::ConnectionStatus, status.SerializeAsString());
+    });
+    Require(run.phoneProblem.empty(), ("Fake phone: " + run.phoneProblem).c_str());
+    Require(run.link.tcpFd < 0, "A phone that cannot join must not count as connected");
+    Require(run.link.message.find("-3") != std::string::npos, ("The failure must name the phone's status: " + run.link.message).c_str());
+    Require(run.duration < std::chrono::seconds(3), "A reported failure must end the wait at once");
+}
+
+void TestLinkPhoneHangsUpEarly()
+{
+    const auto run = RunLink([](FakePhone& phone, int btFd, std::uint16_t) {
+        phone.Read();   // the start request
+        ::shutdown(btFd, SHUT_RDWR);
+    });
+    Require(run.phoneProblem.empty(), ("Fake phone: " + run.phoneProblem).c_str());
+    Require(run.link.tcpFd < 0 && !run.link.hasSentInfo && !run.link.message.empty(), "A phone that hangs up before asking for the network is a failure");
+    Require(run.duration < std::chrono::seconds(3), "A hang-up before the Wi-Fi details must end the wait at once");
+}
+}
+
 void RunWirelessTests()
 {
     TestFraming();
     TestHandshake();
     TestSocketTransport();
     TestStopWakesReader();
+    TestLinkConnects();
+    TestLinkPhoneCannotJoin();
+    TestLinkPhoneHangsUpEarly();
 }

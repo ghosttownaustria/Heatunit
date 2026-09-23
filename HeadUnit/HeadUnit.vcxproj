@@ -84,6 +84,8 @@
     <None Include="src\wireless\SystemCommand.cpp" />
     <None Include="src\wireless\SystemCommand.h" />
     <None Include="src\wireless\WirelessConnect.cpp" />
+    <None Include="src\wireless\WirelessLink.cpp" />
+    <None Include="src\wireless\WirelessLink.h" />
     <None Include="src\wireless\WirelessConnect.h" />
     <None Include="src\wireless\WirelessProtocol.cpp" />
     <None Include="src\wireless\WirelessProtocol.h" />
