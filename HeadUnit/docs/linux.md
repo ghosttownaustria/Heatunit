@@ -4,6 +4,8 @@ Dieselben Quellen wie unter Windows: kein zweites Projekt. Was sich pro Plattfor
 kleinen Schnittstellen (USB-Suche, Treiber-Reparatur, Audioausgang) und wird in `CMakeLists.txt` ausgewaehlt.
 Siehe [Architektur](architecture.md#platform-layer).
 
+Kabellos (Bluetooth und eigenes WLAN, Raspberry Pi): [Kabelloses Android Auto](wireless.md).
+
 Neuer Rechner ohne alles: [Schritt-fuer-Schritt-Anleitung](linux-setup.md); Bauen und Starten in einem Schritt:
 `bash BuildAndRun.sh` im Wurzelordner des Repositorys (`--help` zeigt die Optionen).
 

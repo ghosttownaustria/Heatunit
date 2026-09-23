@@ -1,5 +1,8 @@
 #include "ui/MainWindow.h"
 #include "ui/CarWidgets.h"
+#ifdef HEADUNIT_WIRELESS
+#include "wireless/WirelessConnect.h"
+#endif
 #include <QApplication>
 #include <QComboBox>
 #include <QDir>
@@ -79,8 +82,21 @@ MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
     controls->addWidget(displayLabel);
     controls->addWidget(m_displayChoice);
     controls->addWidget(m_button, 1);
+#ifdef HEADUNIT_WIRELESS
+    m_wirelessButton = new QPushButton("Android Auto kabellos", central);
+    m_wirelessButton->setMinimumHeight(48);
+    m_wirelessButton->setFocusPolicy(Qt::NoFocus);
+    m_wirelessButton->setToolTip("Ohne Kabel: HeadUnit erzeugt ein WLAN und ist per Bluetooth als HEATUNIT sichtbar. "
+        "Das Handy muss einmal gekoppelt werden. Der WLAN-Chip wird dabei zum Hotspot.");
+    controls->addWidget(m_wirelessButton, 1);
+#endif
     left->addLayout(controls);
+#ifdef HEADUNIT_WIRELESS
+    m_step = new QLabel("USB: Handy per Kabel anschliessen, entsperren und auf Android Auto verbinden klicken. "
+        "Kabellos: auf Android Auto kabellos klicken und das Handy per Bluetooth mit HEATUNIT koppeln.", central);
+#else
     m_step = new QLabel("Handy per USB-Kabel anschliessen, entsperren und auf Android Auto verbinden klicken.", central);
+#endif
     m_step->setWordWrap(true);
     m_step->setTextFormat(Qt::PlainText);
     m_step->setTextInteractionFlags(Qt::TextSelectableByMouse);
@@ -119,6 +135,7 @@ MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
         ShowStep(Text(message));
     });
     connect(m_button, &QPushButton::clicked, this, &MainWindow::OnButton);
+    if (m_wirelessButton) connect(m_wirelessButton, &QPushButton::clicked, this, &MainWindow::StartWirelessConnect);
     auto* tickTimer = new QTimer(this);
     connect(tickTimer, &QTimer::timeout, this, &MainWindow::Tick);
     tickTimer->start(33);
@@ -260,6 +277,7 @@ void MainWindow::SetState(State state)
     m_state = state;
     m_button->setEnabled(state != State::Stopping);
     m_button->setText(state == State::Idle ? "Android Auto verbinden" : state == State::Connecting ? "Verbindung beenden" : "Beende ...");
+    if (m_wirelessButton) m_wirelessButton->setEnabled(state == State::Idle);
     // The phone learns the display size when the connection starts; afterwards it can no longer change.
     m_displayChoice->setEnabled(state == State::Idle);
 }
@@ -307,7 +325,14 @@ void MainWindow::Tick()
         else if (m_mode == TestMode::Keys) RunKeysTest();
     }
 }
-void MainWindow::StartConnect()
+void MainWindow::StartConnect() { BeginConnect(false); }
+void MainWindow::StartWirelessConnect()
+{
+#ifdef HEADUNIT_WIRELESS
+    BeginConnect(true);
+#endif
+}
+void MainWindow::BeginConnect(bool isWireless)
 {
     if (m_state != State::Idle) return;
     m_isStopRequested = false;
@@ -319,13 +344,18 @@ void MainWindow::StartConnect()
     m_history->clear();
     SetState(State::Connecting);
     m_logger.Write("INFO", "UI", "Display size for this connection: " + DisplayText(m_display));
-    m_watcher.setFuture(QtConcurrent::run([this, display = m_display] {
+    m_watcher.setFuture(QtConcurrent::run([this, display = m_display, isWireless] {
         ProjectionCallbacks callbacks;
         callbacks.display = display;
         callbacks.onStatus = [this](const std::string& status) { QMetaObject::invokeMethod(this, [this, status] { ShowStep(Text(status)); }, Qt::QueuedConnection); };
         callbacks.onFrame = [this](VideoFrame frame) { std::lock_guard lock(m_frameMutex); m_latestFrame = std::move(frame); };
         callbacks.input = m_input;
         callbacks.openAudio = m_audio->Opener();
+#ifdef HEADUNIT_WIRELESS
+        if (isWireless) return ConnectWirelessAndroidAuto(m_logger, m_isStopRequested, std::move(callbacks));
+#else
+        (void)isWireless;
+#endif
         return ConnectPhoneAutomatically(m_backend, m_logger, m_isStopRequested, std::move(callbacks));
     }));
 }

@@ -39,6 +39,8 @@ public:
     // Selects the display size for the next connection (ignored while a connection is running or for a
     // size that is not offered). Not remembered: only a choice made in the window is.
     void SetDisplay(const DisplayConfig& display);
+    // Starts "Android Auto kabellos" (Linux): Wi-Fi hotspot plus Bluetooth, no cable. Does nothing where that is not built.
+    void StartWirelessConnect();
 protected:
     void closeEvent(QCloseEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
@@ -48,6 +50,7 @@ private:
     void SetState(State state);
     void OnButton();
     void StartConnect();
+    void BeginConnect(bool isWireless);
     void RequestStop();
     void FinishConnect(const AutoConnectResult& result);
     void ShowStep(const QString& text);
@@ -77,6 +80,7 @@ private:
     QLabel* m_step{};
     QComboBox* m_displayChoice{};
     QPushButton* m_button{};
+    QPushButton* m_wirelessButton{};   // only where wireless Android Auto is built
     QPlainTextEdit* m_history{};
     std::atomic_bool m_isStopRequested{};
     std::mutex m_frameMutex;

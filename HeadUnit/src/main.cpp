@@ -6,7 +6,13 @@
 #include "androidauto/DisplayConfig.h"
 #include "audio/AudioEngine.h"
 #include "ui/MainWindow.h"
+#ifdef HEADUNIT_WIRELESS
+#include "platform/Environment.h"
+#include "wireless/WirelessConnect.h"
+#include <QCoreApplication>
+#endif
 #include <QApplication>
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <iostream>
@@ -51,7 +57,7 @@ int RunToneTest(headunit::Logger& logger)
 
 int main(int argc, char* argv[])
 {
-    bool isScanOnly = false, isSmokeTest = false, isUsbProbe = false, isStartAccessory = false, isProjectionTest = false, isRepairDriver = false, isRecoverPhone = false, isInputTest = false, isAudioTest = false, isConsoleTest = false, isKeysTest = false, isToneTest = false;
+    bool isScanOnly = false, isSmokeTest = false, isUsbProbe = false, isStartAccessory = false, isProjectionTest = false, isRepairDriver = false, isRecoverPhone = false, isInputTest = false, isAudioTest = false, isConsoleTest = false, isKeysTest = false, isToneTest = false, isBluetoothTest = false, isHotspotTest = false, isWireless = false;
     std::optional<headunit::DisplayConfig> display;
     for (int index = 1; index < argc; ++index) {
         const std::string_view argument(argv[index]);
@@ -77,8 +83,19 @@ int main(int argc, char* argv[])
         else if (argument == "--test-console") isConsoleTest = true;
         else if (argument == "--test-keys") isKeysTest = true;
         else if (argument == "--test-tone") isToneTest = true;
+#ifdef HEADUNIT_WIRELESS
+        else if (argument == "--test-bluetooth") isBluetoothTest = true;
+        else if (argument == "--test-hotspot") isHotspotTest = true;
+        else if (argument == "--wireless") isWireless = true;
+#endif
         else if (argument == "--help") {
             std::cout << "HeadUnit [--scan | --smoke-test | --probe-usb | --start-accessory | --test-projection | --test-input | --test-audio | --test-console | --test-keys | --test-tone | --repair-driver | --recover-phone] [--display 800x480|1280x720|1600x600|1920x1080]\n"
+#ifdef HEADUNIT_WIRELESS
+                         "HeadUnit [--wireless | --test-bluetooth | --test-hotspot]\n"
+                         "--wireless starts wireless Android Auto right away (Wi-Fi hotspot + Bluetooth, docs/wireless.md)\n"
+                         "--test-bluetooth makes the computer visible as HEATUNIT and checks that a phone pairs and asks for the Wi-Fi details (HEADUNIT_TEST_SECONDS, default 120)\n"
+                         "--test-hotspot starts the Wi-Fi hotspot for a while and prints how to join it (HEADUNIT_TEST_SECONDS, default 60)\n"
+#endif
                          "Logs: ./headunit.log (includes USB serial numbers); in the user's state directory when the working directory is not writable\n"
                          "--display picks the display size for this run (the window's own choice is remembered, this one is not)\n"
                          "--test-tone plays a short quiet tone through the audio output, which needs no phone\n"
@@ -87,7 +104,7 @@ int main(int argc, char* argv[])
             return 0;
         } else { std::cerr << "Unknown option: " << argument << '\n'; return 1; }
     }
-    if (static_cast<int>(isScanOnly) + static_cast<int>(isSmokeTest) + static_cast<int>(isUsbProbe) + static_cast<int>(isStartAccessory) + static_cast<int>(isProjectionTest) + static_cast<int>(isRepairDriver) + static_cast<int>(isRecoverPhone) + static_cast<int>(isInputTest) + static_cast<int>(isAudioTest) + static_cast<int>(isConsoleTest) + static_cast<int>(isKeysTest) + static_cast<int>(isToneTest) > 1) { std::cerr << "Choose one run mode\n"; return 1; }
+    if (static_cast<int>(isScanOnly) + static_cast<int>(isSmokeTest) + static_cast<int>(isUsbProbe) + static_cast<int>(isStartAccessory) + static_cast<int>(isProjectionTest) + static_cast<int>(isRepairDriver) + static_cast<int>(isRecoverPhone) + static_cast<int>(isInputTest) + static_cast<int>(isAudioTest) + static_cast<int>(isConsoleTest) + static_cast<int>(isKeysTest) + static_cast<int>(isToneTest) + static_cast<int>(isBluetoothTest) + static_cast<int>(isHotspotTest) + static_cast<int>(isWireless) > 1) { std::cerr << "Choose one run mode\n"; return 1; }
     try {
         if (isRepairDriver || isRecoverPhone) {
             // On Windows this runs elevated in its own process, so it keeps a separate log.
@@ -102,6 +119,17 @@ int main(int argc, char* argv[])
         headunit::Logger logger(headunit::DefaultLogPath("headunit.log"));
         logger.Write("INFO", "APP", "HeadUnit 0.2.0 started; USB Android Auto projection; log includes serial numbers");
         if (isToneTest) return RunToneTest(logger);
+#ifdef HEADUNIT_WIRELESS
+        if (isBluetoothTest || isHotspotTest) {
+            // D-Bus (Bluetooth) delivers BlueZ's calls as Qt events, so the tests need an application object, but no window.
+            QCoreApplication core(argc, argv);
+            int seconds = isBluetoothTest ? 120 : 60;
+            if (const auto text = headunit::GetEnv("HEADUNIT_TEST_SECONDS")) { try { seconds = std::max(5, std::stoi(*text)); } catch (const std::exception&) {} }
+            return isBluetoothTest ? headunit::RunBluetoothTest(logger, std::chrono::seconds(seconds)) : headunit::RunHotspotTest(logger, std::chrono::seconds(seconds));
+        }
+#else
+        (void)isBluetoothTest; (void)isHotspotTest; (void)isWireless;
+#endif
         const auto backendOwner = headunit::CreateUsbBackend(logger);
         headunit::IUsbBackend& backend = *backendOwner;
         if (isScanOnly) return backend.EnumerateDevices().errors.empty() ? 0 : 2;
@@ -123,6 +151,7 @@ int main(int argc, char* argv[])
         headunit::MainWindow window(backend, logger, isSmokeTest ? Mode::Smoke : isProjectionTest ? Mode::Projection : isInputTest ? Mode::Input : isAudioTest ? Mode::Audio : isConsoleTest ? Mode::Console : isKeysTest ? Mode::Keys : Mode::None);
         if (display) window.SetDisplay(*display);
         window.show();
+        if (isWireless) window.StartWirelessConnect();
         logger.Write("INFO", "UI", "Qt " QT_VERSION_STR " window initialized");
         const auto result = application.exec();
         logger.Write("INFO", "APP", "Event loop stopped");

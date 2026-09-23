@@ -106,6 +106,17 @@ directory when writable, otherwise the user's state directory). Raspberry Pi gra
 remain separate decoder/renderer decisions; FFmpeg's software H.264 decoder is used everywhere. The core builds
 without Qt or any library using `-DHEADUNIT_BUILD_APP=OFF`.
 
+Wireless Android Auto (Linux only, `src/wireless/`, built by the `headunit_wireless` target when Qt6 DBus is found;
+[wireless.md](wireless.md)) adds a second `ITransport` and a connection flow, and leaves the session untouched:
+`ConnectWirelessAndroidAuto` starts a NetworkManager hotspot (`Hotspot`, `nmcli` without a shell), makes the computer
+visible over Bluetooth and registers the Android Auto Wireless service with BlueZ (`BluetoothService`, QtDBus), hands the
+phone the Wi-Fi details over the RFCOMM link (`WirelessHandshake`: pure message logic, unit-tested), accepts the phone's
+TCP connection on port 5288 and runs `RunAndroidAutoSession` on a `SocketTransport` (the TCP twin of
+`ProjectionTransport`: one reader, one writer, `stop()` rejects with OPERATION_ABORTED). It runs on the same worker
+thread as the USB flow; QtDBus needs that thread to run Qt events, which `BluetoothService::WaitForPhone` does. Only
+this target uses moc (`AUTOMOC`), and `HEADUNIT_WIRELESS` is defined only where it is built, so the Windows build and
+`MainWindow` without the wireless button are unchanged.
+
 Input and audio: the window owns a `ProjectionInput` (GUI thread -> protocol thread) and an
 `AudioState` plus an `IAudioEngine`. `ProjectionCallbacks` hands them to the session, which attaches
 to the input bus while it runs and turns `InputEvent`s into `InputReport` messages on its strand

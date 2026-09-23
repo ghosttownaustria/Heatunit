@@ -138,6 +138,12 @@ bash BuildAndRun.sh --pull
 
 `--reset` verwirft dabei lokale Aenderungen (`git reset --hard`) und holt danach den neuesten Stand.
 
+## 11. Kabellos (optional, Raspberry Pi)
+
+Bluetooth plus eigenes WLAN statt USB-Kabel: [Kabelloses Android Auto](wireless.md). Kurz: Netzwerkkabel anstecken (der
+WLAN-Chip wird zum Hotspot, SSH ueber WLAN bricht ab), WLAN-Land setzen (`sudo raspi-config`), dann nacheinander
+`./HeadUnit --test-hotspot`, `./HeadUnit --test-bluetooth` und `./HeadUnit --wireless`.
+
 ## Kurzfassung
 
 ```sh

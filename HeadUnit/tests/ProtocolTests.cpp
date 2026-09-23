@@ -18,7 +18,7 @@ void Check(bool value, const char* message) { if (!value) throw std::runtime_err
 using Data = aasdk::common::Data;
 Data ReadBio(BIO* bio) {
     Data data(BIO_ctrl_pending(bio));
-    if (!data.empty()) Check(BIO_read(bio, data.data(), static_cast<int>(data.size())) == data.size(), "BIO read failed");
+    if (!data.empty()) Check(BIO_read(bio, data.data(), static_cast<int>(data.size())) == static_cast<int>(data.size()), "BIO read failed");
     return data;
 }
 void TestTls(int version) {
@@ -52,7 +52,7 @@ void TestTls(int version) {
     for (int step = 0; step < 20 && !(isClientReady && isServerReady); ++step) {
         isClientReady = client.doHandshake();
         auto request = client.readHandshakeBuffer();
-        if (!request.empty()) Check(BIO_write(input, request.data(), static_cast<int>(request.size())) == request.size(), "Client handshake forwarding failed");
+        if (!request.empty()) Check(BIO_write(input, request.data(), static_cast<int>(request.size())) == static_cast<int>(request.size()), "Client handshake forwarding failed");
         const auto result = SSL_do_handshake(server.get());
         const auto error = SSL_get_error(server.get(), result);
         Check(error == SSL_ERROR_NONE || error == SSL_ERROR_WANT_READ, "Server handshake failed");
@@ -71,7 +71,7 @@ void TestTls(int version) {
         Check(decoded == plaintext, "TLS plaintext mismatch (cipher overhead/record split)");
         Data outgoing;
         client.encrypt(outgoing, aasdk::common::DataConstBuffer(plaintext));
-        Check(BIO_write(input, outgoing.data(), static_cast<int>(outgoing.size())) == outgoing.size(), "Encrypted response forwarding failed");
+        Check(BIO_write(input, outgoing.data(), static_cast<int>(outgoing.size())) == static_cast<int>(outgoing.size()), "Encrypted response forwarding failed");
         Data received(size);
         int offset = 0;
         while (offset < size) {
@@ -141,6 +141,9 @@ void TestTransportStop() {
 }
 }
 void RunInputAudioTests();
+#ifdef HEADUNIT_WIRELESS_TESTS
+void RunWirelessTests();
+#endif
 int main() {
     try {
         TestTls(TLS1_2_VERSION);
@@ -153,6 +156,9 @@ int main() {
         TestStopWhileWaitingForPhone();
         TestTransportStop();
         RunInputAudioTests();
+#ifdef HEADUNIT_WIRELESS_TESTS
+        RunWirelessTests();
+#endif
         std::cout << "TLS 1.2/1.3 variable record sizes, session cancellation and transport shutdown passed\n";
         return 0;
     } catch (const std::exception& error) { std::cerr << error.what() << '\n'; return 1; }

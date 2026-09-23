@@ -6,6 +6,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 option(HEADUNIT_BUILD_APP "Build the Qt application (needs Qt 6, the protocol dependencies, libusb and FFmpeg)" ON)
 option(HEADUNIT_INSTALL_UDEV_RULES "Linux: install the udev rule for phone access with the program (for packagers; users run scripts/install-udev-rules.sh)" OFF)
+option(HEADUNIT_WIRELESS "Linux: wireless Android Auto (Bluetooth and a Wi-Fi hotspot); needs Qt 6 DBus to build, BlueZ and NetworkManager to run" ON)
 set(HEADUNIT_AUDIO_BACKEND "auto" CACHE STRING "Audio output: auto (WASAPI on Windows, miniaudio elsewhere), wasapi or miniaudio")
 set_property(CACHE HEADUNIT_AUDIO_BACKEND PROPERTY STRINGS auto wasapi miniaudio)
 include(CTest)
@@ -34,6 +35,16 @@ if(HEADUNIT_BUILD_APP)
 
   find_package(Threads REQUIRED)
   find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Concurrent)
+  # Wireless Android Auto talks to BlueZ over D-Bus (QtDBus is part of qt6-base-dev) and drives NetworkManager.
+  set(HEADUNIT_WIRELESS_ENABLED OFF)
+  if(HEADUNIT_WIRELESS AND NOT WIN32)
+    find_package(Qt6 6.4 QUIET COMPONENTS DBus)
+    if(Qt6DBus_FOUND)
+      set(HEADUNIT_WIRELESS_ENABLED ON)
+    else()
+      message(WARNING "Qt6 DBus not found: building without wireless Android Auto (HEADUNIT_WIRELESS=OFF hides this warning)")
+    endif()
+  endif()
   include(cmake/Protocol.cmake)
   include(cmake/Libusb.cmake)
 
@@ -72,8 +83,21 @@ if(HEADUNIT_BUILD_APP)
     set_source_files_properties(src/audio/MiniaudioImpl.cpp PROPERTIES COMPILE_OPTIONS "$<IF:$<CXX_COMPILER_ID:MSVC>,/w,-w>")
   endif()
 
+  if(HEADUNIT_WIRELESS_ENABLED)
+    # Linux only: the Bluetooth service, the hotspot and the TCP transport of wireless Android Auto. The D-Bus objects
+    # need moc, so this is the one target that runs it (the rest of the code base has no Q_OBJECT).
+    add_library(headunit_wireless src/wireless/WirelessProtocol.cpp src/wireless/SystemCommand.cpp src/wireless/Hotspot.cpp
+      src/wireless/SocketTransport.cpp src/wireless/BluetoothService.cpp src/wireless/WirelessConnect.cpp)
+    set_target_properties(headunit_wireless PROPERTIES AUTOMOC ON)
+    target_link_libraries(headunit_wireless PUBLIC headunit_usb headunit_aasdk Qt6::Core Qt6::DBus)
+    target_compile_definitions(headunit_wireless PUBLIC HEADUNIT_WIRELESS)
+  endif()
+
   add_executable(HeadUnit src/main.cpp src/ui/MainWindow.cpp src/ui/CarWidgets.cpp)
   target_link_libraries(HeadUnit PRIVATE headunit_usb Qt6::Widgets Qt6::Concurrent)
+  if(HEADUNIT_WIRELESS_ENABLED)
+    target_link_libraries(HeadUnit PRIVATE headunit_wireless)
+  endif()
 
   if(WIN32)
     add_custom_command(TARGET HeadUnit POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -103,6 +127,11 @@ if(BUILD_TESTING)
     add_executable(ProtocolTests tests/ProtocolTests.cpp tests/InputAudioTests.cpp src/androidauto/AndroidAutoSession.cpp src/androidauto/InputReports.cpp src/usb/ProjectionTransport.cpp)
     target_link_libraries(ProtocolTests PRIVATE headunit_aasdk headunit_video headunit_core headunit_libusb Threads::Threads)
     add_test(NAME ProtocolTests COMMAND ProtocolTests)
+    if(HEADUNIT_WIRELESS_ENABLED)
+      # The parts of wireless Android Auto that need neither Qt nor a phone: message framing, the conversation, the socket transport.
+      target_sources(ProtocolTests PRIVATE tests/WirelessTests.cpp src/wireless/WirelessProtocol.cpp src/wireless/SocketTransport.cpp)
+      target_compile_definitions(ProtocolTests PRIVATE HEADUNIT_WIRELESS_TESTS)
+    endif()
     if(WIN32)
       add_custom_command(TARGET ProtocolTests POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${HEADUNIT_DEPS}/$<IF:$<CONFIG:Debug>,debug/bin,bin>" "$<TARGET_FILE_DIR:ProtocolTests>")
