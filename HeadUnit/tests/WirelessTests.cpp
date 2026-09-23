@@ -203,7 +203,6 @@ void TestStopWakesReader()
     Require(std::chrono::steady_clock::now() - begin < std::chrono::seconds(3), "stop() took too long to reach a waiting read");
     ::close(ends[1]);
 }
-}
 
 // A phone at the other end of the "Bluetooth" socket (a socketpair): reads what the head unit says, answers like a phone.
 class FakePhone {
