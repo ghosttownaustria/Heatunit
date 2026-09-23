@@ -178,7 +178,16 @@ cmake --preset "$PRESET" || fail "CMake-Konfiguration fehlgeschlagen (fehlt ein 
 info "Baue ($PRESET)..."
 build_args=(--build --preset "$PRESET")
 [ -n "$JOBS" ] && build_args+=(--parallel "$JOBS")
-cmake "${build_args[@]}" || fail "Build fehlgeschlagen."
+BUILD_LOG="$BUILD_DIR/build.log"
+if ! cmake "${build_args[@]}" 2>&1 | tee "$BUILD_LOG"; then
+  # Ninja baut parallel: die letzte Zeile im Terminal ist meist nicht die Fehlerursache.
+  printf '\n\033[31m===== Erster Fehler =====\033[0m\n' >&2
+  grep -m1 -A40 -E '^FAILED:' "$BUILD_LOG" >&2 || tail -n 40 "$BUILD_LOG" >&2
+  if grep -qiE 'Killed|internal compiler error|cannot allocate memory|out of memory' "$BUILD_LOG"; then
+    warn "Sieht nach Speichermangel aus: mit weniger parallelen Prozessen neu versuchen, z.B.  bash BuildAndRun.sh -j 1"
+  fi
+  fail "Build fehlgeschlagen. Vollstaendiges Log: $BUILD_LOG"
+fi
 ok "Build erfolgreich: $BUILD_DIR"
 
 # ---------------------------------------------------------------- Tests
