@@ -8,6 +8,7 @@
 #include <QUrl>
 #include <algorithm>
 #include <iterator>
+#include <utility>
 
 namespace headunit {
 namespace {

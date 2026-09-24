@@ -1,8 +1,11 @@
 #include "media/AudioPlayer.h"
 #include "media/StreamText.h"
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <functional>
+#include <span>
+#include <utility>
 #include <vector>
 extern "C" {
 #include <libavcodec/avcodec.h>
