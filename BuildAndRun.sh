@@ -4,6 +4,8 @@
 set -Eeuo pipefail
 
 REPO_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# Fuer den Neustart nach "--pull" (siehe unten).
+ORIGINAL_ARGS=("$@")
 PROJECT_DIR="$REPO_DIR/HeadUnit"
 
 # Debian, Ubuntu, Raspberry Pi OS: dieselbe Liste wie in HeadUnit/docs/linux.md und .github/workflows/build.yml.
@@ -108,8 +110,24 @@ if [ "$DO_PULL" = "true" ]; then
     git reset --hard
   fi
   info "Neueste Aenderungen holen (git pull --ff-only)..."
+  before="$(git rev-parse HEAD)"
   git pull --ff-only || fail "git pull fehlgeschlagen."
   ok "Git ist aktuell."
+  # Bash hat dieses Skript schon vor dem Pull gelesen: Paketliste und Ablauf waeren noch die alten (z. B. fehlten dann
+  # neu dazugekommene Pakete in der Pruefung). Darum startet sich das Skript im neuen Stand noch einmal, ohne --pull.
+  if [ "$(git rev-parse HEAD)" != "$before" ]; then
+    info "Neuer Stand geholt: starte BuildAndRun.sh im neuen Stand neu..."
+    rerun=()
+    passthrough="false"
+    for arg in ${ORIGINAL_ARGS[@]+"${ORIGINAL_ARGS[@]}"}; do
+      if [ "$passthrough" = "false" ]; then
+        [ "$arg" = "--" ] && passthrough="true"
+        [ "$arg" = "--pull" ] || [ "$arg" = "--reset" ] && continue
+      fi
+      rerun+=("$arg")
+    done
+    exec bash "$REPO_DIR/BuildAndRun.sh" ${rerun[@]+"${rerun[@]}"}
+  fi
 fi
 
 # ---------------------------------------------------------------- Pakete
