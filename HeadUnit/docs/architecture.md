@@ -111,14 +111,15 @@ without Qt or any library using `-DHEADUNIT_BUILD_APP=OFF`.
 
 Wireless Android Auto (Linux only, `src/wireless/`, built by the `headunit_wireless` target when Qt6 DBus is found;
 [wireless.md](wireless.md)) adds a second `ITransport` and a connection flow, and leaves the session untouched:
-`ConnectWirelessAndroidAuto` switches Bluetooth on (rfkill unblock, adapter power), makes the computer visible and
-registers the Android Auto Wireless service with BlueZ (`BluetoothService`, QtDBus). Only when a phone opens that service
-does it start the NetworkManager hotspot (`Hotspot`, `nmcli` without a shell, on its own thread while Bluetooth keeps
-being answered), then `EstablishWirelessLink` hands the phone the Wi-Fi details over the RFCOMM socket
+`ConnectWirelessAndroidAuto` first starts the NetworkManager hotspot (`Hotspot`, `nmcli` without a shell), because the
+phone expects an answer as soon as it opens the service. It then switches Bluetooth on (rfkill unblock, adapter power),
+makes the computer visible, registers the Android Auto Wireless service with BlueZ (`BluetoothService`, QtDBus) and
+(re)connects the phones paired before (`ConnectPairedPhones`: a phone PipeWire connected before the service existed is
+disconnected first). When a phone opens the service, `EstablishWirelessLink` hands it the Wi-Fi details over the RFCOMM socket
 (`WirelessHandshake`: pure message logic; both Qt-free and tested against a simulated phone) and accepts the phone's TCP
 connection on port 5288, and `RunAndroidAutoSession` runs on a `SocketTransport` (the TCP twin of
-`ProjectionTransport`: one reader, one writer, `stop()` rejects with OPERATION_ABORTED). The hotspot goes down after
-every attempt. It runs on the same worker thread as the USB flow; QtDBus needs that thread to run Qt events, which
+`ProjectionTransport`: one reader, one writer, `stop()` rejects with OPERATION_ABORTED). The hotspot stays up for the
+whole wireless mode. It runs on the same worker thread as the USB flow; QtDBus needs that thread to run Qt events, which
 `BluetoothService::WaitForPhone`/`Pump` do. Only
 this target uses moc (`AUTOMOC`), and `HEADUNIT_WIRELESS` is defined only where it is built, so the Windows build and
 `MainWindow` without the wireless button are unchanged.

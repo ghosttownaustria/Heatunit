@@ -21,11 +21,11 @@ struct WirelessSettings {
 };
 WirelessSettings LoadWirelessSettings();
 
-// "Android Auto kabellos": switches Bluetooth on and becomes visible, waits for the paired phone to open the Android
-// Auto service, only then starts the hotspot, hands the phone the Wi-Fi details, and runs the Android Auto session over
-// the TCP connection the phone opens. The hotspot goes down again after every attempt, so it is only on the air while
-// a phone connects. Returns when a session that showed video has ended, the user stopped it, or something failed for
-// good. Runs on a worker thread that can run Qt events (the D-Bus calls of Bluetooth arrive there).
+// "Android Auto kabellos": starts the hotspot, then switches Bluetooth on and becomes visible, (re)connects the phones
+// paired before, waits for a phone to open the Android Auto service, hands it the Wi-Fi details at once, and runs the
+// Android Auto session over the TCP connection the phone opens. The hotspot stays up until this returns: when a session
+// that showed video has ended, the user stopped it, or something failed for good. Runs on a worker thread that can run
+// Qt events (the D-Bus calls of Bluetooth arrive there).
 AutoConnectResult ConnectWirelessAndroidAuto(Logger& logger, std::atomic_bool& isStopRequested, ProjectionCallbacks callbacks);
 
 // Only the Bluetooth part, for finding out whether a phone pairs and connects: visible under the Bluetooth name,

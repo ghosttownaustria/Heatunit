@@ -22,6 +22,12 @@ public:
     // Empty on success, otherwise what went wrong and what to do about it (German, for the window).
     std::string Start(const std::string& name);
     void Stop();
+    // Asks the phones paired before to connect, as a car does when it starts. A phone that is connected already (PipeWire
+    // connects calls and audio by itself, also while HeadUnit is not in wireless mode) is disconnected first: Android
+    // Auto looks for its service when the connection starts, so a phone connected before the service existed may not
+    // look again while that connection lasts. Only devices BlueZ shows as phones. Call it after Start(), once the head
+    // unit is ready for the phone.
+    void ConnectPairedPhones();
     // Waits up to `timeout` for a phone that opened the Android Auto Wireless service. Returns its connected
     // RFCOMM socket, which the caller owns and closes, or -1.
     int WaitForPhone(std::chrono::milliseconds timeout);

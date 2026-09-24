@@ -163,12 +163,18 @@ bool IsPowered(QDBusConnection& bus, const QString& adapter)
     return value.toBool();
 }
 
-// What BlueZ knows: whether it runs at all, its first adapter, and the phones paired so far (for the log).
+struct PairedDevice {
+    QString path;
+    std::string name;
+    bool isConnected{};
+    bool isPhone{};   // BlueZ's icon for the device class "phone"
+};
+// What BlueZ knows: whether it runs at all, its first adapter, and the devices paired so far.
 struct BluezState {
     bool isRunning{};
     std::string error;
     QString adapterPath;
-    std::vector<std::string> pairedDevices;
+    std::vector<PairedDevice> paired;
 };
 BluezState ReadBluez(QDBusConnection& bus)
 {
@@ -192,8 +198,8 @@ BluezState ReadBluez(QDBusConnection& bus)
             objects.endMapEntry();
             if (interfaceName == QLatin1String(kAdapterInterface)) adapters.push_back(path.path());
             else if (interfaceName == QLatin1String("org.bluez.Device1") && properties.value(QStringLiteral("Paired")).toBool())
-                state.pairedDevices.push_back(Text(properties.value(QStringLiteral("Alias")).toString()) +
-                    (properties.value(QStringLiteral("Connected")).toBool() ? " (connected)" : ""));
+                state.paired.push_back({path.path(), Text(properties.value(QStringLiteral("Alias")).toString()),
+                    properties.value(QStringLiteral("Connected")).toBool(), properties.value(QStringLiteral("Icon")).toString() == QLatin1String("phone")});
         }
         objects.endMap();
         objects.endMapEntry();
@@ -299,7 +305,7 @@ std::string BluetoothService::Start(const std::string& name)
     if (bluez.adapterPath.isEmpty()) return "Kein Bluetooth-Adapter gefunden. Pruefen mit: bluetoothctl list und rfkill list";
     const QString adapter = m_impl->adapterPath = bluez.adapterPath;
     std::string paired;
-    for (const auto& device : bluez.pairedDevices) paired += (paired.empty() ? "" : ", ") + device;
+    for (const auto& device : bluez.paired) paired += (paired.empty() ? "" : ", ") + device.name + (device.isConnected ? " (connected)" : "");
     shared.Log("INFO", "Adapter " + Text(adapter) + "; paired devices: " + (paired.empty() ? "none" : paired));
 
     if (const auto error = PowerOn(bus, adapter, shared); !error.empty()) return error;
@@ -363,6 +369,31 @@ void BluetoothService::Stop()
     impl.shared.phones.clear();
     if (impl.isRunning) impl.shared.Log("INFO", "Bluetooth service stopped");
     impl.isRunning = false;
+}
+
+void BluetoothService::ConnectPairedPhones()
+{
+    if (!m_impl->isRunning) return;
+    auto bus = QDBusConnection::systemBus();
+    const auto& shared = m_impl->shared;
+    const auto paired = ReadBluez(bus).paired;
+    bool isAnyDisconnected = false;
+    for (const auto& device : paired) {
+        if (!device.isPhone || !device.isConnected) continue;
+        shared.Log("INFO", "Phone '" + device.name + "' was connected before the Android Auto service existed; reconnecting it");
+        if (const auto error = Call(bus, device.path, "org.bluez.Device1", "Disconnect", {}); !error.empty())
+            shared.Log("WARN", "Disconnecting '" + device.name + "' failed: " + error);
+        isAnyDisconnected = true;
+    }
+    // The old link needs a moment to go down before a new one can start; BlueZ is answered meanwhile.
+    if (isAnyDisconnected) Pump(2s);
+    for (const auto& device : paired) {
+        if (!device.isPhone) continue;
+        shared.Log("INFO", "Asking the paired phone '" + device.name + "' to connect");
+        // Takes seconds, or fails when the phone is out of reach, so the answer is not awaited: the log shows
+        // "Connected = true" when it worked, and the phone then opens the Android Auto service by itself.
+        bus.send(QDBusMessage::createMethodCall(QLatin1String(kService), device.path, QStringLiteral("org.bluez.Device1"), QStringLiteral("Connect")));
+    }
 }
 
 void BluetoothService::Pump(std::chrono::milliseconds duration)

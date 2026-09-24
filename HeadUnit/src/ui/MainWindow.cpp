@@ -124,8 +124,8 @@ MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
     m_wirelessButton = new QPushButton("Android Auto kabellos", central);
     m_wirelessButton->setMinimumHeight(48);
     m_wirelessButton->setFocusPolicy(Qt::NoFocus);
-    m_wirelessButton->setToolTip("Ohne Kabel: HeadUnit schaltet Bluetooth ein und ist als HEATUNIT sichtbar; das Handy wird einmal gekoppelt. "
-        "Das WLAN startet erst, wenn das Handy Android Auto aufbaut, und geht danach wieder aus.");
+    m_wirelessButton->setToolTip("Ohne Kabel: HeadUnit startet ein eigenes WLAN, schaltet Bluetooth ein und ist als HEATUNIT sichtbar; "
+        "das Handy wird einmal gekoppelt. Das WLAN laeuft, bis die kabellose Verbindung endet.");
     controls->addWidget(m_wirelessButton, 1);
 #endif
     left->addLayout(controls);
