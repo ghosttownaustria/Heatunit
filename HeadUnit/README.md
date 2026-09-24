@@ -24,8 +24,8 @@ schliessen): Das Handy bekommt ein Goodbye, dann wird die USB-Schnittstelle frei
 **Displaygroesse.** Solange keine Verbindung besteht, laesst sich neben dem Verbinden-Knopf die Displaygroesse
 waehlen: 800 x 480, 1280 x 720 (HD), 1600 x 600 (Ultrawide) oder 1920 x 1080 (Full HD). Das Handy erfaehrt sie
 beim Verbinden (Video-Aufloesung, Touchflaeche und passende Bilddichte), darum ist die Auswahl waehrend einer
-Verbindung gesperrt. Die Wahl wird gemerkt (Windows-Benutzer, Registry `HKCU\Software\HeadUnit`); das leere
-Bildfeld zeigt schon vor dem Verbinden die Form des gewaehlten Displays.
+Verbindung gesperrt. Die Wahl wird gemerkt (Windows-Benutzer, Registry `HKCU\Software\HeadUnit`); das
+Startmenue im Bildfeld zeigt schon vor dem Verbinden die Form des gewaehlten Displays.
 Android Auto kennt nur feste Video-Aufloesungen. Ein Display anderer Form, wie 1600 x 600, wird in das
 naechstgroessere Bild eingepasst: Das Handy bekommt 1920 x 1080 mit 360 Pixel Rand (oben und unten je 180),
 zeichnet seine Oberflaeche nur in den mittleren 1920 x 720 grossen Streifen (Bilddichte 240 dpi) und die App
@@ -48,12 +48,21 @@ einer Groesse, ohne sie zu merken (auch fuer die `--test-...`-Laeufe, die sonst 
   leuchtet auf. Ein Klick, der auf einem anderen Bereich endet als er begann, zaehlt nicht.
 - **Tasten** (angelehnt an ein BMW-iDrive-Multimedia-Bedienteil): Media, Tel, Nav und Map rufen die
   entsprechende App auf dem Handy auf (Map und Nav oeffnen beide die Navigation), Back ist die
-  Zurueck-Taste des Handys, Option sendet dessen Menue-Taste. Radio und Menu haben noch keine Belegung,
-  weil es kein eigenes Betriebssystem gibt: sie schreiben nur eine Zeile ins Fenster-Log.
+  Zurueck-Taste des Handys, Option sendet dessen Menue-Taste. Menu und Radio holen das Startmenue des Radios
+  nach vorn (Radio hat noch keine eigene Funktion, es gibt noch kein Radio-Betriebssystem).
+- **Startmenue des Radios:** Die Uhr und eine Reihe Kacheln (Multimedia, Radio, Telephone, Navigation,
+  Vehicle, Settings) nach der Vorlage [docs/design/home-menu.svg](docs/design/home-menu.svg), an der Stelle
+  des Handybilds und in der Form des gewaehlten Displays. Ohne verbundenes Handy ist es immer zu sehen, waehrend
+  des Verbindens auch; das Handybild
+  kommt nach vorn, sobald es da ist. Drehen am Regler oder die Pfeile links/rechts waehlen eine Kachel (sie
+  leuchtet orange, die Reihe scrollt mit), Druecken des Reglers oder ein Klick auf eine Kachel oeffnet sie:
+  Multimedia, Telephone und Navigation wie die Tasten Media, Tel und Nav, Radio wie die Radio-Taste; Vehicle
+  und Settings haben noch keine Funktion (nur ein Log-Eintrag). Solange das Menue vorn ist, gehen Regler und
+  Pfeile nicht ans Handy, Titel- und Play-Tasten schon.
 - **Home** hat zwei Stufen, solange ein Handy uebertragen wird: Beim ersten Druck wechselt das Handy auf
   seinen Startbildschirm (Karte, Medien, Telefon-Karten, z. B. Maps und Spotify). Der zweite Druck
-  oeffnet das Home-Menue des Radios (nur ein Log-Eintrag), der dritte geht zurueck zum Handy-Startbildschirm.
-  Ohne verbundenes Handy meldet Home nur das Radio-Menue. Ob das Handy gerade auf seinem Startbildschirm
+  zeigt das Startmenue des Radios, der dritte geht zurueck zum Handy-Startbildschirm.
+  Ohne verbundenes Handy zeigt Home das Startmenue. Ob das Handy gerade auf seinem Startbildschirm
   ist, liest die App am Symbol unten links im Bild ab.
 - Das **Handy-Symbol** (CarPlay / Android Auto) startet die Verbindung, wenn noch keine besteht, sonst holt die
   Taste das Handy in den Vordergrund.

@@ -93,7 +93,7 @@ if(HEADUNIT_BUILD_APP)
     target_compile_definitions(headunit_wireless PUBLIC HEADUNIT_WIRELESS)
   endif()
 
-  add_executable(HeadUnit src/main.cpp src/ui/MainWindow.cpp src/ui/CarWidgets.cpp)
+  add_executable(HeadUnit src/main.cpp src/ui/MainWindow.cpp src/ui/CarWidgets.cpp src/ui/HomeMenu.cpp)
   target_link_libraries(HeadUnit PRIVATE headunit_usb Qt6::Widgets Qt6::Concurrent)
   if(HEADUNIT_WIRELESS_ENABLED)
     target_link_libraries(HeadUnit PRIVATE headunit_wireless)

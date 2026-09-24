@@ -23,9 +23,9 @@ struct ConsoleEffect {
     bool connect{};
 };
 
-// Decides what the controller keys mean. There is no radio operating system behind the headunit yet,
-// so everything that would open one of its screens (radio, menu, radio home) is only reported as a log
-// line; the projection (Android Auto, later CarPlay) is the only real content.
+// Decides what the controller keys mean. The radio's own side is its home menu (HomeMenu, shown in place
+// of the phone's picture): Radio, Menu and the second step of Home bring it to the front. There is no radio
+// operating system behind its tiles yet; the projection (Android Auto, later CarPlay) is the only real content.
 //
 // Home is a two-step key while a projection is connected. The first press brings the phone to its
 // dashboard (the screen with the map, media and phone cards); a second press while the phone shows that
@@ -37,7 +37,7 @@ public:
     enum class Screen {
         Projection,      // the phone shows something; where exactly is not known
         ProjectionHome,  // the dashboard was asked for and nothing left it since
-        RadioHome,       // the radio's own menu (a log line for now)
+        RadioHome,       // the radio's home menu is in front of the phone
     };
     bool IsProjectionConnected() const { return m_isConnected; }
     Screen CurrentScreen() const { return m_screen; }
@@ -57,10 +57,10 @@ public:
         case ConsoleKey::Home: return PressHome(phone);
         case ConsoleKey::Menu:
             m_screen = Screen::RadioHome;
-            return Message("Menue: Radio-Hauptmenue (noch kein Betriebssystem, keine Funktion)");
+            return Message("Menue: Radio-Startmenue");
         case ConsoleKey::Radio:
             m_screen = Screen::RadioHome;
-            return Message("Radio: noch keine Belegung (kein Betriebssystem)");
+            return Message("Radio: noch keine Belegung, zeigt das Radio-Startmenue");
         case ConsoleKey::Media: return ToPhone("Medien", keys::Media);
         case ConsoleKey::Tel: return ToPhone("Tel", keys::Tel);
         case ConsoleKey::Nav: return ToPhone("Nav", keys::Navigation);
@@ -100,12 +100,12 @@ private:
     ConsoleEffect PressHome(PhoneScreen phone) {
         if (!m_isConnected) {
             m_screen = Screen::RadioHome;
-            return Radio("Home: Radio-Startmenue (noch kein Betriebssystem, keine Funktion)");
+            return Radio("Home: Radio-Startmenue");
         }
         const bool isAtDashboard = phone == PhoneScreen::Dashboard || (phone == PhoneScreen::Unknown && m_screen == Screen::ProjectionHome);
         if (m_screen == Screen::RadioHome) {
-            // The radio menu is only a log line, so the phone still shows whatever it showed. Back to
-            // the phone's dashboard.
+            // The radio menu only covered the phone, which still shows whatever it showed. Back to the
+            // phone's dashboard.
             m_screen = Screen::ProjectionHome;
             auto effect = Message("Home: zurueck zum Android-Auto-Startbildschirm");
             if (!isAtDashboard) GoToDashboard(effect, phone);
@@ -113,7 +113,7 @@ private:
         }
         if (isAtDashboard) {
             m_screen = Screen::RadioHome;
-            return Radio("Home: Radio-Startmenue (noch kein Betriebssystem, keine Funktion)");
+            return Radio("Home: Radio-Startmenue");
         }
         m_screen = Screen::ProjectionHome;
         auto effect = Message("Home: Android-Auto-Startbildschirm");

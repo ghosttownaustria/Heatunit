@@ -28,7 +28,8 @@ main (composition/lifetime)
               +-- ProjectionTransport : AASDK ITransport
               +-- AndroidAutoSession -> AASDK framing/TLS/channels
               +-- VideoDecoder (FFmpeg H.264 -> RGB)
-              +-- latest-frame mailbox -> Qt timer -> QLabel
+              +-- latest-frame mailbox -> Qt timer -> VideoWidget
+        +-- QStackedWidget: VideoWidget (phone) or HomeMenu (radio), chosen by ConsoleController
 ```
 
 `headunit_core` has no Qt or Windows headers. Plain C++ value types carry device
@@ -142,8 +143,8 @@ resolution that holds the display), the margins that fit the display's shape int
 the session announces the shown area as the touchscreen. Video and touch therefore share one coordinate
 space: the pixels of the shown area, which `VideoWidget::SetFrame` cuts out of each decoded frame (the phone
 draws only there and leaves the margins black). The size cannot change while a session runs. The window passes
-it on to `VideoWidget` (crop, touch mapping, shape of the empty screen) and `ConsoleController` (where Home
-taps). `DetectPhoneScreen` and `DashboardButtonPosition` scale the 800x480 layout by `shown height / 480`,
+it on to `VideoWidget` (crop, touch mapping, shape of the empty screen), `HomeMenu` (shape and scale of the
+menu) and `ConsoleController` (where Home taps). `DetectPhoneScreen` and `DashboardButtonPosition` scale the 800x480 layout by `shown height / 480`,
 anchored at the left and bottom edges of the shown area, because the density keeps the phone's layout
 height constant.
 
@@ -155,10 +156,25 @@ in `ui/KnobZones.h`; dragging around it and the mouse wheel turn it.
 Hard keys: `CarPanel` reports controller keys (`ConsoleKey`: Home, Menu, Option, Media, Radio, Tel,
 Nav, Map, Back, Projection) to `MainWindow::PressConsole`, which asks the portable `ConsoleController`
 what the key means and gets a `ConsoleEffect` back: car keys and touch taps for the phone, one line for
-the window log, and whether to connect first. There is no radio operating system yet, so the radio side
-(Radio, Menu, the second step of Home) is only a log line. Home is two-step while a phone is projected;
+the window log, and whether to connect first. The radio side (Radio, Menu, the second step of Home) is the
+home menu, see below; there is no radio operating system behind it yet. Home is two-step while a phone is projected;
 where the phone currently is comes from `DetectPhoneScreen`, which reads the symbol of the navigation
 bar's bottom-left button from the newest decoded frame (the protocol never reports the phone's screen,
 and `KEYCODE_HOME` only opens the app launcher). `ApplyConsoleEffect` sends keys and taps through
 `ProjectionInput` and re-reads the picture once after the phone's home key when the picture was
 not readable. Hardware tests for this are `--test-console` and the diagnostic `--test-keys`.
+
+Home menu: the radio's own screen, drawn after the design `docs/design/home-menu.svg` (clock, six tiles:
+Multimedia, Radio, Telephone, Navigation, Vehicle, Settings; the focused tile's stripes and symbol turn orange).
+`MainWindow` keeps `VideoWidget` and `HomeMenu` in a `QStackedWidget`; `ShowScreen` puts the menu in front whenever
+`ConsoleController::CurrentScreen()` is `RadioHome`, which is always the case without a projection (before the first
+frame, while connecting, after the session). The decoded frames keep flowing into the hidden `VideoWidget`, so Home can
+still read the phone's picture. The layout is portable (`ui/HomeMenuLayout.h`, in CoreTests): design units 600 high and
+as wide as the display's shape, tile positions, the scroll that keeps the focused tile in view with the least movement,
+hit testing and which `ConsoleKey` a tile stands for (Multimedia Media, Radio Radio, Telephone Tel, Navigation Nav;
+Vehicle and Settings only log). `HomeMenu` draws the design's own outlines (its SVG path data, parsed once into
+`QPainterPath`s; no QtSvg dependency) and gradients (with their `gradientTransform` as brush transform), slides the row
+with a short `QVariantAnimation` and opens a clicked tile on release. While the menu is in front the knob works it:
+`MainWindow::SendKey` sends left/right/push to the menu (up/down are swallowed, the menu is one row) and everything else
+to the phone; a key's release always goes where its press went, so neither side sees half a key press. Turning moves
+the focus instead of the phone's.

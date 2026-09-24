@@ -2,6 +2,7 @@
 #include "androidauto/DisplayConfig.h"
 #include "androidauto/ProjectionInput.h"
 #include "audio/AudioTypes.h"
+#include "ui/HomeMenuLayout.h"
 #include "ui/KnobZones.h"
 #include <cmath>
 #include <cstddef>
@@ -532,8 +533,52 @@ void TestKnobZones() {
     Check(KnobZoneKey(KnobZone::Centre) == 0 && KnobZoneKey(KnobZone::None) == 0, "The middle or nothing sends an arrow key");
 }
 
+// The radio's home menu: six tiles in one row, laid out as in the 1600x600 design and scrolled to the focus.
+void TestHomeMenuLayout() {
+    Check(kHomeMenuCount == 6 && std::string(HomeMenuTitle(kHomeMenuEntries[0])) == "Multimedia" &&
+        std::string(HomeMenuTitle(kHomeMenuEntries[5])) == "Settings", "The home menu does not have the tiles of the design");
+    // A tile does what its controller key does; Vehicle and Settings have nothing behind them yet.
+    Check(HomeMenuKey(HomeMenuEntry::Multimedia) == ConsoleKey::Media && HomeMenuKey(HomeMenuEntry::Radio) == ConsoleKey::Radio &&
+        HomeMenuKey(HomeMenuEntry::Telephone) == ConsoleKey::Tel && HomeMenuKey(HomeMenuEntry::Navigation) == ConsoleKey::Nav &&
+        !HomeMenuKey(HomeMenuEntry::Vehicle) && !HomeMenuKey(HomeMenuEntry::Settings), "A home menu tile opens the wrong thing");
+    // The screen is 600 units high and as wide as the display's shape.
+    Check(HomeMenuWidth({1600, 600}) == 1600 && HomeMenuWidth(kDefaultDisplay) == 1000 && std::abs(HomeMenuWidth({1920, 1080}) - 1066.67) < 0.01 &&
+        HomeMenuWidth({0, 0}) == 0, "The home menu has the wrong width");
+    Check(HomeTileLeft(0) == 25 && HomeTileLeft(4) == 1225 && kHomeRowWidth == 1800, "The tiles are not where the design has them");
+    // 1600x600 as in the design: up to Vehicle nothing scrolls (Settings is cut off at the edge), Settings scrolls
+    // the row to its end, and going back only scrolls again once a tile would leave the screen.
+    for (int focus = 0; focus <= 4; ++focus) Check(HomeMenuScroll(focus, 1600, 0) == 0, "The design's first screen scrolled");
+    Check(HomeMenuScroll(5, 1600, 0) == 200, "Settings did not scroll into view");
+    Check(HomeMenuScroll(4, 1600, 200) == 200 && HomeMenuScroll(1, 1600, 200) == 200 && HomeMenuScroll(0, 1600, 200) == 0,
+        "Going back scrolled more than needed");
+    // 800x480 shows three tiles and a bit.
+    Check(HomeMenuScroll(2, 1000, 0) == 0 && HomeMenuScroll(3, 1000, 0) == 200 && HomeMenuScroll(5, 1000, 0) == 800,
+        "The row scrolls wrongly on 800x480");
+    // On every display each tile is completely in view once it has the focus, walking right and back again.
+    for (const auto& display : kDisplays) {
+        const double width = HomeMenuWidth(display);
+        double scroll = 0;
+        for (const int focus : {0, 1, 2, 3, 4, 5, 4, 3, 2, 1, 0}) {
+            scroll = HomeMenuScroll(focus, width, scroll);
+            Check(HomeTileLeft(focus) - scroll >= 0 && HomeTileLeft(focus) + kHomeTileWidth - scroll <= width && scroll >= 0 &&
+                scroll <= kHomeRowWidth - width, ("A focused tile is not in view on a " + DisplayText(display) + " display").c_str());
+        }
+        Check(scroll == 0, "Walking back did not return to the start of the row");
+    }
+    // A screen wider than the row never scrolls.
+    Check(HomeMenuScroll(5, 2400, 0) == 0, "A row that fits scrolled");
+    // Clicks: on a tile, in the gaps, above and below the row, with the row scrolled.
+    Check(HomeTileAt(150, 300, 0) == 0 && HomeTileAt(1350, 300, 0) == 4 && HomeTileAt(1560, 300, 0) == 5, "A click missed its tile");
+    Check(!HomeTileAt(300, 300, 0) && !HomeTileAt(10, 300, 0) && !HomeTileAt(150, 50, 0) && !HomeTileAt(150, 520, 0) && !HomeTileAt(1790, 300, 0),
+        "A click outside the tiles hit one");
+    Check(HomeTileAt(150, 300, 200) == 1 && HomeTileAt(1560, 300, 200) == 5, "A click on the scrolled row hit the wrong tile");
+    // The focus stops at both ends.
+    Check(MoveHomeFocus(0, -1) == 0 && MoveHomeFocus(0, 2) == 2 && MoveHomeFocus(4, 3) == 5 && MoveHomeFocus(5, -9) == 0, "The focus left the row");
+}
+
 void TestCarControls() {
     TestKnobZones();
+    TestHomeMenuLayout();
     TestTouchMapping();
     TestTouchMappingOtherDisplays();
     TestDisplayConfig();

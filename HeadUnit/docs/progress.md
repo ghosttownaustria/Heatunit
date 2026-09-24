@@ -1,5 +1,32 @@
 # Progress
 
+## 2026-09-24: first home menu of the radio
+
+- **Look** from the user's design (`docs/design/home-menu.svg`, 1600x600): black screen, clock at the top left, a row
+  of six framed tiles (Multimedia, Radio, Telephone, Navigation, Vehicle, Settings) with diagonal stripes and a symbol.
+  The orange tile of the design is read as the focus: the focused tile's stripes and symbol are orange, the others
+  grey. `HomeMenu` draws the design's outlines and gradients itself (SVG path data parsed into `QPainterPath`s, no
+  QtSvg), scaled to the display's height; other shapes show more or less of the row (800x480 and 16:9: three tiles and
+  a bit), and the row slides to keep the focused tile in view.
+- **Where it shows:** in place of the phone's picture (`QStackedWidget`) whenever the console is on the radio's side:
+  always without a phone (so also at start and while connecting; the phone's picture comes to the front with its first
+  frame), after the second Home, after Menu and Radio. It replaces the empty "not connected" screen.
+- **Operation:** turning the knob or the left/right arrows move the focus, pushing the knob (Enter) or clicking a tile
+  opens it. Multimedia, Telephone, Navigation and Radio act like the keys Media, Tel, Nav and Radio; Vehicle and
+  Settings have no function yet and only log. While the menu is in front, knob and arrows no longer reach the phone
+  (up/down do nothing); track and play keys still do. Messages: "Home: Radio-Startmenue" and "Menue:
+  Radio-Startmenue" lost their "keine Funktion" remark, Radio now says it shows the menu.
+- **Tests:** CoreTests cover the portable layout (`ui/HomeMenuLayout.h`): tiles and their keys, widths per display,
+  scrolling on 1600x600 (as in the design: nothing scrolls up to Vehicle, Settings scrolls by 200) and 800x480, every
+  focused tile fully in view on every display, hit testing, focus limits. `--test-console` additionally checks that the
+  second Home shows the menu and Media brings back the picture, and saves `console-3-home-menu.png` (whole window).
+- **Verified on this Windows machine:** MSBuild Debug x64 without warnings from own sources, CoreTests and
+  ProtocolTests pass, `--smoke-test` window pictures at 1600x600, 800x480 and 1920x1080, and the real window driven by
+  posted key and mouse messages (right x4 lights Vehicle, right again scrolls to Settings, Enter on Settings logs, Enter
+  on Multimedia reports "nicht verbunden", a click on Radio focuses and opens it).
+  **Not verified:** with a phone connected (switching between picture and menu, knob routing while projected,
+  `--test-console`), and on Linux (not built there).
+
 ## 2026-09-21: one code base for Windows and Linux
 
 Goal: the same C++ sources build and run reliably on Windows and Linux, not two projects. The survey showed that

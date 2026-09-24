@@ -4,6 +4,7 @@
 #include "androidauto/ProjectionInput.h"
 #include "audio/AudioEngine.h"
 #include "audio/AudioTypes.h"
+#include "ui/HomeMenuLayout.h"
 #include "usb/AutoConnectSystem.h"
 #include "usb/IUsbBackend.h"
 #include "logging/Logger.h"
@@ -14,22 +15,27 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 class QCloseEvent;
 class QComboBox;
 class QKeyEvent;
 class QLabel;
 class QPlainTextEdit;
 class QPushButton;
+class QStackedWidget;
 
 namespace headunit {
 class CarPanel;
+class HomeMenu;
 class VideoWidget;
 
 // One button connects (finding the phone, repairing the driver, starting Android Auto, restarting the
 // USB link when needed) and, while running, ends the session again. Next to the picture sits the
 // simulated centre console: rotary knob, hard keys and the audio display. The picture itself takes
-// mouse input as touch. The display size (video resolution) is chosen next to the button and only
-// while nothing is connected: the phone is told the size once, when the connection starts.
+// mouse input as touch. In its place the radio's home menu is shown whenever the console is on the
+// radio's side (always while no phone is projected); the knob then works the menu instead of the phone.
+// The display size (video resolution) is chosen next to the button and only while nothing is connected:
+// the phone is told the size once, when the connection starts.
 class MainWindow final : public QMainWindow {
 public:
     // The test modes run one scripted check against the real phone and exit with its result.
@@ -61,6 +67,11 @@ private:
     void RunConsoleTest();
     void RunKeysTest();
     void PressConsole(ConsoleKey key);
+    bool IsHomeMenuShown() const;
+    void ShowScreen();
+    void SendKey(unsigned keycode, bool isDown);
+    void PressMenuKey(unsigned keycode);
+    void OpenMenuEntry(HomeMenuEntry entry);
     void TapPhone(int x, int y);
     PhoneScreen CurrentPhoneScreen() const;
     void ApplyConsoleEffect(const ConsoleEffect& effect);
@@ -74,7 +85,10 @@ private:
     std::shared_ptr<AudioState> m_audioState;
     std::unique_ptr<IAudioEngine> m_audio;
     DisplayConfig m_display{kDefaultDisplay};
+    QStackedWidget* m_screens{};   // the phone's picture or the home menu
     VideoWidget* m_video{};
+    HomeMenu* m_homeMenu{};
+    std::set<unsigned> m_menuKeys;  // keys held down whose press went to the home menu
     CarPanel* m_panel{};
     QLabel* m_status{};
     QLabel* m_step{};

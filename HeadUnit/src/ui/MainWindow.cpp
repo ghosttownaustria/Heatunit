@@ -1,5 +1,6 @@
 #include "ui/MainWindow.h"
 #include "ui/CarWidgets.h"
+#include "ui/HomeMenu.h"
 #ifdef HEADUNIT_WIRELESS
 #include "wireless/WirelessConnect.h"
 #endif
@@ -13,6 +14,7 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSettings>
+#include <QStackedWidget>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QtConcurrent/QtConcurrentRun>
@@ -58,13 +60,19 @@ MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
     auto* central = new QWidget(this);
     auto* root = new QHBoxLayout(central);
     auto* left = new QVBoxLayout();
-    m_video = new VideoWidget(central);
+    // The phone's picture and the radio's home menu share one place; ShowScreen picks the one in front.
+    m_screens = new QStackedWidget(central);
+    m_video = new VideoWidget(m_screens);
     m_video->ClearFrame("Android Auto ist nicht verbunden.");
     m_video->onTouch = [this](TouchAction action, int x, int y) {
         if (action == TouchAction::Down) m_console.NoteTouch();
         m_input->Touch(action, x, y);
     };
-    left->addWidget(m_video, 1);
+    m_homeMenu = new HomeMenu(m_screens);
+    m_homeMenu->onOpen = [this](HomeMenuEntry entry) { OpenMenuEntry(entry); };
+    m_screens->addWidget(m_video);
+    m_screens->addWidget(m_homeMenu);
+    left->addWidget(m_screens, 1);
     // The display size sits next to the button that connects: it is fixed once the connection starts.
     auto* controls = new QHBoxLayout();
     auto* displayLabel = new QLabel("Displaygroesse:", central);
@@ -113,13 +121,14 @@ MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
     m_panel = new CarPanel(central);
     m_panel->setFixedWidth(310);
     m_panel->onConsole = [this](ConsoleKey key) { PressConsole(key); };
-    m_panel->onKey = [this](unsigned keycode, bool isDown) { m_console.NoteKey(keycode, isDown); m_input->Key(keycode, isDown); };
-    m_panel->onRotate = [this](int detents) { m_input->Rotate(detents); };
+    m_panel->onKey = [this](unsigned keycode, bool isDown) { SendKey(keycode, isDown); };
+    m_panel->onRotate = [this](int detents) { if (IsHomeMenuShown()) m_homeMenu->Move(detents); else m_input->Rotate(detents); };
     m_panel->onVolume = [this](int delta) { m_audioState->ChangeVolume(delta); };
     m_panel->onMute = [this] { m_audioState->ToggleMute(); };
     root->addWidget(m_panel);
     setCentralWidget(central);
     SetState(State::Idle);
+    ShowScreen();
     if (m_mode == TestMode::None || m_mode == TestMode::Smoke) {
         // The scripted runs against the phone always start from the default (or --display), whatever was chosen last.
         const QSettings settings(kSettingsOrganization, kSettingsApplication);
@@ -212,8 +221,11 @@ bool MainWindow::HandleKey(QKeyEvent* event, bool isDown)
     default: break;
     }
     if (keycode != 0) {
-        if (event->isAutoRepeat()) { if (isDown && isArrow) m_input->Tap(keycode); }  // held arrows keep nudging
-        else { m_console.NoteKey(keycode, isDown); m_input->Key(keycode, isDown); }
+        if (!event->isAutoRepeat()) SendKey(keycode, isDown);
+        else if (isDown && isArrow) {   // held arrows keep nudging, wherever their press went
+            if (m_menuKeys.contains(keycode)) PressMenuKey(keycode);
+            else m_input->Tap(keycode);
+        }
         return true;
     }
     if (!isDown) return false;
@@ -243,6 +255,39 @@ void MainWindow::PressConsole(ConsoleKey key)
     }
     ApplyConsoleEffect(m_console.Press(key, phone));
 }
+// The console decides which side is in front; the radio's side is its home menu.
+bool MainWindow::IsHomeMenuShown() const { return m_console.CurrentScreen() == ConsoleController::Screen::RadioHome; }
+void MainWindow::ShowScreen() { m_screens->setCurrentWidget(IsHomeMenuShown() ? static_cast<QWidget*>(m_homeMenu) : m_video); }
+// The controller's arrows and push go to the home menu while it is shown, otherwise to the phone. A release goes
+// where its press went, so neither side sees half a key press. Track and play keys always go to the phone.
+void MainWindow::SendKey(unsigned keycode, bool isDown)
+{
+    const bool isMenuKey = keycode == keys::DpadLeft || keycode == keys::DpadRight || keycode == keys::DpadUp ||
+        keycode == keys::DpadDown || keycode == keys::DpadCenter;
+    if (isDown && isMenuKey && IsHomeMenuShown()) {
+        m_menuKeys.insert(keycode);
+        PressMenuKey(keycode);
+        return;
+    }
+    if (!isDown && m_menuKeys.erase(keycode) > 0) return;
+    m_console.NoteKey(keycode, isDown);
+    m_input->Key(keycode, isDown);
+}
+// The menu is one row: left and right move the focus, pushing the knob opens the tile, up and down do nothing.
+void MainWindow::PressMenuKey(unsigned keycode)
+{
+    if (keycode == keys::DpadLeft) m_homeMenu->Move(-1);
+    else if (keycode == keys::DpadRight) m_homeMenu->Move(+1);
+    else if (keycode == keys::DpadCenter) m_homeMenu->Activate();
+}
+// A tile does what its controller key does; the tiles without a key have nothing behind them yet.
+void MainWindow::OpenMenuEntry(HomeMenuEntry entry)
+{
+    if (const auto key = HomeMenuKey(entry)) { PressConsole(*key); return; }
+    const std::string message = std::string(HomeMenuTitle(entry)) + ": noch keine Funktion";
+    m_logger.Write("INFO", "CONSOLE", message);
+    ShowStep(Text(message));
+}
 // Keys and taps go to the phone, the message (if any) becomes a line in the window log, and the
 // projection key may start the connection.
 void MainWindow::ApplyConsoleEffect(const ConsoleEffect& effect)
@@ -262,6 +307,7 @@ void MainWindow::ApplyConsoleEffect(const ConsoleEffect& effect)
         m_logger.Write("INFO", "CONSOLE", effect.message);
         ShowStep(Text(effect.message));
     }
+    ShowScreen();
     if (effect.connect) StartConnect();
 }
 // A short touch at a fixed spot of the phone's screen.
@@ -287,6 +333,7 @@ void MainWindow::SetDisplay(const DisplayConfig& display)
     m_display = display;
     m_console.SetDisplay(display);
     m_video->SetDisplay(display);
+    m_homeMenu->SetDisplay(display);
     for (int index = 0; index < static_cast<int>(std::size(kDisplays)); ++index)
         if (kDisplays[index] == display) m_displayChoice->setCurrentIndex(index);
 }
@@ -309,6 +356,7 @@ void MainWindow::Tick()
         if (++m_displayedFrames == 1) {
             m_logger.Write("INFO", "VIDEO", "First real Android Auto frame displayed in Qt");
             m_console.SetProjectionConnected(true);
+            ShowScreen();
         }
         // A display of another shape than the phone's frame shows only part of it: name both.
         const QString shownArea = VideoLayoutOf(m_display).HasMargins() ? ", Anzeige " + Text(DisplayText(m_display)) : QString();
@@ -339,6 +387,7 @@ void MainWindow::BeginConnect(bool isWireless)
     m_displayedFrames = 0;
     { std::lock_guard lock(m_frameMutex); m_latestFrame.reset(); }
     m_console.SetProjectionConnected(false);
+    ShowScreen();
     m_video->ClearFrame("Verbinde Android Auto ...");
     m_status->clear();
     m_history->clear();
@@ -369,6 +418,7 @@ void MainWindow::RequestStop()
 void MainWindow::FinishConnect(const AutoConnectResult& result)
 {
     m_console.SetProjectionConnected(false);
+    ShowScreen();
     SetState(State::Idle);
     if (m_mode == TestMode::Projection) { QApplication::exit(m_displayedFrames >= kProjectionTestFrames ? 0 : 3); return; }
     if (m_mode == TestMode::Input || m_mode == TestMode::Audio || m_mode == TestMode::Console || m_mode == TestMode::Keys) { QApplication::exit(m_isTestFinished ? m_testExitCode : 3); return; }
@@ -526,7 +576,9 @@ void MainWindow::RunConsoleTest()
     case 3:  // second Home: the radio menu, only a log line; the phone must stay where it is
         if (elapsed >= 800) {
             SaveTestShot("console-3-second-home.png");
+            SaveTestShot("console-3-home-menu.png", true);
             expectScreen(ConsoleController::Screen::RadioHome, "second Home did not open the radio menu");
+            if (m_screens->currentWidget() != m_homeMenu) m_testProblems += "second Home did not show the home menu; ";
             expectPhone(PhoneScreen::Dashboard, "second Home changed what the phone shows");
             if (!historyHas("Home: Radio-Startmenue")) m_testProblems += "radio menu line missing in the window log; ";
             PressConsole(ConsoleKey::Media);
@@ -537,6 +589,7 @@ void MainWindow::RunConsoleTest()
         if (elapsed >= 3000) {
             SaveTestShot("console-4-media-again.png");
             expectScreen(ConsoleController::Screen::Projection, "Media did not leave the dashboard");
+            if (m_screens->currentWidget() != m_video) m_testProblems += "Media did not bring back the phone's picture; ";
             expectPhone(PhoneScreen::Other, "the phone did not show an app after Media");
             PressConsole(ConsoleKey::Home);
             m_testClock.restart(); m_testStage = 5;

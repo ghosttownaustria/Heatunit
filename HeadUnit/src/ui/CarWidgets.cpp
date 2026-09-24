@@ -449,9 +449,9 @@ CarPanel::CarPanel(QWidget* parent) : QWidget(parent)
 
     auto* more = new QGridLayout();
     more->setSpacing(6);
-    more->addWidget(AddConsoleButton("MENU", ConsoleKey::Menu, "Hauptmenue des Radios (noch ohne Funktion), Taste F1"), 0, 0);
+    more->addWidget(AddConsoleButton("MENU", ConsoleKey::Menu, "Radio-Startmenue, Taste F1"), 0, 0);
     more->addWidget(AddConsoleButton("OPTION", ConsoleKey::Option, "Optionen/Kontextmenue der aktuellen Ansicht (F2)"), 0, 1);
-    more->addWidget(AddConsoleButton("RADIO", ConsoleKey::Radio, "Radio (noch ohne Funktion), Taste F4"), 0, 2);
+    more->addWidget(AddConsoleButton("RADIO", ConsoleKey::Radio, "Radio (noch ohne Funktion, zeigt das Radio-Startmenue), Taste F4"), 0, 2);
     more->addWidget(AddConsoleButton("MAP", ConsoleKey::Map, "Karte auf dem Handy, Taste F7"), 0, 3);
     layout->addLayout(more);
 
