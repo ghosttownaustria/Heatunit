@@ -20,6 +20,7 @@
     <ClCompile Include="src\androidauto\AoaNegotiator.cpp"><Filter>src\androidauto</Filter></ClCompile>
     <ClInclude Include="src\androidauto\AoaNegotiator.h"><Filter>src\androidauto</Filter></ClInclude>
     <ClCompile Include="src\androidauto\AndroidDeviceDetector.cpp"><Filter>src\androidauto</Filter></ClCompile>
+    <ClCompile Include="src\androidauto\PhoneWatch.cpp"><Filter>src\androidauto</Filter></ClCompile>
     <ClInclude Include="src\androidauto\AndroidDeviceDetector.h"><Filter>src\androidauto</Filter></ClInclude>
     <ClCompile Include="src\logging\Logger.cpp"><Filter>src\logging</Filter></ClCompile>
     <ClInclude Include="src\logging\Logger.h"><Filter>src\logging</Filter></ClInclude>

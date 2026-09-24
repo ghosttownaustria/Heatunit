@@ -35,14 +35,16 @@ class RadioPage;
 class SettingsPage;
 class VideoWidget;
 
-// One button connects (finding the phone, repairing the driver, starting Android Auto, restarting the
-// USB link when needed) and, while running, ends the session again. Next to the picture sits the
+// Always ready, like a car: from the start the window watches USB and (where built) wireless Android Auto and connects
+// whichever phone comes, with no button to press (RunPhoneWatch). The button ends a running session, and otherwise
+// connects the phone on the USB cable once more (finding the phone, repairing the driver, starting Android Auto,
+// restarting the USB link when needed). The scripted test modes connect once over USB instead. Next to the picture sits the
 // simulated centre console: rotary knob, hard keys and the audio display. The picture itself takes
 // mouse input as touch. In its place the radio's own pages are shown whenever the console is on the
 // radio's side (always while no phone is projected): the home menu, the music player, the tuner and the
 // settings; the knob then works the page instead of the phone. The radio's own player plays through the
 // same audio output as the phone, and only one of them sounds at a time: the one started last.
-// The display size (video resolution) is chosen next to the button and only while nothing is connected:
+// The display size (video resolution) is chosen next to the button and only while no session runs:
 // the phone is told the size once, when the connection starts.
 class MainWindow final : public QMainWindow {
 public:
@@ -50,21 +52,26 @@ public:
     enum class TestMode { None, Smoke, Projection, Input, Audio, Console, Keys };
     MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode = TestMode::None);
     ~MainWindow() override;
-    // Selects the display size for the next connection (ignored while a connection is running or for a
+    // Selects the display size for the next connection (ignored while a session is running or for a
     // size that is not offered). Not remembered: only a choice made in the window is.
     void SetDisplay(const DisplayConfig& display);
-    // Starts "Android Auto kabellos" (Linux): Wi-Fi hotspot plus Bluetooth, no cable. Does nothing where that is not built.
-    void StartWirelessConnect();
 protected:
     void closeEvent(QCloseEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
     void keyReleaseEvent(QKeyEvent* event) override;
 private:
-    enum class State { Idle, Connecting, Stopping };
+    // Idle: nothing runs. Watching: the automatic mode waits for a phone. Connecting: a connection or session runs.
+    // Stopping: it is being ended.
+    enum class State { Idle, Watching, Connecting, Stopping };
     void SetState(State state);
     void OnButton();
     void StartConnect();
-    void BeginConnect(bool isWireless);
+    void BeginConnect();
+    void BeginWatch();
+    AutoConnectResult WatchPhones();
+    ProjectionCallbacks MakeCallbacks();
+    void OnAttemptStart();
+    void OnAttemptEnd(const AutoConnectResult& result);
     void RequestStop();
     void FinishConnect(const AutoConnectResult& result);
     void ShowStep(const QString& text);
@@ -114,9 +121,11 @@ private:
     QLabel* m_step{};
     QComboBox* m_displayChoice{};
     QPushButton* m_button{};
-    QPushButton* m_wirelessButton{};   // only where wireless Android Auto is built
     QPlainTextEdit* m_history{};
-    std::atomic_bool m_isStopRequested{};
+    std::atomic_bool m_isStopRequested{};         // ends the running connection or session
+    std::atomic_bool m_isWatchStopRequested{};    // ends the automatic mode (the window closes)
+    std::atomic_bool m_isUsbRequested{};          // the automatic mode connects the phone on the USB cable once more
+    std::mutex m_displayMutex;                    // m_display, as the worker reads it for each connection
     std::mutex m_frameMutex;
     std::optional<VideoFrame> m_latestFrame;
     unsigned m_displayedFrames{};

@@ -101,8 +101,8 @@ int main(int argc, char* argv[])
         else if (argument == "--help") {
             std::cout << "HeadUnit [--scan | --smoke-test | --probe-usb | --start-accessory | --test-projection | --test-input | --test-audio | --test-console | --test-keys | --test-tone | --repair-driver | --recover-phone] [--display 800x480|1280x720|1600x600|1920x1080]\n"
 #ifdef HEADUNIT_WIRELESS
-                         "HeadUnit [--wireless | --test-bluetooth | --test-hotspot]\n"
-                         "--wireless starts wireless Android Auto right away (Wi-Fi hotspot + Bluetooth, docs/wireless.md)\n"
+                         "HeadUnit [--test-bluetooth | --test-hotspot]\n"
+                         "Without an option the window watches USB and wireless Android Auto from the start (hidden Wi-Fi hotspot + Bluetooth, docs/wireless.md); --wireless is accepted and changes nothing\n"
                          "--test-bluetooth makes the computer visible as HEATUNIT and checks that a phone pairs and asks for the Wi-Fi details (HEADUNIT_TEST_SECONDS, default 120)\n"
                          "--test-hotspot starts the Wi-Fi hotspot for a while and prints how to join it (HEADUNIT_TEST_SECONDS, default 60)\n"
 #endif
@@ -127,7 +127,11 @@ int main(int argc, char* argv[])
             return static_cast<int>(result.outcome);
         }
         headunit::Logger logger(headunit::DefaultLogPath("headunit.log"));
-        logger.Write("INFO", "APP", "HeadUnit 0.2.0 started; USB Android Auto projection; log includes serial numbers");
+#ifdef HEADUNIT_WIRELESS
+        logger.Write("INFO", "APP", "HeadUnit 0.2.0 started; automatic USB and wireless Android Auto projection; log includes serial numbers");
+#else
+        logger.Write("INFO", "APP", "HeadUnit 0.2.0 started; automatic USB Android Auto projection; log includes serial numbers");
+#endif
         if (isToneTest) return RunToneTest(logger);
 #ifdef HEADUNIT_WIRELESS
         if (isBluetoothTest || isHotspotTest) {
@@ -165,7 +169,7 @@ int main(int argc, char* argv[])
         headunit::MainWindow window(backend, logger, isSmokeTest ? Mode::Smoke : isProjectionTest ? Mode::Projection : isInputTest ? Mode::Input : isAudioTest ? Mode::Audio : isConsoleTest ? Mode::Console : isKeysTest ? Mode::Keys : Mode::None);
         if (display) window.SetDisplay(*display);
         window.show();
-        if (isWireless) window.StartWirelessConnect();
+        if (isWireless) logger.Write("INFO", "APP", "--wireless: wireless Android Auto runs from the start anyway");
 #ifndef _WIN32
         // Closing properly ends a running session and takes the wireless mode's hotspot down again.
         std::signal(SIGINT, RequestClose);

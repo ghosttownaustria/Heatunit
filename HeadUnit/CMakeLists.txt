@@ -12,7 +12,8 @@ set_property(CACHE HEADUNIT_AUDIO_BACKEND PROPERTY STRINGS auto wasapi miniaudio
 include(CTest)
 
 # The portable core: no Qt, no operating system API.
-add_library(headunit_core src/usb/UsbDescriptors.cpp src/androidauto/AndroidDeviceDetector.cpp src/androidauto/AoaNegotiator.cpp src/androidauto/AutoConnect.cpp src/logging/Logger.cpp)
+add_library(headunit_core src/usb/UsbDescriptors.cpp src/androidauto/AndroidDeviceDetector.cpp src/androidauto/AoaNegotiator.cpp src/androidauto/AutoConnect.cpp
+  src/androidauto/PhoneWatch.cpp src/logging/Logger.cpp)
 target_include_directories(headunit_core PUBLIC src)
 if(MSVC)
   target_compile_options(headunit_core PUBLIC /W4 /utf-8 /permissive-)
@@ -121,7 +122,7 @@ if(HEADUNIT_BUILD_APP)
 endif()
 
 if(BUILD_TESTING)
-  add_executable(CoreTests tests/CoreTests.cpp tests/AoaTests.cpp tests/AutoConnectTests.cpp tests/CarControlTests.cpp)
+  add_executable(CoreTests tests/CoreTests.cpp tests/AoaTests.cpp tests/AutoConnectTests.cpp tests/CarControlTests.cpp tests/PhoneWatchTests.cpp)
   target_link_libraries(CoreTests PRIVATE headunit_core)
   add_test(NAME CoreTests COMMAND CoreTests)
   if(HEADUNIT_BUILD_APP)

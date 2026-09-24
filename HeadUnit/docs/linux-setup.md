@@ -122,7 +122,7 @@ bash BuildAndRun.sh --no-test -- --probe-usb     # Zugriff und "AOA version 2"
 bash BuildAndRun.sh --no-test                    # das Programm mit Fenster
 ```
 
-Im Fenster **Android Auto verbinden** waehlen. Was jeder Test erwartet, steht in
+Das Handy anstecken und entsperren; das Fenster verbindet es von selbst. Was jeder Test erwartet, steht in
 [Linux, Erste Inbetriebnahme](linux.md#erste-inbetriebnahme).
 
 ## 9. Ohne Desktop (Kiosk, SSH)
@@ -141,9 +141,10 @@ bash BuildAndRun.sh --pull
 
 ## 11. Kabellos (optional, Raspberry Pi)
 
-Bluetooth plus eigenes WLAN statt USB-Kabel: [Kabelloses Android Auto](wireless.md). Kurz: Netzwerkkabel anstecken (der
-WLAN-Chip wird zum Hotspot, SSH ueber WLAN bricht ab), WLAN-Land setzen (`sudo raspi-config`), dann nacheinander
-`./HeadUnit --test-hotspot`, `./HeadUnit --test-bluetooth` und `./HeadUnit --wireless`.
+Bluetooth plus eigenes, verborgenes WLAN statt USB-Kabel: [Kabelloses Android Auto](wireless.md). Es laeuft ab dem
+Programmstart von selbst. Kurz: Netzwerkkabel anstecken (der WLAN-Chip ist Hotspot, solange HeadUnit laeuft; SSH ueber
+WLAN bricht ab), WLAN-Land setzen (`sudo raspi-config`), zur Probe `./HeadUnit --test-hotspot` und
+`./HeadUnit --test-bluetooth`, dann einfach `./HeadUnit`.
 
 ## Kurzfassung
 

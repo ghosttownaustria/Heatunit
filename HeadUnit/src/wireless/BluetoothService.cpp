@@ -334,6 +334,7 @@ std::string BluetoothService::Start(const std::string& name)
     QVariantMap options;
     options.insert(QStringLiteral("Name"), QStringLiteral("Android Auto Wireless"));
     options.insert(QStringLiteral("Role"), QStringLiteral("server"));
+    options.insert(QStringLiteral("Channel"), QVariant::fromValue<quint16>(kAndroidAutoWirelessChannel));   // D-Bus uint16, as BlueZ requires
     options.insert(QStringLiteral("RequireAuthentication"), false);
     options.insert(QStringLiteral("RequireAuthorization"), false);
     if (const auto error = Call(bus, root, "org.bluez.ProfileManager1", "RegisterProfile",
@@ -342,7 +343,8 @@ std::string BluetoothService::Start(const std::string& name)
         return "Der Bluetooth-Dienst fuer Android Auto laesst sich nicht anmelden: " + error;
     }
     m_impl->isRunning = true;
-    shared.Log("INFO", "Bluetooth visible as '" + name + "', Android Auto Wireless service registered");
+    shared.Log("INFO", "Bluetooth visible as '" + name + "', Android Auto Wireless service registered on RFCOMM channel " +
+        std::to_string(kAndroidAutoWirelessChannel));
     return {};
 }
 

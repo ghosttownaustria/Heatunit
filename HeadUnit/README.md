@@ -13,15 +13,17 @@ confirmed version 1.7, TLS, service discovery and projected video, including rep
 sessions and a clean stop. Touch (mouse), a simulated rotary knob with hard keys, and phone audio
 over WASAPI with a simulated audio display work on hardware. There is no simulated phone data or AA screen.
 
-**Bedienung: ein Knopf.** Handy per Datenkabel anschliessen, entsperren und
-**Android Auto verbinden** anklicken. Die App erledigt alle Schritte selbst und meldet
-jeden davon im Fenster: Handy suchen, bei Bedarf den USB-Treiber reparieren (einmal
-die Windows-Abfrage nach Administratorrechten bestaetigen), Android Auto auf dem Handy
-starten und das Video anzeigen. Auf dem Handy nur die Android-Auto-Hinweise bestaetigen.
-Waehrend der Sitzung heisst derselbe Knopf **Verbindung beenden** (oder das Fenster
-schliessen): Das Handy bekommt ein Goodbye, dann wird die USB-Schnittstelle freigegeben.
+**Bedienung: automatisch.** Handy per Datenkabel anschliessen und entsperren: Die App
+erkennt es von selbst (auch wenn es beim Start schon steckt) und erledigt alle Schritte,
+jeden davon im Fenster gemeldet: bei Bedarf den USB-Treiber reparieren (einmal die
+Windows-Abfrage nach Administratorrechten bestaetigen), Android Auto auf dem Handy starten
+und das Video anzeigen. Auf dem Handy nur die Android-Auto-Hinweise bestaetigen. Unter
+Linux kommt kabelloses Android Auto dazu, ebenfalls automatisch ([wireless.md](docs/wireless.md)).
+Waehrend der Sitzung heisst der Knopf **Verbindung beenden**: Das Handy bekommt ein Goodbye,
+dann wird die USB-Schnittstelle freigegeben; die Automatik wartet danach weiter. Ein Handy,
+das stecken bleibt, startet erst nach neuem Anstecken wieder, oder mit **Android Auto verbinden**.
 
-**Displaygroesse.** Solange keine Verbindung besteht, laesst sich neben dem Verbinden-Knopf die Displaygroesse
+**Displaygroesse.** Solange keine Sitzung laeuft, laesst sich neben dem Verbinden-Knopf die Displaygroesse
 waehlen: 800 x 480, 1280 x 720 (HD), 1600 x 600 (Ultrawide) oder 1920 x 1080 (Full HD). Das Handy erfaehrt sie
 beim Verbinden (Video-Aufloesung, Touchflaeche und passende Bilddichte), darum ist die Auswahl waehrend einer
 Verbindung gesperrt. Die Wahl wird gemerkt (Windows-Benutzer, Registry `HKCU\Software\HeadUnit`); das
@@ -268,8 +270,9 @@ ADB debugging is not required. If already enabled, its interface provides an
 additional identification hint. Manufacturer IDs alone are only candidates:
 Samsung also makes non-phone USB devices. Unknown/charge-only phones may not be
 identified. Missing descriptors are shown as warnings, never invented.
-The window itself has one button (**Android Auto verbinden**) and does the mode switch,
-driver repair and session by itself; the individual steps stay available on the command line.
+The window connects a phone by itself as soon as it is plugged in (and, on Linux, one that connects wirelessly) and
+does the mode switch, driver repair and session; its one button ends a session or connects the plugged-in phone once
+more. The individual steps stay available on the command line.
 
 See [research and protocol plan](docs/android_auto.md), [architecture](docs/architecture.md),
 [USB diagnostics](docs/usb.md), [dependencies](docs/dependencies.md), and [verified progress](docs/progress.md).

@@ -109,20 +109,28 @@ directory when writable, otherwise the user's state directory). Raspberry Pi gra
 remain separate decoder/renderer decisions; FFmpeg's software H.264 decoder is used everywhere. The core builds
 without Qt or any library using `-DHEADUNIT_BUILD_APP=OFF`.
 
+The automatic mode: outside the scripted test modes the window starts one worker at once that runs `RunPhoneWatch`
+(core, Qt-free, tested with scripted deps) until the window closes. Each round it takes a quiet libusb scan
+(`UsbPhoneIdentities`: serial numbers, so a phone switching into and out of accessory mode stays the same phone) and
+connects a newly plugged-in phone with `ConnectPhoneAutomatically`; in between it waits a second for a wireless phone.
+Two stop flags: `m_isStopRequested` ends the running attempt ("Verbindung beenden"; the watch clears it before each
+attempt), `m_isWatchStopRequested` ends the watch (closing, which sets both). Attempt start and end are posted to the
+window, which switches between the phone's picture and the radio's pages.
+
 Wireless Android Auto (Linux only, `src/wireless/`, built by the `headunit_wireless` target when Qt6 DBus is found;
-[wireless.md](wireless.md)) adds a second `ITransport` and a connection flow, and leaves the session untouched:
-`ConnectWirelessAndroidAuto` first starts the NetworkManager hotspot (`Hotspot`, `nmcli` without a shell), because the
-phone expects an answer as soon as it opens the service. It then switches Bluetooth on (rfkill unblock, adapter power),
-makes the computer visible, registers the Android Auto Wireless service with BlueZ (`BluetoothService`, QtDBus) and
-(re)connects the phones paired before (`ConnectPairedPhones`: a phone PipeWire connected before the service existed is
-disconnected first). When a phone opens the service, `EstablishWirelessLink` hands it the Wi-Fi details over the RFCOMM socket
-(`WirelessHandshake`: pure message logic; both Qt-free and tested against a simulated phone) and accepts the phone's TCP
-connection on port 5288, and `RunAndroidAutoSession` runs on a `SocketTransport` (the TCP twin of
-`ProjectionTransport`: one reader, one writer, `stop()` rejects with OPERATION_ABORTED). The hotspot stays up for the
-whole wireless mode. It runs on the same worker thread as the USB flow; QtDBus needs that thread to run Qt events, which
-`BluetoothService::WaitForPhone`/`Pump` do. Only
-this target uses moc (`AUTOMOC`), and `HEADUNIT_WIRELESS` is defined only where it is built, so the Windows build and
-`MainWindow` without the wireless button are unchanged.
+[wireless.md](wireless.md)) adds a second `ITransport` and leaves the session untouched. `WirelessStation` keeps it
+ready for as long as the watch runs (and retries a failed start every minute): first the hidden NetworkManager hotspot
+(`Hotspot`, `nmcli` without a shell), because the phone expects an answer as soon as it opens the service; then
+Bluetooth (rfkill unblock, adapter power, visible), the Android Auto Wireless service registered with BlueZ on RFCOMM
+channel 8 (`BluetoothService`, QtDBus; without a channel BlueZ opens no RFCOMM server for an unknown UUID), and the
+phones paired before are (re)connected (`ConnectPairedPhones`: a phone PipeWire connected before the service existed
+is disconnected first). When a phone opens the service, `EstablishWirelessLink` hands it the Wi-Fi details over the
+RFCOMM socket (`WirelessHandshake`: pure message logic; both Qt-free and tested against a simulated phone) and accepts
+the phone's TCP connection on port 5288, and `RunAndroidAutoSession` runs on a `SocketTransport` (the TCP twin of
+`ProjectionTransport`: one reader, one writer, `stop()` rejects with OPERATION_ABORTED). Everything runs on the watch's
+worker thread; QtDBus needs that thread to run Qt events, which `BluetoothService::WaitForPhone`/`Pump` do (so BlueZ is
+answered only between sessions). Only this target uses moc (`AUTOMOC`), and `HEADUNIT_WIRELESS` is defined only where
+it is built, so the Windows build watches USB alone.
 
 Input and audio: the window owns a `ProjectionInput` (GUI thread -> protocol thread) and an
 `AudioState` plus an `IAudioEngine`. `ProjectionCallbacks` hands them to the session, which attaches

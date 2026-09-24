@@ -9,6 +9,7 @@ struct HotspotConfig {
     std::string password;        // WPA2, 8 to 63 characters
     std::string band{"a"};       // "a" = 5 GHz, "bg" = 2.4 GHz
     int channel{36};
+    bool isHidden{true};         // the name is not broadcast: only the phone knows it, from Bluetooth
 };
 struct HotspotInfo {
     std::string interfaceName;

@@ -82,7 +82,7 @@ Am besten in dieser Reihenfolge, jeweils aus dem Ordner mit dem Programm:
 | `./HeadUnit --scan` | USB-Suche ohne Fenster | Das Handy steht in `headunit.log` (VID/PID, Seriennummer, Schnittstellen), Exit 0 |
 | `./HeadUnit --test-tone` | Audioausgang ohne Handy | Zwei Sekunden leiser Ton, Exit 0 |
 | `./HeadUnit --probe-usb` | Zugriff und AOA-Version | "AOA version 2", Exit 0 (sonst Hinweis auf die udev-Regel) |
-| `./HeadUnit` | Alles | Fenster, **Android Auto verbinden** |
+| `./HeadUnit` | Alles | Fenster; ein angestecktes Handy verbindet sich von selbst, kabellos ebenso |
 
 Der Ablauf im Fenster ist derselbe wie unter Windows (siehe [README](../README.md)); die Windows-Schritte "Treiber
 reparieren" und die Administrator-Abfrage entfallen. Weitere Testlaeufe (`--test-projection`, `--test-input`,

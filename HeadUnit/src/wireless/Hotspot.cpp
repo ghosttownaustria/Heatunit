@@ -104,14 +104,15 @@ std::string Hotspot::Start(const HotspotConfig& config, HotspotInfo& info)
         interfaceName = FirstWifiDevice(devices.output);
         if (interfaceName.empty()) return "NetworkManager kennt keinen WLAN-Chip. Pruefen mit: nmcli device   (WLAN mit rfkill unblock wifi einschalten)";
     }
-    m_logger.Write("INFO", "WLAN", "Hotspot on interface " + interfaceName + ", network '" + config.ssid + "', band " + config.band + ", channel " + std::to_string(config.channel));
+    m_logger.Write("INFO", "WLAN", "Hotspot on interface " + interfaceName + ", network '" + config.ssid + "'" + (config.isHidden ? " (hidden)" : "") +
+        ", band " + config.band + ", channel " + std::to_string(config.channel));
 
     RunCommand({"nmcli", "radio", "wifi", "on"}, 10s);
     // A leftover from an earlier run (or a crash) would keep the old settings.
     RunCommand({"nmcli", "connection", "delete", "id", kConnectionName}, 15s);
 
     const auto added = RunCommand({"nmcli", "connection", "add", "type", "wifi", "ifname", interfaceName, "con-name", kConnectionName,
-        "autoconnect", "no", "ssid", config.ssid, "mode", "ap",
+        "autoconnect", "no", "ssid", config.ssid, "mode", "ap", "802-11-wireless.hidden", config.isHidden ? "yes" : "no",
         "802-11-wireless.band", config.band, "802-11-wireless.channel", std::to_string(config.channel),
         "ipv4.method", "shared", "ipv6.method", "ignore",
         "wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.proto", "rsn", "wifi-sec.pairwise", "ccmp", "wifi-sec.group", "ccmp",

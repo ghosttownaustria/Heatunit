@@ -32,8 +32,10 @@
     <ClCompile Include="src\usb\DriverRepair.cpp" />
     <ClCompile Include="src\usb\AutoConnectSystem.cpp" />
     <ClCompile Include="src\androidauto\AutoConnect.cpp" />
+    <ClCompile Include="src\androidauto\PhoneWatch.cpp" />
     <ClInclude Include="src\usb\AutoConnectSystem.h" />
     <ClInclude Include="src\androidauto\AutoConnect.h" />
+    <ClInclude Include="src\androidauto\PhoneWatch.h" />
     <ClInclude Include="src\usb\DriverRepair.h" />
     <ClCompile Include="src\video\VideoDecoder.cpp" />
     <ClCompile Include="src\androidauto\AoaNegotiator.cpp" />

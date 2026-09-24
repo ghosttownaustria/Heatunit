@@ -3,7 +3,9 @@
 #include "ui/HomeMenu.h"
 #include "ui/MediaPages.h"
 #include "ui/SettingsPage.h"
+#include "androidauto/PhoneWatch.h"
 #include "platform/Environment.h"
+#include "usb/LibusbUsbBackend.h"
 #ifdef HEADUNIT_WIRELESS
 #include "wireless/WirelessConnect.h"
 #endif
@@ -28,6 +30,7 @@
 #include <exception>
 #include <iterator>
 #include <system_error>
+#include <thread>
 
 namespace headunit {
 namespace {
@@ -120,20 +123,12 @@ MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
     controls->addWidget(displayLabel);
     controls->addWidget(m_displayChoice);
     controls->addWidget(m_button, 1);
-#ifdef HEADUNIT_WIRELESS
-    m_wirelessButton = new QPushButton("Android Auto kabellos", central);
-    m_wirelessButton->setMinimumHeight(48);
-    m_wirelessButton->setFocusPolicy(Qt::NoFocus);
-    m_wirelessButton->setToolTip("Ohne Kabel: HeadUnit startet ein eigenes WLAN, schaltet Bluetooth ein und ist als HEATUNIT sichtbar; "
-        "das Handy wird einmal gekoppelt. Das WLAN laeuft, bis die kabellose Verbindung endet.");
-    controls->addWidget(m_wirelessButton, 1);
-#endif
     left->addLayout(controls);
 #ifdef HEADUNIT_WIRELESS
-    m_step = new QLabel("USB: Handy per Kabel anschliessen, entsperren und auf Android Auto verbinden klicken. "
-        "Kabellos: auf Android Auto kabellos klicken und das Handy per Bluetooth mit HEATUNIT koppeln.", central);
+    m_step = new QLabel("Android Auto startet von selbst: Handy per USB-Kabel anstecken und entsperren, oder kabellos "
+        "(einmal in den Bluetooth-Einstellungen des Handys mit HEATUNIT koppeln).", central);
 #else
-    m_step = new QLabel("Handy per USB-Kabel anschliessen, entsperren und auf Android Auto verbinden klicken.", central);
+    m_step = new QLabel("Android Auto startet von selbst, sobald ein Handy per USB-Kabel angesteckt wird (Handy entsperren).", central);
 #endif
     m_step->setWordWrap(true);
     m_step->setTextFormat(Qt::PlainText);
@@ -166,7 +161,7 @@ MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
     }
     // `activated` only fires for a choice made by the user, not for SetDisplay.
     connect(m_displayChoice, &QComboBox::activated, this, [this](int index) {
-        if (m_state != State::Idle || index < 0 || index >= static_cast<int>(std::size(kDisplays))) return;
+        if (m_state == State::Connecting || m_state == State::Stopping || index < 0 || index >= static_cast<int>(std::size(kDisplays))) return;
         SetDisplay(kDisplays[index]);
         QSettings(kSettingsOrganization, kSettingsApplication).setValue(kDisplaySetting, Text(DisplayText(m_display)));
         const std::string message = "Displaygroesse " + DisplayText(m_display) + ": gilt ab der naechsten Verbindung";
@@ -174,7 +169,6 @@ MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
         ShowStep(Text(message));
     });
     connect(m_button, &QPushButton::clicked, this, &MainWindow::OnButton);
-    if (m_wirelessButton) connect(m_wirelessButton, &QPushButton::clicked, this, &MainWindow::StartWirelessConnect);
     auto* tickTimer = new QTimer(this);
     connect(tickTimer, &QTimer::timeout, this, &MainWindow::Tick);
     tickTimer->start(33);
@@ -190,14 +184,16 @@ MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
             try { return m_backend.EnumerateDevices(); }
             catch (const std::exception& error) { UsbScanResult result; result.errors.push_back(error.what()); return result; }
         }));
-    } else if (m_mode != TestMode::None) {
+    } else {
         // Scripted runs must not blast the phone's music: they start quiet.
-        m_audioState->SetVolume(5);
+        if (m_mode != TestMode::None) m_audioState->SetVolume(5);
+        // Normal runs start watching for phones at once (after --display has been applied); nobody has to press anything.
         QTimer::singleShot(0, this, &MainWindow::StartConnect);
     }
 }
 MainWindow::~MainWindow()
 {
+    m_isWatchStopRequested = true;
     m_isStopRequested = true;
     // Keep backend and logger alive until the worker has released the USB interface.
     m_watcher.waitForFinished();
@@ -206,10 +202,16 @@ MainWindow::~MainWindow()
 void MainWindow::closeEvent(QCloseEvent* event)
 {
     if (m_state != State::Idle) {
-        // Closing mid-session first lets the session say goodbye to the phone and release
-        // the USB interface; FinishConnect closes the window once that has happened.
+        // Closing first lets a session say goodbye to the phone and release the USB interface, and takes the hotspot
+        // and Bluetooth down; FinishConnect closes the window once that has happened. The watch's flag goes first (see
+        // RunPhoneWatch).
         m_isCloseRequested = true;
-        RequestStop();
+        m_isWatchStopRequested = true;
+        m_isStopRequested = true;
+        if (m_state != State::Stopping) {
+            SetState(State::Stopping);
+            ShowStep("Beende ...");
+        }
         event->ignore();
         return;
     }
@@ -414,15 +416,14 @@ void MainWindow::SetState(State state)
 {
     m_state = state;
     m_button->setEnabled(state != State::Stopping);
-    m_button->setText(state == State::Idle ? "Android Auto verbinden" : state == State::Connecting ? "Verbindung beenden" : "Beende ...");
-    if (m_wirelessButton) m_wirelessButton->setEnabled(state == State::Idle);
+    m_button->setText(state == State::Connecting ? "Verbindung beenden" : state == State::Stopping ? "Beende ..." : "Android Auto verbinden");
     // The phone learns the display size when the connection starts; afterwards it can no longer change.
-    m_displayChoice->setEnabled(state == State::Idle);
+    m_displayChoice->setEnabled(state == State::Idle || state == State::Watching);
 }
 void MainWindow::SetDisplay(const DisplayConfig& display)
 {
-    if (m_state != State::Idle || !IsSupportedDisplay(display)) return;
-    m_display = display;
+    if (m_state == State::Connecting || m_state == State::Stopping || !IsSupportedDisplay(display)) return;
+    { std::lock_guard lock(m_displayMutex); m_display = display; }
     m_console.SetDisplay(display);
     m_video->SetDisplay(display);
     for (MenuPage* page : {static_cast<MenuPage*>(m_homeMenu), static_cast<MenuPage*>(m_music), static_cast<MenuPage*>(m_radio),
@@ -433,8 +434,8 @@ void MainWindow::SetDisplay(const DisplayConfig& display)
 }
 void MainWindow::OnButton()
 {
-    if (m_state == State::Idle) StartConnect();
-    else RequestStop();
+    if (m_state == State::Connecting) RequestStop();
+    else StartConnect();
 }
 void MainWindow::ShowStep(const QString& text)
 {
@@ -468,45 +469,108 @@ void MainWindow::Tick()
         else if (m_mode == TestMode::Keys) RunKeysTest();
     }
 }
-void MainWindow::StartConnect() { BeginConnect(false); }
-void MainWindow::StartWirelessConnect()
+// The button, the Android Auto tile and the projection key. Normally the automatic mode runs already; then this
+// connects the phone on the USB cable once more (after a session, the phone stays plugged in and is not connected again
+// by itself). The scripted test modes connect once over USB and report the result.
+void MainWindow::StartConnect()
 {
-#ifdef HEADUNIT_WIRELESS
-    BeginConnect(true);
-#endif
+    if (m_mode != TestMode::None) { BeginConnect(); return; }
+    if (m_state == State::Idle) BeginWatch();
+    else if (m_state == State::Watching) {
+        m_isUsbRequested = true;
+        ShowStep("Suche ein Handy am USB-Kabel ...");
+    }
 }
-void MainWindow::BeginConnect(bool isWireless)
+// What a connection needs from the window; called on the worker for every connection.
+ProjectionCallbacks MainWindow::MakeCallbacks()
+{
+    ProjectionCallbacks callbacks;
+    { std::lock_guard lock(m_displayMutex); callbacks.display = m_display; }
+    m_logger.Write("INFO", "UI", "Display size for this connection: " + DisplayText(callbacks.display));
+    callbacks.onStatus = [this](const std::string& status) { QMetaObject::invokeMethod(this, [this, status] { ShowStep(Text(status)); }, Qt::QueuedConnection); };
+    callbacks.onFrame = [this](VideoFrame frame) { std::lock_guard lock(m_frameMutex); m_latestFrame = std::move(frame); };
+    callbacks.input = m_input;
+    // The phone's music is watched, so the radio's own player can give way when the phone starts playing.
+    callbacks.openAudio = [opener = m_audio->Opener(), activity = m_phoneMedia](AudioKind kind, const PcmFormat& format) -> std::shared_ptr<IPcmOutput> {
+        auto output = opener(kind, format);
+        if (kind != AudioKind::Media || !output) return output;
+        return std::make_shared<WatchedOutput>(std::move(output), activity);
+    };
+    return callbacks;
+}
+void MainWindow::BeginConnect()
 {
     if (m_state != State::Idle) return;
     m_isStopRequested = false;
+    OnAttemptStart();
+    m_history->clear();
+    SetState(State::Connecting);
+    m_watcher.setFuture(QtConcurrent::run([this] { return ConnectPhoneAutomatically(m_backend, m_logger, m_isStopRequested, MakeCallbacks()); }));
+}
+// The automatic mode: a worker that watches USB and wireless until the window closes (RunPhoneWatch).
+void MainWindow::BeginWatch()
+{
+    if (m_state != State::Idle) return;
+    m_isWatchStopRequested = false;
+    m_isStopRequested = false;
+    m_isUsbRequested = false;
+    m_history->clear();
+    SetState(State::Watching);
+    m_watcher.setFuture(QtConcurrent::run([this]() -> AutoConnectResult {
+        try { return WatchPhones(); }
+        catch (const std::exception& error) {
+            // A future that ends in an exception would take the window down with it.
+            m_logger.Write("ERROR", "WATCH", std::string("Automatic mode failed: ") + error.what());
+            AutoConnectResult result;
+            result.message = std::string("Die automatische Verbindung ist ausgefallen: ") + error.what();
+            return result;
+        }
+    }));
+}
+// The worker of the automatic mode.
+AutoConnectResult MainWindow::WatchPhones()
+{
+    const auto onStatus = [this](const std::string& status) { QMetaObject::invokeMethod(this, [this, status] { ShowStep(Text(status)); }, Qt::QueuedConnection); };
+    // Looks at the bus every second, so it keeps quiet in the log; the connection itself uses the platform's backend.
+    LibusbUsbBackend usb(m_logger, true);
+    PhoneWatchDeps deps;
+    deps.usbPhones = [&usb] { return UsbPhoneIdentities(usb.EnumerateDevices()); };
+    deps.connectUsb = [this] { return ConnectPhoneAutomatically(m_backend, m_logger, m_isStopRequested, MakeCallbacks()); };
+    deps.wait = [this](std::chrono::milliseconds time) {
+        for (auto left = time; left.count() > 0 && !m_isWatchStopRequested; left -= std::chrono::milliseconds(100))
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    };
+    deps.onAttemptStart = [this] { QMetaObject::invokeMethod(this, [this] { OnAttemptStart(); }, Qt::QueuedConnection); };
+    deps.onAttemptEnd = [this](const AutoConnectResult& result) { QMetaObject::invokeMethod(this, [this, result] { OnAttemptEnd(result); }, Qt::QueuedConnection); };
+#ifdef HEADUNIT_WIRELESS
+    // Hidden Wi-Fi and Bluetooth stay up for as long as the watch runs.
+    WirelessStation wireless(m_logger, onStatus);
+    wireless.Start();
+    deps.waitForWirelessPhone = [&wireless](std::chrono::milliseconds timeout) { return wireless.WaitForPhone(timeout); };
+    deps.connectWireless = [this, &wireless](int phone) { return wireless.Serve(phone, m_isStopRequested, MakeCallbacks()); };
+#endif
+    return RunPhoneWatch(deps, m_logger, m_isWatchStopRequested, m_isStopRequested, m_isUsbRequested, onStatus);
+}
+// A connection starts: the picture area waits for the phone.
+void MainWindow::OnAttemptStart()
+{
     m_displayedFrames = 0;
     { std::lock_guard lock(m_frameMutex); m_latestFrame.reset(); }
     m_console.SetProjectionConnected(false);
     ShowScreen();
     m_video->ClearFrame("Verbinde Android Auto ...");
     m_status->clear();
-    m_history->clear();
-    SetState(State::Connecting);
-    m_logger.Write("INFO", "UI", "Display size for this connection: " + DisplayText(m_display));
-    m_watcher.setFuture(QtConcurrent::run([this, display = m_display, isWireless] {
-        ProjectionCallbacks callbacks;
-        callbacks.display = display;
-        callbacks.onStatus = [this](const std::string& status) { QMetaObject::invokeMethod(this, [this, status] { ShowStep(Text(status)); }, Qt::QueuedConnection); };
-        callbacks.onFrame = [this](VideoFrame frame) { std::lock_guard lock(m_frameMutex); m_latestFrame = std::move(frame); };
-        callbacks.input = m_input;
-        // The phone's music is watched, so the radio's own player can give way when the phone starts playing.
-        callbacks.openAudio = [opener = m_audio->Opener(), activity = m_phoneMedia](AudioKind kind, const PcmFormat& format) -> std::shared_ptr<IPcmOutput> {
-            auto output = opener(kind, format);
-            if (kind != AudioKind::Media || !output) return output;
-            return std::make_shared<WatchedOutput>(std::move(output), activity);
-        };
-#ifdef HEADUNIT_WIRELESS
-        if (isWireless) return ConnectWirelessAndroidAuto(m_logger, m_isStopRequested, std::move(callbacks));
-#else
-        (void)isWireless;
-#endif
-        return ConnectPhoneAutomatically(m_backend, m_logger, m_isStopRequested, std::move(callbacks));
-    }));
+    if (m_state == State::Watching) SetState(State::Connecting);
+}
+// A connection of the automatic mode has ended; the mode itself goes on and the radio's pages come back.
+void MainWindow::OnAttemptEnd(const AutoConnectResult& result)
+{
+    m_console.SetProjectionConnected(false);
+    { std::lock_guard lock(m_frameMutex); m_latestFrame.reset(); }
+    m_video->ClearFrame(result.hasVideo || result.isStoppedByUser ? "Android Auto beendet." : "Android Auto ist nicht verbunden.");
+    m_status->setText("Android Auto: nicht verbunden");
+    ShowScreen();
+    if (!m_isCloseRequested && (m_state == State::Connecting || m_state == State::Stopping)) SetState(State::Watching);
 }
 void MainWindow::RequestStop()
 {
