@@ -31,6 +31,9 @@ public:
     virtual void Write(std::span<const std::uint8_t> pcm) = 0;
     // Drops what is queued (the stream stopped).
     virtual void Flush() = 0;
+    // Bytes written but not yet handed to the sound device. A source faster than real time (a file decoder)
+    // waits while this is high instead of overrunning the queue.
+    virtual std::size_t Queued() const = 0;
 };
 using AudioOpener = std::function<std::shared_ptr<IPcmOutput>(AudioKind, const PcmFormat&)>;
 

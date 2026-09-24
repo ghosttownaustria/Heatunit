@@ -24,8 +24,8 @@ schliessen): Das Handy bekommt ein Goodbye, dann wird die USB-Schnittstelle frei
 **Displaygroesse.** Solange keine Verbindung besteht, laesst sich neben dem Verbinden-Knopf die Displaygroesse
 waehlen: 800 x 480, 1280 x 720 (HD), 1600 x 600 (Ultrawide) oder 1920 x 1080 (Full HD). Das Handy erfaehrt sie
 beim Verbinden (Video-Aufloesung, Touchflaeche und passende Bilddichte), darum ist die Auswahl waehrend einer
-Verbindung gesperrt. Die Wahl wird gemerkt (Windows-Benutzer, Registry `HKCU\Software\HeadUnit`); das leere
-Bildfeld zeigt schon vor dem Verbinden die Form des gewaehlten Displays.
+Verbindung gesperrt. Die Wahl wird gemerkt (Windows-Benutzer, Registry `HKCU\Software\HeadUnit`); das
+Startmenue im Bildfeld zeigt schon vor dem Verbinden die Form des gewaehlten Displays.
 Android Auto kennt nur feste Video-Aufloesungen. Ein Display anderer Form, wie 1600 x 600, wird in das
 naechstgroessere Bild eingepasst: Das Handy bekommt 1920 x 1080 mit 360 Pixel Rand (oben und unten je 180),
 zeichnet seine Oberflaeche nur in den mittleren 1920 x 720 grossen Streifen (Bilddichte 240 dpi) und die App
@@ -48,19 +48,61 @@ einer Groesse, ohne sie zu merken (auch fuer die `--test-...`-Laeufe, die sonst 
   leuchtet auf. Ein Klick, der auf einem anderen Bereich endet als er begann, zaehlt nicht.
 - **Tasten** (angelehnt an ein BMW-iDrive-Multimedia-Bedienteil): Media, Tel, Nav und Map rufen die
   entsprechende App auf dem Handy auf (Map und Nav oeffnen beide die Navigation), Back ist die
-  Zurueck-Taste des Handys, Option sendet dessen Menue-Taste. Radio und Menu haben noch keine Belegung,
-  weil es kein eigenes Betriebssystem gibt: sie schreiben nur eine Zeile ins Fenster-Log.
+  Zurueck-Taste des Handys, Option sendet dessen Menue-Taste. Menu holt das Startmenue des Radios nach vorn,
+  Radio den Radioempfang (siehe unten). Ohne verbundenes Handy oeffnet Media den Musikordner des Radios.
+- **Startmenue des Radios:** Die Uhr und eine Reihe Kacheln (Android Auto, Multimedia, Radio, Telephone,
+  Navigation, Vehicle, Settings) nach der Vorlage [docs/design/home-menu.svg](docs/design/home-menu.svg), an der
+  Stelle des Handybilds und in der Form des gewaehlten Displays. Ohne verbundenes Handy ist es immer zu sehen,
+  waehrend des Verbindens auch; das Handybild kommt nach vorn, sobald es da ist.
+  - **Drehen** am Regler waehlt eine Kachel (sie leuchtet orange). Die gewaehlte Kachel steht in der Mitte, nur
+    am Anfang und Ende der Reihe nicht. Wo es weitergeht, zeigt der Rand einen orangen Pfeil; der Balken unten
+    zeigt, welcher Teil der Reihe gerade zu sehen ist.
+  - **Pfeil links/rechts** verschiebt die gewaehlte Kachel in der Reihenfolge um einen Platz (wird gemerkt).
+  - **Druecken** oder ein Klick oeffnet die Kachel: Android Auto verbindet bzw. holt das Handy nach vorn (wie
+    das Handy-Symbol), Multimedia, Radio und Settings oeffnen die Seiten des Radios, Telephone und Navigation
+    wirken wie die Tasten Tel und Nav; Vehicle hat noch keine Funktion. Ein Klick auf einen Randpfeil geht eine
+    Kachel weiter, das Mausrad ueber dem Menue dreht.
+- **Settings:** Alle Kacheln in ihrer Reihenfolge mit Haekchen. Drehen waehlt, Druecken blendet die Kachel ein
+  oder aus (Settings bleibt immer), Pfeil hoch/runter verschiebt sie in der Reihenfolge. Wird gemerkt.
+- **Multimedia (Musikordner):** Spielt Musik aus dem Ordner `HeadUnit` im Musikordner des Benutzers (Windows:
+  `C:\Users\<Name>\Music\HeadUnit`, Linux: meist `~/Music/HeadUnit` oder `~/Musik/HeadUnit`; wird beim Start angelegt, mit
+  `HEADUNIT_MUSIC_DIR` laesst sich ein anderer Ordner waehlen). Einfach Dateien hineinkopieren, gern in
+  Unterordnern (Alben): MP3, FLAC, M4A/AAC, OGG, OPUS, WAV, WMA, AIFF. Die Seite zeigt links die orange
+  leuchtende Kachel, rechts Titel, Interpret (aus den Tags), Fortschritt, die Knoepfe Zurueck/Play-Pause/Weiter
+  und die Titelliste; oben **Open folder** (oeffnet den Ordner im Explorer) und **Rescan** (liest ihn neu ein,
+  passiert auch bei jedem Oeffnen der Seite). Am Ende eines Titels geht es mit dem naechsten weiter.
+- **Radio (Internetradio):** Die Sender eines Landes aus dem freien Senderverzeichnis
+  [radio-browser.info](https://www.radio-browser.info) (die 500 meistgehoerten, alphabetisch sortiert), gespielt als
+  Internet-Stream.
+  Oben **Country** oeffnet die Laenderliste; voreingestellt ist das Land der Windows-Region, Land und zuletzt
+  gehoerter Sender werden gemerkt. Waehrend ein Sender laeuft, steht darunter, was er gerade spielt (Titel aus
+  dem Stream), dazu **LIVE**. Zurueck/Weiter wechseln den Sender, der mittlere Knopf startet und stoppt.
+  DAB+ selbst braucht einen Empfaenger (z. B. einen RTL-SDR-USB-Stick); ohne ihn laeuft dasselbe Programm der
+  Sender ueber ihren Internet-Stream. Dafuer braucht der Rechner Internet.
+- **Bedienung der Seiten:** Drehen und Pfeile machen verschiedene Dinge. **Drehen** bewegt die Auswahl innerhalb
+  eines Bereichs (durch die Liste, entlang der Knopfreihe). **Pfeil hoch/runter** springt zwischen den Bereichen
+  (Liste, Knoepfe Zurueck/Play/Weiter, Knoepfe oben), egal wo in der Liste man steht. **Pfeil links/rechts**
+  springt zum vorigen/naechsten Titel bzw. Sender, die Auswahl bleibt stehen. Druecken des Reglers loest aus, ein
+  Mausklick auch; das Mausrad ueber der Seite blaettert in der Liste. Back und Home fuehren zurueck zum
+  Startmenue (Back schliesst vorher die Laenderliste). Solange eine Seite des Radios vorn ist, gehen Regler und
+  Pfeile nicht ans Handy.
+- **Eigene Wiedergabe und Handy:** Musik und Radio laufen ueber denselben Tonausgang wie das Handy (Lautstaerke,
+  Stumm und die MEDIEN-Anzeige gelten auch dafuer). Titel- und Play-Tasten (auch Leertaste, Bild hoch/runter)
+  steuern die eigene Wiedergabe, solange sie laeuft oder pausiert, sonst das Handy. Es spielt immer nur eine
+  Quelle, die zuletzt gestartete: Startet die eigene Wiedergabe, bekommt das Handy Pause; faengt das Handy an zu
+  spielen (z. B. beim Verbinden von Android Auto), pausiert die eigene Musik bzw. stoppt das Radio.
 - **Home** hat zwei Stufen, solange ein Handy uebertragen wird: Beim ersten Druck wechselt das Handy auf
   seinen Startbildschirm (Karte, Medien, Telefon-Karten, z. B. Maps und Spotify). Der zweite Druck
-  oeffnet das Home-Menue des Radios (nur ein Log-Eintrag), der dritte geht zurueck zum Handy-Startbildschirm.
-  Ohne verbundenes Handy meldet Home nur das Radio-Menue. Ob das Handy gerade auf seinem Startbildschirm
-  ist, liest die App am Symbol unten links im Bild ab.
+  zeigt das Startmenue des Radios, der dritte geht zurueck zum Handy-Startbildschirm.
+  Ohne verbundenes Handy, oder auf einer Seite des Radios, zeigt Home das Startmenue. Ob das Handy gerade auf
+  seinem Startbildschirm ist, liest die App am Symbol unten links im Bild ab.
 - Das **Handy-Symbol** (CarPlay / Android Auto) startet die Verbindung, wenn noch keine besteht, sonst holt die
   Taste das Handy in den Vordergrund.
 - **Audio-Anzeige:** Lautstaerke (30 Stufen), Stumm und je ein Pegel fuer Medien, Navigation und
   System. Die Anzeige zeigt, welche Tonspur des Handys gerade Audio liefert. Lautstaerke und Stumm
   wirken in der App (der Windows-Regler bleibt unberuehrt); mehr Lautstaerke schaltet Stumm aus.
-- **Tastatur:** Pfeile, Enter (Regler druecken), Esc/Rueck (Back), Pos1 (Home), F1 Menu, F2 Option,
+- **Tastatur:** Pfeile (die Pfeile des Reglers), Komma/Punkt (Regler drehen), Enter (Regler druecken), Esc/Rueck
+  (Back), Pos1 (Home), F1 Menu, F2 Option,
   F3 Media, F4 Radio, F5 Tel, F6 Nav, F7 Map, F8 CarPlay / Android Auto, Leertaste (Play/Pause),
   Bild hoch/runter (Titel), +/- (Lautstaerke), M (Stumm).
 Der Ton laeuft ueber das Standard-Ausgabegeraet von Windows (WASAPI, andere Programme behalten
@@ -155,7 +197,7 @@ Kurzfassung (Debian, Ubuntu, Raspberry Pi OS; Pakete, Erste Inbetriebnahme und F
 
 ```sh
 sudo apt install build-essential cmake ninja-build pkg-config qt6-base-dev libboost-dev libssl-dev \
-    libprotobuf-dev protobuf-compiler libusb-1.0-0-dev libavcodec-dev libavutil-dev libswscale-dev
+    libprotobuf-dev protobuf-compiler libusb-1.0-0-dev libavcodec-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev
 cd HeadUnit
 cmake --preset linux-debug && cmake --build --preset linux-debug && ctest --preset linux-debug
 bash scripts/install-udev-rules.sh     # einmalig: Zugriff aufs Handy ohne root, danach Handy neu stecken

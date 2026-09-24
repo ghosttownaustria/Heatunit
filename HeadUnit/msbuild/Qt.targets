@@ -5,11 +5,14 @@
   </Target>
   <Target Name="DeployQtRuntime" AfterTargets="Build">
     <ItemGroup>
-      <QtRuntime Include="$(QtRoot)\bin\Qt6Core$(QtSuffix).dll;$(QtRoot)\bin\Qt6Gui$(QtSuffix).dll;$(QtRoot)\bin\Qt6Widgets$(QtSuffix).dll;$(QtRoot)\bin\Qt6Concurrent$(QtSuffix).dll" />
+      <QtRuntime Include="$(QtRoot)\bin\Qt6Core$(QtSuffix).dll;$(QtRoot)\bin\Qt6Gui$(QtSuffix).dll;$(QtRoot)\bin\Qt6Widgets$(QtSuffix).dll;$(QtRoot)\bin\Qt6Concurrent$(QtSuffix).dll;$(QtRoot)\bin\Qt6Network$(QtSuffix).dll" />
       <QtPlatform Include="$(QtRoot)\plugins\platforms\qwindows$(QtSuffix).dll" />
+      <!-- https for the radio station directory: Windows' own TLS (Schannel). -->
+      <QtTls Include="$(QtRoot)\plugins\tls\qschannelbackend$(QtSuffix).dll" />
     </ItemGroup>
     <Copy SourceFiles="@(QtRuntime)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
     <Copy SourceFiles="@(QtPlatform)" DestinationFolder="$(OutDir)platforms" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(QtTls)" DestinationFolder="$(OutDir)tls" SkipUnchangedFiles="true" />
     <WriteLinesToFile File="$(OutDir)qt.conf" Lines="[Paths];Plugins=." Overwrite="true" WriteOnlyWhenDifferent="true" />
   </Target>
 </Project>

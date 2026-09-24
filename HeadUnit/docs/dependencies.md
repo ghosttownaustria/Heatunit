@@ -19,11 +19,12 @@ the first-run checks are in [linux.md](linux.md). What the CMake build needs on 
 | Dependency | How it is found | Notes |
 | --- | --- | --- |
 | C++20 compiler, CMake 3.24+, Ninja | system | GCC 11+ (needs `<chrono>` calendar types, `std::span`) |
-| Qt 6.4+ Widgets, Concurrent | `find_package(Qt6 6.4 ...)` | Windows uses 6.8.3; the UI sources were compile-checked against the 6.4.3 headers (Ubuntu 22.04/24.04 and Debian 12 ship 6.2/6.4), not linked or run with them |
+| Qt 6.4+ Widgets, Concurrent, Network | `find_package(Qt6 6.4 ...)` | Windows uses 6.8.3; the UI sources were compile-checked against the 6.4.3 headers (Ubuntu 22.04/24.04 and Debian 12 ship 6.2/6.4), not linked or run with them |
 | Boost 1.74+ (Asio, Endian: headers only) | `find_package(Boost)`, target `Boost::headers` | |
 | OpenSSL 3, protobuf + protoc | `find_package(OpenSSL)`, `find_package(Protobuf)` | protoc generates the AASDK sources at build time |
 | libusb 1.0.16+ | pkg-config `libusb-1.0` | Windows uses the vendored 1.0.30 DLL |
 | FFmpeg libavcodec, libavutil, libswscale (H.264 decoder) | pkg-config | |
+| FFmpeg libavformat, libswresample (the radio's own player: music files, internet radio over http/https) | pkg-config | Windows: vcpkg features `avformat`, `swresample`; https through Schannel |
 | miniaudio 0.11.25 | vendored header `third_party/miniaudio` | Loads libpulse/libasound at run time; no development package needed |
 
 The same CMake files build on Windows against the vcpkg tree (`HEADUNIT_DEPS`, default `../.tools/vcpkg/installed/x64-windows`

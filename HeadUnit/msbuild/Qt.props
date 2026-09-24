@@ -8,12 +8,12 @@
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(QtRoot)\include;$(QtRoot)\include\QtCore;$(QtRoot)\include\QtGui;$(QtRoot)\include\QtWidgets;$(QtRoot)\include\QtConcurrent;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>QT_CORE_LIB;QT_GUI_LIB;QT_WIDGETS_LIB;QT_CONCURRENT_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(QtRoot)\include;$(QtRoot)\include\QtCore;$(QtRoot)\include\QtGui;$(QtRoot)\include\QtWidgets;$(QtRoot)\include\QtConcurrent;$(QtRoot)\include\QtNetwork;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>QT_CORE_LIB;QT_GUI_LIB;QT_WIDGETS_LIB;QT_CONCURRENT_LIB;QT_NETWORK_LIB;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories>$(QtRoot)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>Qt6Core$(QtSuffix).lib;Qt6Gui$(QtSuffix).lib;Qt6Widgets$(QtSuffix).lib;Qt6Concurrent$(QtSuffix).lib;setupapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>Qt6Core$(QtSuffix).lib;Qt6Gui$(QtSuffix).lib;Qt6Widgets$(QtSuffix).lib;Qt6Concurrent$(QtSuffix).lib;Qt6Network$(QtSuffix).lib;setupapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">

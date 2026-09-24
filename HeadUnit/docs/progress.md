@@ -1,5 +1,101 @@
 # Progress
 
+## 2026-09-24 (night): home menu navigation, settings, one sound at a time
+
+From the user's list and the design `AA.svg` (now `docs/design/home-menu.svg`):
+
+- **Bar at the bottom** (position in the menu): the whole row dark, the part in view light, as in the design.
+- **Edge arrows:** where more tiles follow, the tiles fade into a black strip with a line and an orange arrow (from the
+  design); a click on it moves the focus that way.
+- **Focused tile in the middle**, except near the ends of the row (then the row stops at its end).
+- **Moving tiles:** left/right on the home menu move the focused tile along the row; turning moves the focus. The
+  order is remembered (`QSettings` `home/tiles`).
+- **Settings tile** opens a page with every tile and a tick box: push shows/hides (Settings cannot be hidden),
+  up/down move the tile in the order. New tile **Android Auto** (symbol from the design): connects, or brings the
+  phone to the front.
+- **One sound at a time:** before, the radio kept playing when Android Auto connected and the phone started its
+  music. Now the source started last wins: the phone's media output is watched, and when the phone starts playing
+  after the radio's player, the music pauses / the radio stops; starting or resuming the radio's player pauses the
+  phone as before.
+- **Turning and arrows are separate:** on the player pages turning moves within the list or the row of buttons, up/down
+  jump between list, controls and top buttons (the up arrow in the station list goes straight to the buttons), left/right
+  skip to the previous/next title or station. Keyboard: comma/period turn the knob.
+- **Tests:** CoreTests cover the new layout (centring on every display and tile count, focused tile never under an
+  edge, edges, the bar against the design's numbers, hits), the tile setup (show/hide, Settings fixed, moving on the
+  menu and in the settings, text form and repair of damaged text), the audio rule (starts after gaps, who takes over,
+  the watched output), the new page focus rules and the settings page in the console.
+- **Verified on this Windows machine:** build without warnings from own sources, CoreTests pass; the real window at
+  1600x600: arrows and bar, the focused tile centred (also with three quick turns), Telephone moved right and back,
+  the settings page hiding Vehicle and moving it, the menu without it, restored afterwards; on the tuner the up arrow
+  jumps from a station to the play button and left plays the previous station (an AAC stream). **Not verified:** the
+  phone taking over the sound (needs a phone; covered by unit tests only). In one run a screenshot showed the focused
+  tile not yet centred; two repeats did not show it again.
+
+## 2026-09-24 (later): music folder and internet radio
+
+- **Multimedia page:** plays the music folder (`HeadUnit` in the user's music folder, or `HEADUNIT_MUSIC_DIR`; created
+  at start), sub folders included, in natural order; title and artist from the tags, progress, previous/play-pause/next,
+  the list of titles, "Open folder" and "Rescan"; the next title follows at the end. Formats: whatever FFmpeg decodes
+  (MP3, FLAC, M4A/AAC, OGG, OPUS, WAV, WMA, AIFF are recognised as music files).
+- **Radio page:** internet radio from radio-browser.info, by country (list of all countries, default from the system's
+  region, remembered with the last station), the 500 most listened stations in alphabetical order, "now playing" from the stream's ICY title,
+  LIVE mark, previous/next station, play/stop. The user asked for DAB+: a real DAB+ broadcast needs a tuner (there is
+  no DAB+ web API that delivers the broadcast), so the stations' internet streams are played; a tuner such as an
+  RTL-SDR stick with `welle-cli` could be added later as another source of stream URLs.
+- **One look:** both pages are built from the home menu's design (`MenuStyle`: its tiles, font, frames; the focus
+  marked with the frame and orange corner stripes) on a common `MenuPage` (screen shape, clock, design units).
+- **Controls:** Menu gives the home menu, Radio the tuner, Media without a phone the music player; Home and Back on the
+  pages go to the home menu, Back first closes the country list. The knob works the page in front; the media keys work
+  the radio's own player while it plays or is paused. The phone gets MediaPause when the radio's player starts.
+- **Audio:** `media/AudioPlayer` (FFmpeg avformat/avcodec/swresample) on its own worker thread, into the same audio
+  engine as the phone (volume, mute and the MEDIEN meter apply). `IPcmOutput::Queued()` was added to both engines so a
+  file decoder can pace itself.
+- **Dependencies:** FFmpeg now also needs avformat and swresample (vcpkg features in `Prepare-Dependencies.ps1`, which
+  passes `--recurse` so an existing tree is rebuilt, about 17 minutes here; Linux packages `libavformat-dev`,
+  `libswresample-dev` in the docs, `BuildAndRun.sh` and the CI), Qt also Network (+ the Schannel TLS plugin, deployed by
+  `Qt.targets`).
+- **Tests:** CoreTests cover the console's new pages (Media without a phone, Radio, Home/Back from a page, Media with a
+  phone from the music player), what each tile opens, the pages' focus rules and list scrolling, reading a real
+  temporary music folder (order, sub folders, non-ASCII names, a missing folder), ICY titles (apostrophes, Latin-1) and
+  play time texts. `--test-console` now expects Radio to show the tuner.
+- **Verified on this Windows machine:** MSBuild Debug x64, no warnings from own sources (FFmpeg 9's `common.h` and
+  AASDK headers warn in every file that includes them); CoreTests and ProtocolTests pass; the real window driven by
+  posted keys, muted (the MEDIEN meter still shows the audio): three generated WAV files (48 kHz stereo, 44.1 kHz mono,
+  22.05 kHz stereo in a sub folder) play one after the other, the play/pause key pauses and resumes (checked five times
+  in a row, log lines for each), the tuner loads the German stations, plays https MP3 streams (MANGORADIO,
+  Deutschlandfunk) with their stream titles, opens the country list (the current country in the middle), Back returns to
+  the country button, stop works; at 1600x600 and 800x480. **Not verified:** real music files (MP3/FLAC/M4A with
+  tags), audible output (the tests ran muted), with a phone connected (MediaPause to the phone, the pages while
+  projected), and on Linux (not built there). In two early automated runs a posted key press seemed not to arrive; it
+  did not happen again in five runs with a key trace.
+
+## 2026-09-24: first home menu of the radio
+
+- **Look** from the user's design (`docs/design/home-menu.svg`, 1600x600): black screen, clock at the top left, a row
+  of six framed tiles (Multimedia, Radio, Telephone, Navigation, Vehicle, Settings) with diagonal stripes and a symbol.
+  The orange tile of the design is read as the focus: the focused tile's stripes and symbol are orange, the others
+  grey. `HomeMenu` draws the design's outlines and gradients itself (SVG path data parsed into `QPainterPath`s, no
+  QtSvg), scaled to the display's height; other shapes show more or less of the row (800x480 and 16:9: three tiles and
+  a bit), and the row slides to keep the focused tile in view.
+- **Where it shows:** in place of the phone's picture (`QStackedWidget`) whenever the console is on the radio's side:
+  always without a phone (so also at start and while connecting; the phone's picture comes to the front with its first
+  frame), after the second Home, after Menu and Radio. It replaces the empty "not connected" screen.
+- **Operation:** turning the knob or the left/right arrows move the focus, pushing the knob (Enter) or clicking a tile
+  opens it. Multimedia, Telephone, Navigation and Radio act like the keys Media, Tel, Nav and Radio; Vehicle and
+  Settings have no function yet and only log. While the menu is in front, knob and arrows no longer reach the phone
+  (up/down do nothing); track and play keys still do. Messages: "Home: Radio-Startmenue" and "Menue:
+  Radio-Startmenue" lost their "keine Funktion" remark, Radio now says it shows the menu.
+- **Tests:** CoreTests cover the portable layout (`ui/HomeMenuLayout.h`): tiles and their keys, widths per display,
+  scrolling on 1600x600 (as in the design: nothing scrolls up to Vehicle, Settings scrolls by 200) and 800x480, every
+  focused tile fully in view on every display, hit testing, focus limits. `--test-console` additionally checks that the
+  second Home shows the menu and Media brings back the picture, and saves `console-3-home-menu.png` (whole window).
+- **Verified on this Windows machine:** MSBuild Debug x64 without warnings from own sources, CoreTests and
+  ProtocolTests pass, `--smoke-test` window pictures at 1600x600, 800x480 and 1920x1080, and the real window driven by
+  posted key and mouse messages (right x4 lights Vehicle, right again scrolls to Settings, Enter on Settings logs, Enter
+  on Multimedia reports "nicht verbunden", a click on Radio focuses and opens it).
+  **Not verified:** with a phone connected (switching between picture and menu, knob routing while projected,
+  `--test-console`), and on Linux (not built there).
+
 ## 2026-09-21: one code base for Windows and Linux
 
 Goal: the same C++ sources build and run reliably on Windows and Linux, not two projects. The survey showed that

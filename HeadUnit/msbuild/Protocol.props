@@ -18,7 +18,7 @@
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories>$(ProtocolLibRoot);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>$(ProtocolProtobufLib);abseil_dll.lib;utf8_validity.lib;libssl.lib;libcrypto.lib;avcodec.lib;avutil.lib;swscale.lib;ws2_32.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(ProtocolProtobufLib);abseil_dll.lib;utf8_validity.lib;libssl.lib;libcrypto.lib;avcodec.lib;avformat.lib;avutil.lib;swresample.lib;swscale.lib;ws2_32.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <Target Name="CheckProtocolDependencies" BeforeTargets="PrepareForBuild">
