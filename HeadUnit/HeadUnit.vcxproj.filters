@@ -33,6 +33,9 @@
     <ClInclude Include="src\ui\MenuPage.h"><Filter>src\ui</Filter></ClInclude>
     <ClCompile Include="src\ui\MediaPages.cpp"><Filter>src\ui</Filter></ClCompile>
     <ClInclude Include="src\ui\MediaPages.h"><Filter>src\ui</Filter></ClInclude>
+    <ClCompile Include="src\ui\SettingsPage.cpp"><Filter>src\ui</Filter></ClCompile>
+    <ClInclude Include="src\ui\SettingsPage.h"><Filter>src\ui</Filter></ClInclude>
+    <ClInclude Include="src\audio\AudioFocus.h"><Filter>src\audio</Filter></ClInclude>
     <ClCompile Include="src\radio\RadioBrowser.cpp"><Filter>src\radio</Filter></ClCompile>
     <ClInclude Include="src\radio\RadioBrowser.h"><Filter>src\radio</Filter></ClInclude>
     <ClCompile Include="src\media\AudioPlayer.cpp"><Filter>src\media</Filter></ClCompile>

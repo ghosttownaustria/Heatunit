@@ -1,5 +1,36 @@
 # Progress
 
+## 2026-09-24 (night): home menu navigation, settings, one sound at a time
+
+From the user's list and the design `AA.svg` (now `docs/design/home-menu.svg`):
+
+- **Bar at the bottom** (position in the menu): the whole row dark, the part in view light, as in the design.
+- **Edge arrows:** where more tiles follow, the tiles fade into a black strip with a line and an orange arrow (from the
+  design); a click on it moves the focus that way.
+- **Focused tile in the middle**, except near the ends of the row (then the row stops at its end).
+- **Moving tiles:** left/right on the home menu move the focused tile along the row; turning moves the focus. The
+  order is remembered (`QSettings` `home/tiles`).
+- **Settings tile** opens a page with every tile and a tick box: push shows/hides (Settings cannot be hidden),
+  up/down move the tile in the order. New tile **Android Auto** (symbol from the design): connects, or brings the
+  phone to the front.
+- **One sound at a time:** before, the radio kept playing when Android Auto connected and the phone started its
+  music. Now the source started last wins: the phone's media output is watched, and when the phone starts playing
+  after the radio's player, the music pauses / the radio stops; starting or resuming the radio's player pauses the
+  phone as before.
+- **Turning and arrows are separate:** on the player pages turning moves within the list or the row of buttons, up/down
+  jump between list, controls and top buttons (the up arrow in the station list goes straight to the buttons), left/right
+  skip to the previous/next title or station. Keyboard: comma/period turn the knob.
+- **Tests:** CoreTests cover the new layout (centring on every display and tile count, focused tile never under an
+  edge, edges, the bar against the design's numbers, hits), the tile setup (show/hide, Settings fixed, moving on the
+  menu and in the settings, text form and repair of damaged text), the audio rule (starts after gaps, who takes over,
+  the watched output), the new page focus rules and the settings page in the console.
+- **Verified on this Windows machine:** build without warnings from own sources, CoreTests pass; the real window at
+  1600x600: arrows and bar, the focused tile centred (also with three quick turns), Telephone moved right and back,
+  the settings page hiding Vehicle and moving it, the menu without it, restored afterwards; on the tuner the up arrow
+  jumps from a station to the play button and left plays the previous station (an AAC stream). **Not verified:** the
+  phone taking over the sound (needs a phone; covered by unit tests only). In one run a screenshot showed the focused
+  tile not yet centred; two repeats did not show it again.
+
 ## 2026-09-24 (later): music folder and internet radio
 
 - **Multimedia page:** plays the music folder (`HeadUnit` in the user's music folder, or `HEADUNIT_MUSIC_DIR`; created

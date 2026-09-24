@@ -178,15 +178,25 @@ these (before the first frame, while connecting, after the session). The decoded
 give the home menu, Radio the tuner, Media without a phone the music player; Home and Back on a player page lead to the
 home menu (Back first goes to the page, which may close something it opened, the tuner's country list).
 
-- `HomeMenu`: the row of tiles (Multimedia, Radio, Telephone, Navigation, Vehicle, Settings; the focused one orange),
-  sliding with a short `QVariantAnimation`. The portable `ui/HomeMenuLayout.h` (CoreTests) has the tile positions, the
-  scroll that keeps the focused tile in view with the least movement, hit testing and what a tile opens (`HomeMenuPage`:
-  Multimedia and Radio; `HomeMenuKey`: Telephone Tel, Navigation Nav; Vehicle and Settings only log).
+- `HomeMenu`: the row of tiles the user chose (Android Auto, Multimedia, Radio, Telephone, Navigation, Vehicle,
+  Settings; the focused one orange), sliding with a short `QVariantAnimation`; an edge beyond which more tiles follow
+  is a black strip with a fade, a line and an orange arrow; the bar at the bottom shows which part of the row is in
+  view. Turning moves the focus, left/right move the focused tile along the row (`onShift`, the window stores the
+  order), the wheel turns, a click on an edge arrow moves the focus. The portable `ui/HomeMenuLayout.h` (CoreTests) has
+  the tile positions, the scroll that keeps the focused tile in the middle (clamped at both ends of the row), the edges
+  and the bar, hit testing, what a tile opens (`HomeMenuPage`: Multimedia, Radio, Settings; `HomeMenuKey`: Android
+  Auto Projection, Telephone Tel, Navigation Nav; Vehicle only logs) and `HomeTileSetup`: every tile once in the
+  user's order, shown or hidden (Settings always shown), `MoveTile` (on the menu past the next shown tile, in the
+  settings list past the direct neighbour) and a text form kept in `QSettings` (`home/tiles`, e.g.
+  `AndroidAuto,Radio,-Vehicle,...`; damaged or older texts are repaired, new tiles appended).
+- `SettingsPage`: every tile with a tick box in the menu's order; turning chooses, pushing shows or hides, up/down move
+  the tile along the order.
 - `PlayerPage` (`ui/MediaPages`): the page's tile at the left (orange while its source sounds), what plays now, the
   controls previous/play/next, a list of five rows and buttons at the top right. The focus moves through them by the
-  portable `PageFocus` rules in `HomeMenuLayout.h` (turning within a part, up/down through the list and from part to
-  part, left/right along a row of buttons; tested) and the list scrolls by `ListFirstRow`. The page polls the player four
-  times a second.
+  portable `PageFocus` rules in `HomeMenuLayout.h` (tested): turning moves within a part (list rows, a row of buttons),
+  up/down jump between the parts from wherever the focus is, left/right never move the focus but skip to the previous
+  or next title or station (not while the country list is open); the list scrolls by `ListFirstRow`. The page polls
+  the player four times a second.
 - `MultimediaPage`: the music folder (`HEADUNIT_MUSIC_DIR`, else `HeadUnit` in `QStandardPaths::MusicLocation`, created
   when missing), read in the background by the portable `media/MusicLibrary.h` (`std::filesystem`, recursive, natural
   order, the folder first, then each sub folder; tested with a real temporary folder), again whenever the page is shown.
@@ -203,7 +213,8 @@ Knob routing: while a page is in front, `MainWindow::SendKey` gives the controll
 (`PressLocally`); the media keys (play/pause, track skip, from the panel or the keyboard) go to the radio's own player
 while it plays or is paused (the page that started it handles them), otherwise to the phone. A key's release always goes
 where its press went (`m_localKeys`), so neither side sees half a key press; held arrows keep nudging the side that took
-the press. Turning goes to the page instead of the phone.
+the press. Turning goes to the page instead of the phone (keyboard: comma and period turn, the arrow keys are the
+controller's arrows).
 
 The radio's own player: `media/AudioPlayer` decodes a file path or an http(s) URL with FFmpeg (avformat for the
 container and the network, including ICY "now playing" titles read from the http context, avcodec, swresample to 48 kHz
@@ -214,5 +225,11 @@ thread. The output is paced by `IPcmOutput::Queued()` (new): at most 250 ms deco
 plays in real time and pause and stop answer at once. Status (state, tags, stream title, position, duration, error)
 carries a generation that counts `Play` calls: a page owns the player while the generation is the one its own `Play`
 got, and a finished run cannot overwrite a newer one's status. Streams use FFmpeg's reconnect options and a 15 s
-read timeout; a live stream that ends or drops is reported, not retried. When the radio's player starts while a phone
-is projected, the phone gets `MediaPause`.
+read timeout; a live stream that ends or drops is reported, not retried.
+
+One sound at a time (`audio/AudioFocus.h`, tested): the source started last keeps the media sound. When the radio's
+player starts or resumes, the window notes the time and sends the phone `MediaPause`. The phone's media output is
+wrapped in a `WatchedOutput` (the opener handed to the session), which tells a `MediaActivity` about every block: audio
+after a gap of more than 500 ms counts as a new start. `MainWindow::Tick` asks `IsPhoneTakingOver`: when the phone
+plays and started after the radio's player, the pages give way (`GiveWay`: the music pauses, the radio stops). The
+phone's music that runs out after its pause key started earlier and does not count.

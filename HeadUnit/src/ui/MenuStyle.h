@@ -32,6 +32,8 @@ enum class Symbol { Previous, Play, Pause, Stop, Next };
 // A framed button like a small tile. `isOn` draws the symbol in orange (the player is playing).
 void DrawButton(QPainter& painter, const QRectF& box, Symbol symbol, bool isFocused, bool isOn = false);
 void DrawTextButton(QPainter& painter, const QRectF& box, const QString& text, bool isFocused);
+// A tick box; on: filled with the lit orange and ticked.
+void DrawCheck(QPainter& painter, const QRectF& box, bool isOn);
 // One row of a list: text at the left, a dim note at the right. The current row (what plays) has its text in orange.
 void DrawRow(QPainter& painter, const QRectF& row, const QString& text, const QString& note, bool isFocused, bool isCurrent);
 }

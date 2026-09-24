@@ -3,6 +3,7 @@
 #include "androidauto/DisplayConfig.h"
 #include "androidauto/ProjectionInput.h"
 #include "audio/AudioEngine.h"
+#include "audio/AudioFocus.h"
 #include "audio/AudioTypes.h"
 #include "media/AudioPlayer.h"
 #include "ui/HomeMenuLayout.h"
@@ -31,15 +32,16 @@ class HomeMenu;
 class MenuPage;
 class MultimediaPage;
 class RadioPage;
+class SettingsPage;
 class VideoWidget;
 
 // One button connects (finding the phone, repairing the driver, starting Android Auto, restarting the
 // USB link when needed) and, while running, ends the session again. Next to the picture sits the
 // simulated centre console: rotary knob, hard keys and the audio display. The picture itself takes
 // mouse input as touch. In its place the radio's own pages are shown whenever the console is on the
-// radio's side (always while no phone is projected): the home menu, the music player and the tuner; the
-// knob then works the page instead of the phone. The radio's own player plays through the same audio
-// output as the phone.
+// radio's side (always while no phone is projected): the home menu, the music player, the tuner and the
+// settings; the knob then works the page instead of the phone. The radio's own player plays through the
+// same audio output as the phone, and only one of them sounds at a time: the one started last.
 // The display size (video resolution) is chosen next to the button and only while nothing is connected:
 // the phone is told the size once, when the connection starts.
 class MainWindow final : public QMainWindow {
@@ -78,8 +80,11 @@ private:
     void SendKey(unsigned keycode, bool isDown);
     bool PressLocally(unsigned keycode);
     void PressPageKey(MenuPage& page, unsigned keycode);
+    void Rotate(int detents);
     void OpenMenuEntry(HomeMenuEntry entry);
     void PausePhoneMedia();
+    void SetTiles(const HomeTileSetup& setup);
+    void KeepOneSound();
     void TapPhone(int x, int y);
     PhoneScreen CurrentPhoneScreen() const;
     void ApplyConsoleEffect(const ConsoleEffect& effect);
@@ -99,6 +104,10 @@ private:
     HomeMenu* m_homeMenu{};
     MultimediaPage* m_music{};
     RadioPage* m_radio{};
+    SettingsPage* m_settings{};
+    HomeTileSetup m_tiles;                            // which tiles the home menu shows (remembered)
+    std::shared_ptr<MediaActivity> m_phoneMedia{std::make_shared<MediaActivity>()};   // when the phone's music plays
+    std::int64_t m_localStartMs{};                    // when the radio's own player last started or resumed
     std::set<unsigned> m_localKeys;  // keys held down whose press the radio's side took
     CarPanel* m_panel{};
     QLabel* m_status{};

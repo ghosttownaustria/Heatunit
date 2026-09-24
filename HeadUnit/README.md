@@ -50,14 +50,20 @@ einer Groesse, ohne sie zu merken (auch fuer die `--test-...`-Laeufe, die sonst 
   entsprechende App auf dem Handy auf (Map und Nav oeffnen beide die Navigation), Back ist die
   Zurueck-Taste des Handys, Option sendet dessen Menue-Taste. Menu holt das Startmenue des Radios nach vorn,
   Radio den Radioempfang (siehe unten). Ohne verbundenes Handy oeffnet Media den Musikordner des Radios.
-- **Startmenue des Radios:** Die Uhr und eine Reihe Kacheln (Multimedia, Radio, Telephone, Navigation,
-  Vehicle, Settings) nach der Vorlage [docs/design/home-menu.svg](docs/design/home-menu.svg), an der Stelle
-  des Handybilds und in der Form des gewaehlten Displays. Ohne verbundenes Handy ist es immer zu sehen, waehrend
-  des Verbindens auch; das Handybild kommt nach vorn, sobald es da ist. Drehen am Regler oder die Pfeile
-  links/rechts waehlen eine Kachel (sie leuchtet orange, die Reihe scrollt mit), Druecken des Reglers oder ein
-  Klick auf eine Kachel oeffnet sie: Multimedia und Radio oeffnen die eigenen Seiten des Radios, Telephone und
-  Navigation wirken wie die Tasten Tel und Nav; Vehicle und Settings haben noch keine Funktion (nur ein
-  Log-Eintrag).
+- **Startmenue des Radios:** Die Uhr und eine Reihe Kacheln (Android Auto, Multimedia, Radio, Telephone,
+  Navigation, Vehicle, Settings) nach der Vorlage [docs/design/home-menu.svg](docs/design/home-menu.svg), an der
+  Stelle des Handybilds und in der Form des gewaehlten Displays. Ohne verbundenes Handy ist es immer zu sehen,
+  waehrend des Verbindens auch; das Handybild kommt nach vorn, sobald es da ist.
+  - **Drehen** am Regler waehlt eine Kachel (sie leuchtet orange). Die gewaehlte Kachel steht in der Mitte, nur
+    am Anfang und Ende der Reihe nicht. Wo es weitergeht, zeigt der Rand einen orangen Pfeil; der Balken unten
+    zeigt, welcher Teil der Reihe gerade zu sehen ist.
+  - **Pfeil links/rechts** verschiebt die gewaehlte Kachel in der Reihenfolge um einen Platz (wird gemerkt).
+  - **Druecken** oder ein Klick oeffnet die Kachel: Android Auto verbindet bzw. holt das Handy nach vorn (wie
+    das Handy-Symbol), Multimedia, Radio und Settings oeffnen die Seiten des Radios, Telephone und Navigation
+    wirken wie die Tasten Tel und Nav; Vehicle hat noch keine Funktion. Ein Klick auf einen Randpfeil geht eine
+    Kachel weiter, das Mausrad ueber dem Menue dreht.
+- **Settings:** Alle Kacheln in ihrer Reihenfolge mit Haekchen. Drehen waehlt, Druecken blendet die Kachel ein
+  oder aus (Settings bleibt immer), Pfeil hoch/runter verschiebt sie in der Reihenfolge. Wird gemerkt.
 - **Multimedia (Musikordner):** Spielt Musik aus dem Ordner `HeadUnit` im Musikordner des Benutzers (Windows:
   `C:\Users\<Name>\Music\HeadUnit`, Linux: meist `~/Music/HeadUnit` oder `~/Musik/HeadUnit`; wird beim Start angelegt, mit
   `HEADUNIT_MUSIC_DIR` laesst sich ein anderer Ordner waehlen). Einfach Dateien hineinkopieren, gern in
@@ -73,15 +79,18 @@ einer Groesse, ohne sie zu merken (auch fuer die `--test-...`-Laeufe, die sonst 
   dem Stream), dazu **LIVE**. Zurueck/Weiter wechseln den Sender, der mittlere Knopf startet und stoppt.
   DAB+ selbst braucht einen Empfaenger (z. B. einen RTL-SDR-USB-Stick); ohne ihn laeuft dasselbe Programm der
   Sender ueber ihren Internet-Stream. Dafuer braucht der Rechner Internet.
-- **Bedienung der Seiten:** Drehen am Regler bewegt die Auswahl in der Liste (bzw. in der Knopfreihe), die Pfeile
-  hoch/runter gehen durch die Liste und weiter zu den Knoepfen und den Knoepfen oben, links/rechts entlang einer
-  Knopfreihe; Druecken des Reglers loest aus, ein Mausklick auch. Das Mausrad ueber der Seite blaettert in der
-  Liste. Back und Home fuehren zurueck zum Startmenue (Back schliesst vorher die Laenderliste). Solange eine
-  Seite des Radios vorn ist, gehen Regler und Pfeile nicht ans Handy.
+- **Bedienung der Seiten:** Drehen und Pfeile machen verschiedene Dinge. **Drehen** bewegt die Auswahl innerhalb
+  eines Bereichs (durch die Liste, entlang der Knopfreihe). **Pfeil hoch/runter** springt zwischen den Bereichen
+  (Liste, Knoepfe Zurueck/Play/Weiter, Knoepfe oben), egal wo in der Liste man steht. **Pfeil links/rechts**
+  springt zum vorigen/naechsten Titel bzw. Sender, die Auswahl bleibt stehen. Druecken des Reglers loest aus, ein
+  Mausklick auch; das Mausrad ueber der Seite blaettert in der Liste. Back und Home fuehren zurueck zum
+  Startmenue (Back schliesst vorher die Laenderliste). Solange eine Seite des Radios vorn ist, gehen Regler und
+  Pfeile nicht ans Handy.
 - **Eigene Wiedergabe und Handy:** Musik und Radio laufen ueber denselben Tonausgang wie das Handy (Lautstaerke,
   Stumm und die MEDIEN-Anzeige gelten auch dafuer). Titel- und Play-Tasten (auch Leertaste, Bild hoch/runter)
-  steuern die eigene Wiedergabe, solange sie laeuft oder pausiert, sonst das Handy. Startet die eigene
-  Wiedergabe, waehrend ein Handy verbunden ist, bekommt das Handy Pause.
+  steuern die eigene Wiedergabe, solange sie laeuft oder pausiert, sonst das Handy. Es spielt immer nur eine
+  Quelle, die zuletzt gestartete: Startet die eigene Wiedergabe, bekommt das Handy Pause; faengt das Handy an zu
+  spielen (z. B. beim Verbinden von Android Auto), pausiert die eigene Musik bzw. stoppt das Radio.
 - **Home** hat zwei Stufen, solange ein Handy uebertragen wird: Beim ersten Druck wechselt das Handy auf
   seinen Startbildschirm (Karte, Medien, Telefon-Karten, z. B. Maps und Spotify). Der zweite Druck
   zeigt das Startmenue des Radios, der dritte geht zurueck zum Handy-Startbildschirm.
@@ -92,7 +101,8 @@ einer Groesse, ohne sie zu merken (auch fuer die `--test-...`-Laeufe, die sonst 
 - **Audio-Anzeige:** Lautstaerke (30 Stufen), Stumm und je ein Pegel fuer Medien, Navigation und
   System. Die Anzeige zeigt, welche Tonspur des Handys gerade Audio liefert. Lautstaerke und Stumm
   wirken in der App (der Windows-Regler bleibt unberuehrt); mehr Lautstaerke schaltet Stumm aus.
-- **Tastatur:** Pfeile, Enter (Regler druecken), Esc/Rueck (Back), Pos1 (Home), F1 Menu, F2 Option,
+- **Tastatur:** Pfeile (die Pfeile des Reglers), Komma/Punkt (Regler drehen), Enter (Regler druecken), Esc/Rueck
+  (Back), Pos1 (Home), F1 Menu, F2 Option,
   F3 Media, F4 Radio, F5 Tel, F6 Nav, F7 Map, F8 CarPlay / Android Auto, Leertaste (Play/Pause),
   Bild hoch/runter (Titel), +/- (Lautstaerke), M (Stumm).
 Der Ton laeuft ueber das Standard-Ausgabegeraet von Windows (WASAPI, andere Programme behalten

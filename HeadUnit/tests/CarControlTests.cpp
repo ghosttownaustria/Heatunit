@@ -1,6 +1,7 @@
 #include "androidauto/ConsoleController.h"
 #include "androidauto/DisplayConfig.h"
 #include "androidauto/ProjectionInput.h"
+#include "audio/AudioFocus.h"
 #include "audio/AudioTypes.h"
 #include "media/MusicLibrary.h"
 #include "media/StreamText.h"
@@ -274,8 +275,12 @@ void TestConsoleController() {
     Check(console.CurrentScreen() == Screen::Multimedia && !effect.message.empty(), "The Multimedia tile did not open the music player");
     effect = console.Open(Screen::Projection);
     Check(console.CurrentScreen() == Screen::Multimedia && effect.message.empty(), "Opening the phone as a page changed the screen");
+    effect = console.Open(Screen::Settings);
+    Check(console.CurrentScreen() == Screen::Settings && !effect.message.empty(), "The Settings tile did not open the settings");
+    effect = console.Press(ConsoleKey::Back);
+    Check(console.CurrentScreen() == Screen::RadioHome && effect.phoneKeys.empty(), "Back on the settings did not return to the home menu");
     console.Press(ConsoleKey::Menu);
-    Check(ConsoleController::IsRadioScreen(Screen::RadioHome) && ConsoleController::IsRadioScreen(Screen::Radio) &&
+    Check(ConsoleController::IsRadioPage(Screen::Settings) && ConsoleController::IsRadioScreen(Screen::RadioHome) && ConsoleController::IsRadioScreen(Screen::Radio) &&
         !ConsoleController::IsRadioScreen(Screen::ProjectionHome) && ConsoleController::IsRadioPage(Screen::Multimedia) &&
         !ConsoleController::IsRadioPage(Screen::RadioHome), "The radio's screens are not told apart");
     effect = console.Press(ConsoleKey::Projection);
@@ -563,54 +568,131 @@ void TestKnobZones() {
     Check(KnobZoneKey(KnobZone::Centre) == 0 && KnobZoneKey(KnobZone::None) == 0, "The middle or nothing sends an arrow key");
 }
 
-// The radio's home menu: six tiles in one row, laid out as in the 1600x600 design and scrolled to the focus.
+// The radio's home menu: the tiles of the design plus Android Auto, laid out as in the 1600x600 design, the focused tile
+// in the middle as far as the row allows, arrows at the edges where more tiles follow and the bar at the bottom.
 void TestHomeMenuLayout() {
-    Check(kHomeMenuCount == 6 && std::string(HomeMenuTitle(kHomeMenuEntries[0])) == "Multimedia" &&
-        std::string(HomeMenuTitle(kHomeMenuEntries[5])) == "Settings", "The home menu does not have the tiles of the design");
-    // A tile does what its controller key does; Vehicle and Settings have nothing behind them yet.
-    Check(HomeMenuPage(HomeMenuEntry::Multimedia) == Screen::Multimedia && HomeMenuPage(HomeMenuEntry::Radio) == Screen::Radio &&
-        !HomeMenuKey(HomeMenuEntry::Multimedia) && !HomeMenuKey(HomeMenuEntry::Radio) &&
-        HomeMenuKey(HomeMenuEntry::Telephone) == ConsoleKey::Tel && HomeMenuKey(HomeMenuEntry::Navigation) == ConsoleKey::Nav &&
-        !HomeMenuPage(HomeMenuEntry::Telephone) && !HomeMenuPage(HomeMenuEntry::Navigation) &&
-        !HomeMenuKey(HomeMenuEntry::Vehicle) && !HomeMenuKey(HomeMenuEntry::Settings) && !HomeMenuPage(HomeMenuEntry::Vehicle) &&
-        !HomeMenuPage(HomeMenuEntry::Settings), "A home menu tile opens the wrong thing");
+    using E = HomeMenuEntry;
+    Check(kHomeMenuCount == 7 && std::string(HomeMenuTitle(kHomeMenuEntries[0])) == "Android Auto" &&
+        std::string(HomeMenuTitle(kHomeMenuEntries[6])) == "Settings" && std::string(HomeMenuId(E::AndroidAuto)) == "AndroidAuto" &&
+        std::string(HomeMenuId(E::Vehicle)) == "Vehicle", "The home menu does not have the tiles of the design");
+    // What a tile opens: a page of the radio or what a controller key does; Vehicle has nothing behind it yet.
+    Check(HomeMenuPage(E::Multimedia) == Screen::Multimedia && HomeMenuPage(E::Radio) == Screen::Radio && HomeMenuPage(E::Settings) == Screen::Settings &&
+        HomeMenuKey(E::AndroidAuto) == ConsoleKey::Projection && HomeMenuKey(E::Telephone) == ConsoleKey::Tel &&
+        HomeMenuKey(E::Navigation) == ConsoleKey::Nav && !HomeMenuPage(E::AndroidAuto) && !HomeMenuKey(E::Multimedia) &&
+        !HomeMenuKey(E::Radio) && !HomeMenuKey(E::Settings) && !HomeMenuPage(E::Telephone) && !HomeMenuKey(E::Vehicle) &&
+        !HomeMenuPage(E::Vehicle), "A home menu tile opens the wrong thing");
     // The screen is 600 units high and as wide as the display's shape.
     Check(HomeMenuWidth({1600, 600}) == 1600 && HomeMenuWidth(kDefaultDisplay) == 1000 && std::abs(HomeMenuWidth({1920, 1080}) - 1066.67) < 0.01 &&
         HomeMenuWidth({0, 0}) == 0, "The home menu has the wrong width");
-    Check(HomeTileLeft(0) == 25 && HomeTileLeft(4) == 1225 && kHomeRowWidth == 1800, "The tiles are not where the design has them");
-    // 1600x600 as in the design: up to Vehicle nothing scrolls (Settings is cut off at the edge), Settings scrolls
-    // the row to its end, and going back only scrolls again once a tile would leave the screen.
-    for (int focus = 0; focus <= 4; ++focus) Check(HomeMenuScroll(focus, 1600, 0) == 0, "The design's first screen scrolled");
-    Check(HomeMenuScroll(5, 1600, 0) == 200, "Settings did not scroll into view");
-    Check(HomeMenuScroll(4, 1600, 200) == 200 && HomeMenuScroll(1, 1600, 200) == 200 && HomeMenuScroll(0, 1600, 200) == 0,
-        "Going back scrolled more than needed");
-    // 800x480 shows three tiles and a bit.
-    Check(HomeMenuScroll(2, 1000, 0) == 0 && HomeMenuScroll(3, 1000, 0) == 200 && HomeMenuScroll(5, 1000, 0) == 800,
-        "The row scrolls wrongly on 800x480");
-    // On every display each tile is completely in view once it has the focus, walking right and back again.
+    Check(HomeTileLeft(0) == 25 && HomeTileLeft(4) == 1225 && HomeRowWidth(6) == 1800 && HomeRowWidth(7) == 2100 && HomeRowWidth(0) == 0,
+        "The tiles are not where the design has them");
+    // The design's six tiles on 1600x600: the first three keep the row at its start (the design's picture), the last
+    // three at its end.
+    for (int focus = 0; focus <= 2; ++focus) Check(HomeMenuScroll(focus, 1600, 6) == 0, "The design's first screen scrolled");
+    for (int focus = 3; focus <= 5; ++focus) Check(HomeMenuScroll(focus, 1600, 6) == 200, "The end of the row did not stop the scrolling");
+    // Seven tiles on 800x480: in between, the focused tile is exactly in the middle.
+    Check(HomeMenuScroll(0, 1000, 7) == 0 && HomeMenuScroll(1, 1000, 7) == 0 && HomeMenuScroll(2, 1000, 7) == 250 &&
+        HomeMenuScroll(3, 1000, 7) == 550 && HomeMenuScroll(4, 1000, 7) == 850 && HomeMenuScroll(5, 1000, 7) == 1100 &&
+        HomeMenuScroll(6, 1000, 7) == 1100, "The focused tile is not kept in the middle on 800x480");
+    Check(HomeMenuScroll(5, 2400, 6) == 0, "A row that fits scrolled");
+    // On every display and with any number of tiles, every focused tile is fully in view and clear of the edge strips.
     for (const auto& display : kDisplays) {
         const double width = HomeMenuWidth(display);
-        double scroll = 0;
-        for (const int focus : {0, 1, 2, 3, 4, 5, 4, 3, 2, 1, 0}) {
-            scroll = HomeMenuScroll(focus, width, scroll);
-            Check(HomeTileLeft(focus) - scroll >= 0 && HomeTileLeft(focus) + kHomeTileWidth - scroll <= width && scroll >= 0 &&
-                scroll <= kHomeRowWidth - width, ("A focused tile is not in view on a " + DisplayText(display) + " display").c_str());
+        for (int count = 1; count <= kHomeMenuCount; ++count) {
+            for (int focus = 0; focus < count; ++focus) {
+                const double scroll = HomeMenuScroll(focus, width, count);
+                const double left = HomeTileLeft(focus) - scroll, right = left + kHomeTileWidth;
+                const HomeEdges edges = HomeMenuEdges(scroll, width, count);
+                Check(scroll >= 0 && scroll <= std::max(0.0, HomeRowWidth(count) - width) && left >= 0 && right <= width &&
+                    (!edges.isLeft || left >= kHomeEdgeWidth + kHomeEdgeFade) && (!edges.isRight || right <= width - kHomeEdgeWidth - kHomeEdgeFade),
+                    ("A focused tile is hidden on a " + DisplayText(display) + " display").c_str());
+            }
         }
-        Check(scroll == 0, "Walking back did not return to the start of the row");
     }
-    // A screen wider than the row never scrolls.
-    Check(HomeMenuScroll(5, 2400, 0) == 0, "A row that fits scrolled");
-    // Clicks: on a tile, in the gaps, above and below the row, with the row scrolled.
-    Check(HomeTileAt(150, 300, 0) == 0 && HomeTileAt(1350, 300, 0) == 4 && HomeTileAt(1560, 300, 0) == 5, "A click missed its tile");
-    Check(!HomeTileAt(300, 300, 0) && !HomeTileAt(10, 300, 0) && !HomeTileAt(150, 50, 0) && !HomeTileAt(150, 520, 0) && !HomeTileAt(1790, 300, 0),
-        "A click outside the tiles hit one");
-    Check(HomeTileAt(150, 300, 200) == 1 && HomeTileAt(1560, 300, 200) == 5, "A click on the scrolled row hit the wrong tile");
+    // Arrows: only where the row goes on.
+    Check(!HomeMenuEdges(0, 1600, 6).isLeft && HomeMenuEdges(0, 1600, 6).isRight && HomeMenuEdges(200, 1600, 6).isLeft &&
+        !HomeMenuEdges(200, 1600, 6).isRight && HomeMenuEdges(100, 1600, 6).isLeft && HomeMenuEdges(100, 1600, 6).isRight &&
+        !HomeMenuEdges(0, 2400, 6).isLeft && !HomeMenuEdges(0, 2400, 6).isRight, "The edge arrows are wrong");
+    // The bar: as in the design at the start of six tiles on 1600x600 (lit from 25 to about 1403), at the end of the row
+    // it reaches the right end of the track; the whole track when the row fits.
+    const HomeBar start = HomeMenuBar(0, 1600, 6), end = HomeMenuBar(200, 1600, 6), all = HomeMenuBar(0, 2400, 6);
+    Check(start.from == 25 && std::abs(start.to - 1403.5) < 1 && std::abs(end.from - 197.2) < 0.1 && end.to == 1575 && all.from == 25 && all.to == 2375,
+        "The bar at the bottom shows the wrong part");
+    // Clicks: on a tile, in the gaps, above and below the row, with the row scrolled, on tiles that are not there.
+    Check(HomeTileAt(150, 300, 0, 6) == 0 && HomeTileAt(1350, 300, 0, 6) == 4 && HomeTileAt(1560, 300, 0, 6) == 5, "A click missed its tile");
+    Check(!HomeTileAt(300, 300, 0, 6) && !HomeTileAt(10, 300, 0, 6) && !HomeTileAt(150, 50, 0, 6) && !HomeTileAt(150, 520, 0, 6) &&
+        !HomeTileAt(1790, 300, 0, 6) && !HomeTileAt(1560, 300, 0, 5), "A click outside the tiles hit one");
+    Check(HomeTileAt(150, 300, 200, 6) == 1 && HomeTileAt(1560, 300, 200, 6) == 5, "A click on the scrolled row hit the wrong tile");
     // The focus stops at both ends.
-    Check(MoveHomeFocus(0, -1) == 0 && MoveHomeFocus(0, 2) == 2 && MoveHomeFocus(4, 3) == 5 && MoveHomeFocus(5, -9) == 0, "The focus left the row");
+    Check(MoveHomeFocus(0, -1, 6) == 0 && MoveHomeFocus(0, 2, 6) == 2 && MoveHomeFocus(4, 3, 6) == 5 && MoveHomeFocus(5, -9, 6) == 0 &&
+        MoveHomeFocus(3, 1, 1) == 0, "The focus left the row");
 }
 
-// The player pages: a list that scrolls with the focus, and the focus moving between the top buttons, the controls and
-// the list.
+// Which tiles the home menu shows and in which order: shown, hidden (never Settings), moved, stored and read back.
+void TestTileSetup() {
+    using E = HomeMenuEntry;
+    using Tiles = std::vector<HomeMenuEntry>;
+    HomeTileSetup setup = DefaultTileSetup();
+    Check(ShownTiles(setup) == Tiles(std::begin(kHomeMenuEntries), std::end(kHomeMenuEntries)), "A new radio does not show every tile");
+    Check(SetTileShown(setup, E::Vehicle, false) && !SetTileShown(setup, E::Vehicle, false) && !SetTileShown(setup, E::Settings, false) &&
+        !SetTileShown(setup, E::Radio, true), "Showing or hiding a tile is wrong");
+    Check(ShownTiles(setup) == Tiles{E::AndroidAuto, E::Multimedia, E::Radio, E::Telephone, E::Navigation, E::Settings}, "A hidden tile is shown");
+    // On the home menu a tile passes the next shown one (and the hidden ones between).
+    Check(MoveTile(setup, E::Navigation, +1, true) && ShownTiles(setup) == Tiles{E::AndroidAuto, E::Multimedia, E::Radio, E::Telephone, E::Settings, E::Navigation},
+        "Moving right on the home menu is wrong");
+    Check(!MoveTile(setup, E::Navigation, +1, true), "A tile moved beyond the end of the row");
+    Check(MoveTile(setup, E::Navigation, -1, true) && ShownTiles(setup) == Tiles{E::AndroidAuto, E::Multimedia, E::Radio, E::Telephone, E::Navigation, E::Settings},
+        "Moving left on the home menu is wrong");
+    // In the settings list a tile passes its direct neighbour, hidden or not.
+    Check(MoveTile(setup, E::Navigation, -1, false) && setup.tiles[4].entry == E::Navigation && setup.tiles[5].entry == E::Vehicle,
+        "Moving up in the settings did not pass the hidden neighbour");
+    Check(MoveTile(setup, E::Settings, -1, false) && setup.tiles[5].entry == E::Settings && !setup.tiles[6].isShown, "Moving past a hidden tile is wrong");
+    Check(!MoveTile(setup, E::AndroidAuto, -1, false) && !MoveTile(setup, E::AndroidAuto, 0, false), "A tile moved before the start");
+    // Stored as text and read back.
+    Check(TileSetupText(setup) == "AndroidAuto,Multimedia,Radio,Telephone,Navigation,Settings,-Vehicle", "The tiles are stored wrongly");
+    Check(ParseTileSetup(TileSetupText(setup)) == setup, "The stored tiles do not read back");
+    // A damaged or older text: unknown and repeated names are skipped, Settings is shown, missing tiles follow at the end.
+    Check(TileSetupText(ParseTileSetup(" Radio , -Settings,Bogus,Radio,-AndroidAuto,-")) == "Radio,Settings,-AndroidAuto,Multimedia,Telephone,Navigation,Vehicle",
+        "A damaged setting was read wrongly");
+    Check(ParseTileSetup("") == DefaultTileSetup(), "An empty setting is not the default");
+}
+
+// One source sounds: the phone's music and the radio's own player, whichever started last.
+struct CountingOutput final : IPcmOutput {
+    std::size_t bytes{};
+    bool isFlushed{};
+    void Write(std::span<const std::uint8_t> pcm) override { bytes += pcm.size(); }
+    void Flush() override { isFlushed = true; }
+    std::size_t Queued() const override { return 7; }
+};
+void TestAudioFocus() {
+    MediaActivity phone;
+    Check(!phone.IsSounding(10000), "The phone sounds before any audio came");
+    phone.NoteAudio(10000);
+    phone.NoteAudio(10020);
+    phone.NoteAudio(10400);   // a running stream: small gaps
+    Check(phone.IsSounding(10500) && phone.StartMs() == 10000 && !phone.IsSounding(11000), "A running stream is tracked wrongly");
+    phone.NoteAudio(12000);   // after a pause: a new start
+    Check(phone.StartMs() == 12000 && phone.IsSounding(12100), "A new start of the phone's music was missed");
+    // The radio's player started at 11000, the phone at 12000: the phone takes over.
+    Check(IsPhoneTakingOver(true, 11000, phone.IsSounding(12100), phone.StartMs()), "The phone's newer music did not take over");
+    // The radio's player started after the phone (whose music runs out after its pause key): it keeps the sound.
+    Check(!IsPhoneTakingOver(true, 12050, true, 12000), "The phone's old music took the sound back");
+    Check(!IsPhoneTakingOver(false, 11000, true, 12000) && !IsPhoneTakingOver(true, 11000, false, 12000), "Nothing to give way to, but it did");
+    // The phone's output passes everything on and reports the audio.
+    auto inner = std::make_shared<CountingOutput>();
+    auto activity = std::make_shared<MediaActivity>();
+    WatchedOutput watched(inner, activity);
+    watched.Write({});
+    Check(!activity->IsSounding(SteadyNowMs()), "Empty audio counted as the phone playing");
+    const std::vector<std::uint8_t> pcm(64, 1);
+    watched.Write(pcm);
+    watched.Flush();
+    Check(inner->bytes == 64 && inner->isFlushed && watched.Queued() == 7 && activity->IsSounding(SteadyNowMs()), "The watched output does not pass on or report");
+}
+
+// The player pages: a list that scrolls with the focus. Turning moves within the part the focus is in; up and down jump
+// between the list, the controls and the top buttons; left and right never move the focus.
 void TestPlayerPageFocus() {
     Check(ListFirstRow(0, 0, 5, 20) == 0 && ListFirstRow(4, 0, 5, 20) == 0 && ListFirstRow(5, 0, 5, 20) == 1 && ListFirstRow(19, 0, 5, 20) == 15 &&
         ListFirstRow(10, 15, 5, 20) == 10 && ListFirstRow(12, 10, 5, 20) == 10, "The list does not follow the focus");
@@ -623,24 +705,23 @@ void TestPlayerPageFocus() {
     Check(focus.part == Part::List && focus.row == 3, "Turning did not move through the list");
     focus = TurnFocus(focus, shape, 50);
     Check(focus.row == 9, "Turning left the end of the list");
-    focus = NudgeFocus(focus, shape, keys::DpadLeft);
-    Check(focus.part == Part::List && focus.row == 9, "Left moved in the list");
-    for (int i = 0; i < 9; ++i) focus = NudgeFocus(focus, shape, keys::DpadUp);
-    Check(focus.part == Part::List && focus.row == 0, "Up did not go through the list");
+    Check(NudgeFocus(focus, shape, keys::DpadLeft) == focus && NudgeFocus(focus, shape, keys::DpadRight) == focus, "Left or right moved the focus");
+    Check(NudgeFocus(focus, shape, keys::DpadDown) == focus, "Down in the list went somewhere");
     focus = NudgeFocus(focus, shape, keys::DpadUp);
-    Check(focus.part == Part::Controls && focus.button == 1 && focus.row == 0, "Up from the list did not reach the play button");
+    Check(focus.part == Part::Controls && focus.button == 1 && focus.row == 9, "Up in the list did not jump to the play button");
     focus = TurnFocus(focus, shape, -5);
     Check(focus.part == Part::Controls && focus.button == 0, "Turning left the controls");
-    focus = NudgeFocus(focus, shape, keys::DpadRight);
-    focus = NudgeFocus(focus, shape, keys::DpadRight);
-    focus = NudgeFocus(focus, shape, keys::DpadRight);
-    Check(focus.part == Part::Controls && focus.button == 2, "Right did not stop at the last control");
+    Check(NudgeFocus(focus, shape, keys::DpadRight) == focus, "Right moved along the controls like turning");
+    focus = TurnFocus(focus, shape, 5);
+    Check(focus.part == Part::Controls && focus.button == 2, "Turning did not stop at the last control");
     focus = NudgeFocus(focus, shape, keys::DpadUp);
     Check(focus.part == Part::Header && focus.button == 0, "Up from the controls did not reach the top buttons");
     focus = NudgeFocus(focus, shape, keys::DpadUp);
     Check(focus.part == Part::Header, "Up left the top of the page");
-    focus = NudgeFocus(NudgeFocus(focus, shape, keys::DpadDown), shape, keys::DpadDown);
-    Check(focus.part == Part::List && focus.row == 0, "Down did not come back to where the list was");
+    focus = NudgeFocus(focus, shape, keys::DpadDown);
+    Check(focus.part == Part::Controls && focus.button == 1, "Down from the top buttons did not reach the play button");
+    focus = NudgeFocus(focus, shape, keys::DpadDown);
+    Check(focus.part == Part::List && focus.row == 9, "Down did not come back to where the list was");
     // The list becomes empty (a new country loads): the focus waits on the play button; a shorter list keeps it in range.
     focus.row = 8;
     Check(FitFocus(focus, {2, 3, 0}) == PageFocus{Part::Controls, 1, 0}, "An empty list kept the focus");
@@ -695,6 +776,8 @@ void TestStreamText() {
 void TestCarControls() {
     TestKnobZones();
     TestHomeMenuLayout();
+    TestTileSetup();
+    TestAudioFocus();
     TestPlayerPageFocus();
     TestMusicLibrary();
     TestStreamText();

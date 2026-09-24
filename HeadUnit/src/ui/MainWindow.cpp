@@ -2,6 +2,7 @@
 #include "ui/CarWidgets.h"
 #include "ui/HomeMenu.h"
 #include "ui/MediaPages.h"
+#include "ui/SettingsPage.h"
 #include "platform/Environment.h"
 #ifdef HEADUNIT_WIRELESS
 #include "wireless/WirelessConnect.h"
@@ -44,6 +45,7 @@ constexpr unsigned kProjectionTestFrames = 10;
 constexpr const char* kSettingsOrganization = "HeadUnit";
 constexpr const char* kSettingsApplication = "HeadUnit";
 constexpr const char* kDisplaySetting = "display";
+constexpr const char* kTilesSetting = "home/tiles";
 QString DisplayChoiceText(const DisplayConfig& display)
 {
     QString text = Text(DisplayText(display));
@@ -84,6 +86,13 @@ MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
     };
     m_homeMenu = new HomeMenu(m_screens);
     m_homeMenu->onOpen = [this](HomeMenuEntry entry) { OpenMenuEntry(entry); };
+    // Left and right on a tile move it along the row; hidden tiles are passed over.
+    m_homeMenu->onShift = [this](HomeMenuEntry entry, int direction) {
+        HomeTileSetup setup = m_tiles;
+        if (MoveTile(setup, entry, direction, true)) SetTiles(setup);
+    };
+    m_settings = new SettingsPage(m_screens);
+    m_settings->onChange = [this](const HomeTileSetup& setup) { SetTiles(setup); };
     m_music = new MultimediaPage(*m_player, MusicFolder(), m_screens);
     m_radio = new RadioPage(*m_player, m_screens);
     for (PlayerPage* page : {static_cast<PlayerPage*>(m_music), static_cast<PlayerPage*>(m_radio)}) page->onWillPlay = [this] { PausePhoneMedia(); };
@@ -91,6 +100,8 @@ MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
     m_screens->addWidget(m_homeMenu);
     m_screens->addWidget(m_music);
     m_screens->addWidget(m_radio);
+    m_screens->addWidget(m_settings);
+    SetTiles(ParseTileSetup(QSettings(kSettingsOrganization, kSettingsApplication).value(kTilesSetting).toString().toStdString()));
     left->addWidget(m_screens, 1);
     // The display size sits next to the button that connects: it is fixed once the connection starts.
     auto* controls = new QHBoxLayout();
@@ -141,10 +152,7 @@ MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
     m_panel->setFixedWidth(310);
     m_panel->onConsole = [this](ConsoleKey key) { PressConsole(key); };
     m_panel->onKey = [this](unsigned keycode, bool isDown) { SendKey(keycode, isDown); };
-    m_panel->onRotate = [this](int detents) {
-        if (MenuPage* page = FrontPage()) page->Turn(detents);
-        else m_input->Rotate(detents);
-    };
+    m_panel->onRotate = [this](int detents) { Rotate(detents); };
     m_panel->onVolume = [this](int delta) { m_audioState->ChangeVolume(delta); };
     m_panel->onMute = [this] { m_audioState->ToggleMute(); };
     root->addWidget(m_panel);
@@ -256,6 +264,9 @@ bool MainWindow::HandleKey(QKeyEvent* event, bool isDown)
     case Qt::Key_Plus: case Qt::Key_Equal: m_audioState->ChangeVolume(+1); return true;
     case Qt::Key_Minus: m_audioState->ChangeVolume(-1); return true;
     case Qt::Key_M: m_audioState->ToggleMute(); return true;
+    // Turning the controller: the arrow keys are its arrows, so turning needs keys of its own.
+    case Qt::Key_Comma: Rotate(-1); return true;
+    case Qt::Key_Period: Rotate(+1); return true;
     default: return false;
     }
 }
@@ -289,6 +300,7 @@ MenuPage* MainWindow::FrontPage() const
     case ConsoleController::Screen::RadioHome: return m_homeMenu;
     case ConsoleController::Screen::Multimedia: return m_music;
     case ConsoleController::Screen::Radio: return m_radio;
+    case ConsoleController::Screen::Settings: return m_settings;
     default: return nullptr;
     }
 }
@@ -322,15 +334,42 @@ bool MainWindow::PressLocally(unsigned keycode)
     if (isTaken) m_logger.Write("INFO", "MEDIA", "Media key " + std::to_string(keycode) + " for the radio's own player");
     return isTaken;
 }
+// Turning the controller works the radio's page in front, otherwise the phone.
+void MainWindow::Rotate(int detents)
+{
+    if (MenuPage* page = FrontPage()) page->Turn(detents);
+    else m_input->Rotate(detents);
+}
 void MainWindow::PressPageKey(MenuPage& page, unsigned keycode)
 {
     if (keycode == keys::DpadCenter) page.Push();
     else page.Nudge(keycode);
 }
-// The radio's player is about to start: the phone's music, if any, pauses, as when a car changes its source.
+// The radio's player is about to start or resume: the phone's music, if any, pauses, as when a car changes its source.
 void MainWindow::PausePhoneMedia()
 {
+    m_localStartMs = SteadyNowMs();
     if (m_console.IsProjectionConnected()) m_input->Tap(keys::MediaPause);
+}
+// Only one source sounds: when the phone starts its music after the radio's player (connecting Android Auto often
+// resumes the phone's last music), the radio's player falls silent (music pauses, radio stops).
+void MainWindow::KeepOneSound()
+{
+    const std::int64_t now = SteadyNowMs();
+    const AudioPlayer::State state = m_player->CurrentStatus().state;
+    const bool isLocalSounding = state == AudioPlayer::State::Opening || state == AudioPlayer::State::Playing;
+    if (!IsPhoneTakingOver(isLocalSounding, m_localStartMs, m_phoneMedia->IsSounding(now), m_phoneMedia->StartMs())) return;
+    m_logger.Write("INFO", "MEDIA", "The phone started its music: the radio's own player gives way");
+    m_music->GiveWay();
+    m_radio->GiveWay();
+}
+// The home menu's tiles changed (moved on the menu, shown or hidden in the settings): shown everywhere and remembered.
+void MainWindow::SetTiles(const HomeTileSetup& setup)
+{
+    m_tiles = setup;
+    m_homeMenu->SetTiles(ShownTiles(m_tiles));
+    m_settings->SetSetup(m_tiles);
+    QSettings(kSettingsOrganization, kSettingsApplication).setValue(kTilesSetting, QString::fromStdString(TileSetupText(m_tiles)));
 }
 // A tile opens one of the radio's pages or does what its controller key does; the others have nothing behind them yet.
 void MainWindow::OpenMenuEntry(HomeMenuEntry entry)
@@ -386,7 +425,9 @@ void MainWindow::SetDisplay(const DisplayConfig& display)
     m_display = display;
     m_console.SetDisplay(display);
     m_video->SetDisplay(display);
-    for (MenuPage* page : {static_cast<MenuPage*>(m_homeMenu), static_cast<MenuPage*>(m_music), static_cast<MenuPage*>(m_radio)}) page->SetDisplay(display);
+    for (MenuPage* page : {static_cast<MenuPage*>(m_homeMenu), static_cast<MenuPage*>(m_music), static_cast<MenuPage*>(m_radio),
+             static_cast<MenuPage*>(m_settings)})
+        page->SetDisplay(display);
     for (int index = 0; index < static_cast<int>(std::size(kDisplays)); ++index)
         if (kDisplays[index] == display) m_displayChoice->setCurrentIndex(index);
 }
@@ -419,6 +460,7 @@ void MainWindow::Tick()
     std::array<AudioState::Meter, kAudioKindCount> meters;
     for (int i = 0; i < kAudioKindCount; ++i) meters[i] = m_audioState->ReadMeter(static_cast<AudioKind>(i));
     m_panel->Display()->SetState(m_audioState->Volume(), m_audioState->IsMuted(), meters);
+    KeepOneSound();
     if (m_state == State::Connecting && !m_isTestFinished) {
         if (m_mode == TestMode::Input) RunInputTest();
         else if (m_mode == TestMode::Audio) RunAudioTest();
@@ -452,7 +494,12 @@ void MainWindow::BeginConnect(bool isWireless)
         callbacks.onStatus = [this](const std::string& status) { QMetaObject::invokeMethod(this, [this, status] { ShowStep(Text(status)); }, Qt::QueuedConnection); };
         callbacks.onFrame = [this](VideoFrame frame) { std::lock_guard lock(m_frameMutex); m_latestFrame = std::move(frame); };
         callbacks.input = m_input;
-        callbacks.openAudio = m_audio->Opener();
+        // The phone's music is watched, so the radio's own player can give way when the phone starts playing.
+        callbacks.openAudio = [opener = m_audio->Opener(), activity = m_phoneMedia](AudioKind kind, const PcmFormat& format) -> std::shared_ptr<IPcmOutput> {
+            auto output = opener(kind, format);
+            if (kind != AudioKind::Media || !output) return output;
+            return std::make_shared<WatchedOutput>(std::move(output), activity);
+        };
 #ifdef HEADUNIT_WIRELESS
         if (isWireless) return ConnectWirelessAndroidAuto(m_logger, m_isStopRequested, std::move(callbacks));
 #else

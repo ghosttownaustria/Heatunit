@@ -24,7 +24,7 @@ struct ConsoleEffect {
 };
 
 // Decides what the controller keys mean. The radio's own side (shown in place of the phone's picture) is its
-// home menu and the pages it leads to: the music player (Multimedia) and the tuner (Radio). Menu and the second
+// home menu and the pages it leads to: the music player (Multimedia), the tuner (Radio) and the settings. Menu and the second
 // step of Home bring the home menu to the front, Radio the tuner, and Media the music player while no phone is
 // projected. Home and Back on one of the pages go back to the home menu.
 //
@@ -41,10 +41,11 @@ public:
         RadioHome,       // the radio's home menu is in front of the phone
         Multimedia,      // the radio's music player (its music folder)
         Radio,           // the radio's tuner (internet radio)
+        Settings,        // the radio's settings (which tiles the home menu shows)
     };
     // The radio's side: one of its own pages is in front, not the phone.
     static constexpr bool IsRadioScreen(Screen screen) { return screen == Screen::RadioHome || IsRadioPage(screen); }
-    static constexpr bool IsRadioPage(Screen screen) { return screen == Screen::Multimedia || screen == Screen::Radio; }
+    static constexpr bool IsRadioPage(Screen screen) { return screen == Screen::Multimedia || screen == Screen::Radio || screen == Screen::Settings; }
     bool IsProjectionConnected() const { return m_isConnected; }
     Screen CurrentScreen() const { return m_screen; }
 
@@ -82,6 +83,7 @@ public:
         switch (page) {
         case Screen::Multimedia: m_screen = page; return Message("Multimedia: Musikordner");
         case Screen::Radio: m_screen = page; return Message("Radio: Internetradio");
+        case Screen::Settings: m_screen = page; return Message("Settings: Kacheln des Startmenues");
         case Screen::RadioHome: m_screen = page; return Message("Radio-Startmenue");
         default: return {};
         }

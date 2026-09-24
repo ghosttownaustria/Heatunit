@@ -94,7 +94,7 @@ if(HEADUNIT_BUILD_APP)
   endif()
 
   add_executable(HeadUnit src/main.cpp src/ui/MainWindow.cpp src/ui/CarWidgets.cpp src/ui/MenuStyle.cpp src/ui/MenuPage.cpp src/ui/HomeMenu.cpp
-    src/ui/MediaPages.cpp src/radio/RadioBrowser.cpp)
+    src/ui/MediaPages.cpp src/ui/SettingsPage.cpp src/radio/RadioBrowser.cpp)
   target_link_libraries(HeadUnit PRIVATE headunit_usb headunit_media Qt6::Widgets Qt6::Concurrent Qt6::Network)
   if(HEADUNIT_WIRELESS_ENABLED)
     target_link_libraries(HeadUnit PRIVATE headunit_wireless)

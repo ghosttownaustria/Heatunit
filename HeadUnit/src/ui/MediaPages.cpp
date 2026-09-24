@@ -82,6 +82,20 @@ void PlayerPage::Look()
     if (IsOwn()) OwnStatus(m_status);
     if (isVisible()) update();
 }
+bool PlayerPage::IsOwnSoundingNow() const
+{
+    const AudioPlayer::Status status = m_player.CurrentStatus();
+    return m_generation != 0 && status.generation == m_generation && (status.state == State::Opening || status.state == State::Playing);
+}
+void PlayerPage::GiveWay()
+{
+    if (IsOwnSoundingNow()) m_player.Stop();
+}
+void PlayerPage::Skip(int direction)
+{
+    if (direction < 0) Previous();
+    else Next();
+}
 bool PlayerPage::IsOwnActive() const
 {
     const AudioPlayer::Status status = m_player.CurrentStatus();
@@ -120,7 +134,16 @@ void PlayerPage::Refocus(PageFocus focus)
     update();
 }
 void PlayerPage::Turn(int steps) { Refocus(TurnFocus(m_focus, Shape(), steps)); }
-void PlayerPage::Nudge(unsigned keycode) { Refocus(NudgeFocus(m_focus, Shape(), keycode)); }
+void PlayerPage::Nudge(unsigned keycode)
+{
+    // Left and right skip; they never move the focus (turning does that).
+    if (keycode == keys::DpadLeft || keycode == keys::DpadRight) {
+        Skip(keycode == keys::DpadLeft ? -1 : +1);
+        Look();
+        return;
+    }
+    Refocus(NudgeFocus(m_focus, Shape(), keycode));
+}
 void PlayerPage::Push()
 {
     Refocus(FitFocus(m_focus, Shape()));
@@ -372,8 +395,17 @@ void MultimediaPage::Next()
 }
 void MultimediaPage::PlayPause()
 {
-    if (IsOwnActive()) Player().SetPaused(Player().CurrentStatus().state != State::Paused);
-    else if (!m_tracks.empty()) PlayTrack(m_current >= 0 ? m_current : FocusedRow());
+    if (IsOwnActive()) {
+        const bool isPaused = Player().CurrentStatus().state == State::Paused;
+        if (isPaused && onWillPlay) onWillPlay();   // resuming takes the sound back from the phone
+        Player().SetPaused(!isPaused);
+    } else if (!m_tracks.empty()) {
+        PlayTrack(m_current >= 0 ? m_current : FocusedRow());
+    }
+}
+void MultimediaPage::GiveWay()
+{
+    if (IsOwnSoundingNow()) Player().SetPaused(true);
 }
 void MultimediaPage::OwnStatus(const AudioPlayer::Status& status)
 {
@@ -531,6 +563,10 @@ void RadioPage::PlayStation(int index)
     Settings().setValue(kStationSetting, m_currentId);
     StartPlayer(station.url.toStdString());
     m_browser->CountClick(station.id);
+}
+void RadioPage::Skip(int direction)
+{
+    if (!m_isPicking) PlayerPage::Skip(direction);   // browsing the countries does not change the station
 }
 void RadioPage::Previous()
 {

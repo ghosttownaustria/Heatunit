@@ -20,6 +20,13 @@ const QPointF kTitleOffset(7.249, 62.337);   // start of the tile title's baseli
 const char* const kStripes =
     "M172.688,70.204L285.116,70.204L285.116,203.986L172.688,70.204ZM230.079,462.911L56.816,462.911L56.816,256.741"
     "L230.079,462.911Z";
+const char* const kAndroidAutoIcon =
+    "M170.966,192.925C167.542,192.925 164.631,194.888 163.033,197.834L105.216,305.828"
+    "C104.414,307.32 103.992,309.014 103.992,310.737C103.992,316.123 108.115,320.555 113.124,320.555"
+    "C113.133,320.555 113.141,320.555 113.149,320.555L124.564,320.555L168.512,237.227L170.966,232.502L217.368,320.555"
+    "L228.783,320.555C228.791,320.555 228.8,320.555 228.808,320.555C233.818,320.555 237.94,316.123 237.94,310.737"
+    "C237.94,309.014 237.518,307.32 236.717,305.828L178.9,197.834C177.266,194.792 174.234,192.915 170.966,192.925Z"
+    "M170.966,238.761L119.199,336.938L122.281,340.19L170.966,320.555L219.651,340.19L222.733,336.938L170.966,238.761Z";
 const char* const kMultimediaIcon =
     "M210.85,286.448C213.905,285.873 216.792,285.969 219.322,286.604L219.322,222.669L156.397,242.095L156.397,316.336"
     "C156.43,316.744 156.453,317.163 156.453,317.571L156.453,317.583C156.453,327.577 146.699,337.5 134.66,339.741"
@@ -203,9 +210,10 @@ const Look& TheLook()
     static const Look look = [] {
         Look result;
         result.stripeShape = ParsePath(kStripes, Qt::OddEvenFill);
-        // The design fills with the even-odd rule; only the microphone uses nonzero.
-        result.iconShapes = {ParsePath(kMultimediaIcon, Qt::OddEvenFill), ParsePath(kRadioIcon, Qt::WindingFill),
-            ParsePath(kTelephoneIcon, Qt::OddEvenFill), ParsePath(kNavigationIcon, Qt::OddEvenFill),
+        // The design fills with the even-odd rule; only the Android Auto symbol and the microphone use nonzero.
+        // In the order of HomeMenuEntry.
+        result.iconShapes = {ParsePath(kAndroidAutoIcon, Qt::WindingFill), ParsePath(kMultimediaIcon, Qt::OddEvenFill),
+            ParsePath(kRadioIcon, Qt::WindingFill), ParsePath(kTelephoneIcon, Qt::OddEvenFill), ParsePath(kNavigationIcon, Qt::OddEvenFill),
             ParsePath(kVehicleIcon, Qt::OddEvenFill), ParsePath(kSettingsIcon, Qt::OddEvenFill)};
         // Stripes: vertical, brightest in the middle of the tile; grey at half opacity, orange opaque.
         const QTransform vertical(0, 392.557, -392.557, 0, 158.23, 70.6259);
@@ -320,6 +328,18 @@ void DrawTextButton(QPainter& painter, const QRectF& box, const QString& text, b
     painter.setFont(font);
     painter.setPen(kText);
     painter.drawText(box, Qt::AlignCenter, Elided(text, font, box.width() - 20));
+}
+void DrawCheck(QPainter& painter, const QRectF& box, bool isOn)
+{
+    painter.setPen(QPen(isOn ? kText : kFaintFrame, 2.5));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawRect(box);
+    if (!isOn) return;
+    painter.fillRect(box.adjusted(5, 5, -5, -5), LitCorner(box));
+    painter.setPen(QPen(Qt::black, 4, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+    const QPointF c = box.center();
+    const double s = box.width() * 0.22;
+    painter.drawPolyline(QPolygonF({QPointF(c.x() - s, c.y()), QPointF(c.x() - s * 0.25, c.y() + s * 0.8), QPointF(c.x() + s * 1.1, c.y() - s * 0.8)}));
 }
 void DrawRow(QPainter& painter, const QRectF& row, const QString& text, const QString& note, bool isFocused, bool isCurrent)
 {

@@ -15,9 +15,10 @@ template <typename T> class QFutureWatcher;
 namespace headunit {
 // A page of the radio that plays something (the music player, the tuner). At the left its tile from the home menu, lit
 // while the page's source plays; at the right what plays now, the player's controls (previous, play, next) and a list,
-// with buttons at the top right. The controller moves a focus through these (PageFocus in HomeMenuLayout.h) and
-// pushing activates what it is on; the mouse clicks them directly. Both pages share the one AudioPlayer: whichever
-// started it last owns it, and only the owner reacts to its end or to media keys.
+// with buttons at the top right. The controller moves a focus through these (PageFocus in HomeMenuLayout.h): turning
+// moves within a part, up and down jump between the parts, pushing activates what the focus is on; left and right skip
+// to the previous or next title (station). The mouse clicks them directly. Both pages share the one AudioPlayer:
+// whichever started it last owns it, and only the owner reacts to its end, to media keys and to the phone taking over.
 class PlayerPage : public MenuPage {
 public:
     PlayerPage(HomeMenuEntry entry, AudioPlayer& player, QWidget* parent);
@@ -27,7 +28,10 @@ public:
     // A media key (keys::MediaPlayPause, MediaNext, ...) while this page's source plays or is paused: handled here and
     // true. False when the player is not this page's (the key then belongs to the phone).
     bool MediaKey(unsigned keycode);
-    // Called before this page starts the player (the window pauses the phone's music then).
+    // Another source (the phone's music) has started: this page's player falls silent if it plays. The music pauses
+    // where it is, the radio stops.
+    virtual void GiveWay();
+    // Called before this page starts or resumes the player (the window pauses the phone's music then).
     std::function<void()> onWillPlay;
 protected:
     // What the page shows and does.
@@ -48,6 +52,8 @@ protected:
     virtual void Previous() = 0;
     virtual void PlayPause() = 0;
     virtual void Next() = 0;
+    // Left and right: the previous or next title (station).
+    virtual void Skip(int direction);
     // Called about four times a second while the player is this page's (to go on after the end of a track).
     virtual void OwnStatus(const AudioPlayer::Status&) {}
 
@@ -56,6 +62,7 @@ protected:
     const AudioPlayer::Status& LastStatus() const { return m_status; }
     bool IsOwn() const { return m_generation != 0 && m_status.generation == m_generation; }
     bool IsOwnActive() const;
+    bool IsOwnSoundingNow() const;   // opening or playing, asked of the player now
     bool IsOwnSounding() const { return IsOwn() && (m_status.state == AudioPlayer::State::Opening || m_status.state == AudioPlayer::State::Playing); }
     void StartPlayer(const std::string& source);
     // Puts the controller on a row of the list; a row out of view is brought to the middle of it.
@@ -99,6 +106,7 @@ public:
     const QString& Folder() const { return m_folder; }
     // Reads the folder again (in the background); the playing track keeps playing.
     void Rescan();
+    void GiveWay() override;   // pauses, so the title goes on where it was
 protected:
     QStringList HeaderButtons() const override { return {"Open folder", "Rescan"}; }
     void PressHeader(int index) override;
@@ -152,6 +160,7 @@ protected:
     void Previous() override;
     void PlayPause() override;
     void Next() override;
+    void Skip(int direction) override;
     void showEvent(QShowEvent* event) override;
 private:
     void LoadStations();
