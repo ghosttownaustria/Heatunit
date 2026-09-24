@@ -105,18 +105,20 @@ BUILD_DIR="$PROJECT_DIR/out/build/$PRESET"
 
 if [ "$DO_PULL" = "true" ]; then
   cd "$REPO_DIR"
+  SCRIPT_FILE="$REPO_DIR/BuildAndRun.sh"
+  script_before="$(cksum < "$SCRIPT_FILE")"
   if [ "$DO_RESET" = "true" ]; then
     info "Lokale Aenderungen verwerfen (git reset --hard)..."
     git reset --hard
   fi
   info "Neueste Aenderungen holen (git pull --ff-only)..."
-  before="$(git rev-parse HEAD)"
   git pull --ff-only || fail "git pull fehlgeschlagen."
   ok "Git ist aktuell."
-  # Bash hat dieses Skript schon vor dem Pull gelesen: Paketliste und Ablauf waeren noch die alten (z. B. fehlten dann
-  # neu dazugekommene Pakete in der Pruefung). Darum startet sich das Skript im neuen Stand noch einmal, ohne --pull.
-  if [ "$(git rev-parse HEAD)" != "$before" ]; then
-    info "Neuer Stand geholt: starte BuildAndRun.sh im neuen Stand neu..."
+  # Bash hat dieses Skript schon vor dem Pull gelesen: Hat der Pull (oder das Reset) das Skript selbst geaendert,
+  # liefe sonst noch die alte Fassung weiter (z. B. mit einer Paketliste, der neu dazugekommene Pakete fehlen).
+  # Darum startet es sich dann sofort in der neuen Fassung neu, mit denselben Optionen, nur ohne --pull/--reset.
+  if [ "$(cksum < "$SCRIPT_FILE")" != "$script_before" ]; then
+    info "BuildAndRun.sh wurde aktualisiert: starte die neue Fassung..."
     rerun=()
     passthrough="false"
     for arg in ${ORIGINAL_ARGS[@]+"${ORIGINAL_ARGS[@]}"}; do
@@ -126,7 +128,7 @@ if [ "$DO_PULL" = "true" ]; then
       fi
       rerun+=("$arg")
     done
-    exec bash "$REPO_DIR/BuildAndRun.sh" ${rerun[@]+"${rerun[@]}"}
+    exec bash "$SCRIPT_FILE" ${rerun[@]+"${rerun[@]}"}
   fi
 fi
 
