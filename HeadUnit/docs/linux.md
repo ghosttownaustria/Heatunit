@@ -26,7 +26,7 @@ Debian, Ubuntu, Raspberry Pi OS:
 ```sh
 sudo apt install build-essential cmake ninja-build pkg-config \
     qt6-base-dev libboost-dev libssl-dev libprotobuf-dev protobuf-compiler \
-    libusb-1.0-0-dev libavcodec-dev libavutil-dev libswscale-dev
+    libusb-1.0-0-dev libavcodec-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev
 ```
 
 Zum Ausfuehren braucht Qt ein Plattform-Plugin fuer die Bildschirmausgabe: unter X11 `libxcb-cursor0` (Qt 6.5 oder

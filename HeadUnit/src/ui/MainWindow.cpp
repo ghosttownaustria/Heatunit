@@ -1,6 +1,8 @@
 #include "ui/MainWindow.h"
 #include "ui/CarWidgets.h"
 #include "ui/HomeMenu.h"
+#include "ui/MediaPages.h"
+#include "platform/Environment.h"
 #ifdef HEADUNIT_WIRELESS
 #include "wireless/WirelessConnect.h"
 #endif
@@ -15,6 +17,7 @@
 #include <QPushButton>
 #include <QSettings>
 #include <QStackedWidget>
+#include <QStandardPaths>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QtConcurrent/QtConcurrentRun>
@@ -49,18 +52,29 @@ QString DisplayChoiceText(const DisplayConfig& display)
     else if (display.height == 600) text += " (Ultrawide)";
     return text;
 }
+// The folder the music player plays from: HEADUNIT_MUSIC_DIR, else "HeadUnit" in the user's music folder.
+QString MusicFolder()
+{
+    if (const auto folder = GetEnv("HEADUNIT_MUSIC_DIR"); folder && !folder->empty()) return QString::fromStdString(*folder);
+    return QStandardPaths::writableLocation(QStandardPaths::MusicLocation) + "/HeadUnit";
+}
+// The controller's own keys: they work the radio's page in front (the media keys do not).
+bool IsControllerKey(unsigned keycode)
+{
+    return keycode == keys::DpadLeft || keycode == keys::DpadRight || keycode == keys::DpadUp || keycode == keys::DpadDown || keycode == keys::DpadCenter;
+}
 }
 MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
     : m_backend(backend), m_logger(logger), m_mode(mode),
       m_input(std::make_shared<ProjectionInput>()), m_audioState(std::make_shared<AudioState>()),
-      m_audio(CreateAudioEngine(m_audioState, logger))
+      m_audio(CreateAudioEngine(m_audioState, logger)), m_player(std::make_unique<AudioPlayer>(m_audio->Opener(), logger))
 {
     setWindowTitle("Android Auto Headunit");
     resize(1240, 800);
     auto* central = new QWidget(this);
     auto* root = new QHBoxLayout(central);
     auto* left = new QVBoxLayout();
-    // The phone's picture and the radio's home menu share one place; ShowScreen picks the one in front.
+    // The phone's picture and the radio's pages share one place; ShowScreen picks the one in front.
     m_screens = new QStackedWidget(central);
     m_video = new VideoWidget(m_screens);
     m_video->ClearFrame("Android Auto ist nicht verbunden.");
@@ -70,8 +84,13 @@ MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
     };
     m_homeMenu = new HomeMenu(m_screens);
     m_homeMenu->onOpen = [this](HomeMenuEntry entry) { OpenMenuEntry(entry); };
+    m_music = new MultimediaPage(*m_player, MusicFolder(), m_screens);
+    m_radio = new RadioPage(*m_player, m_screens);
+    for (PlayerPage* page : {static_cast<PlayerPage*>(m_music), static_cast<PlayerPage*>(m_radio)}) page->onWillPlay = [this] { PausePhoneMedia(); };
     m_screens->addWidget(m_video);
     m_screens->addWidget(m_homeMenu);
+    m_screens->addWidget(m_music);
+    m_screens->addWidget(m_radio);
     left->addWidget(m_screens, 1);
     // The display size sits next to the button that connects: it is fixed once the connection starts.
     auto* controls = new QHBoxLayout();
@@ -122,7 +141,10 @@ MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
     m_panel->setFixedWidth(310);
     m_panel->onConsole = [this](ConsoleKey key) { PressConsole(key); };
     m_panel->onKey = [this](unsigned keycode, bool isDown) { SendKey(keycode, isDown); };
-    m_panel->onRotate = [this](int detents) { if (IsHomeMenuShown()) m_homeMenu->Move(detents); else m_input->Rotate(detents); };
+    m_panel->onRotate = [this](int detents) {
+        if (MenuPage* page = FrontPage()) page->Turn(detents);
+        else m_input->Rotate(detents);
+    };
     m_panel->onVolume = [this](int delta) { m_audioState->ChangeVolume(delta); };
     m_panel->onMute = [this] { m_audioState->ToggleMute(); };
     root->addWidget(m_panel);
@@ -223,8 +245,9 @@ bool MainWindow::HandleKey(QKeyEvent* event, bool isDown)
     if (keycode != 0) {
         if (!event->isAutoRepeat()) SendKey(keycode, isDown);
         else if (isDown && isArrow) {   // held arrows keep nudging, wherever their press went
-            if (m_menuKeys.contains(keycode)) PressMenuKey(keycode);
-            else m_input->Tap(keycode);
+            MenuPage* page = FrontPage();
+            if (!m_localKeys.contains(keycode)) m_input->Tap(keycode);
+            else if (page) page->Nudge(keycode);
         }
         return true;
     }
@@ -246,6 +269,10 @@ PhoneScreen MainWindow::CurrentPhoneScreen() const
 }
 void MainWindow::PressConsole(ConsoleKey key)
 {
+    // Back first closes what a page has opened inside itself (the tuner's list of countries).
+    if (key == ConsoleKey::Back) {
+        if (MenuPage* page = FrontPage(); page && page->Back()) return;
+    }
     // Only Home depends on where the phone is.
     PhoneScreen phone = PhoneScreen::Unknown;
     if (key == ConsoleKey::Home && m_console.IsProjectionConnected()) {
@@ -255,34 +282,60 @@ void MainWindow::PressConsole(ConsoleKey key)
     }
     ApplyConsoleEffect(m_console.Press(key, phone));
 }
-// The console decides which side is in front; the radio's side is its home menu.
-bool MainWindow::IsHomeMenuShown() const { return m_console.CurrentScreen() == ConsoleController::Screen::RadioHome; }
-void MainWindow::ShowScreen() { m_screens->setCurrentWidget(IsHomeMenuShown() ? static_cast<QWidget*>(m_homeMenu) : m_video); }
-// The controller's arrows and push go to the home menu while it is shown, otherwise to the phone. A release goes
-// where its press went, so neither side sees half a key press. Track and play keys always go to the phone.
+// The console decides which side is in front: the phone's picture or one of the radio's pages.
+MenuPage* MainWindow::FrontPage() const
+{
+    switch (m_console.CurrentScreen()) {
+    case ConsoleController::Screen::RadioHome: return m_homeMenu;
+    case ConsoleController::Screen::Multimedia: return m_music;
+    case ConsoleController::Screen::Radio: return m_radio;
+    default: return nullptr;
+    }
+}
+void MainWindow::ShowScreen()
+{
+    MenuPage* page = FrontPage();
+    m_screens->setCurrentWidget(page ? static_cast<QWidget*>(page) : m_video);
+}
+// Keys go to the radio's side when it takes them (PressLocally), otherwise to the phone. A release goes where its
+// press went, so neither side sees half a key press.
 void MainWindow::SendKey(unsigned keycode, bool isDown)
 {
-    const bool isMenuKey = keycode == keys::DpadLeft || keycode == keys::DpadRight || keycode == keys::DpadUp ||
-        keycode == keys::DpadDown || keycode == keys::DpadCenter;
-    if (isDown && isMenuKey && IsHomeMenuShown()) {
-        m_menuKeys.insert(keycode);
-        PressMenuKey(keycode);
+    if (!isDown && m_localKeys.erase(keycode) > 0) return;
+    if (isDown && PressLocally(keycode)) {
+        m_localKeys.insert(keycode);
         return;
     }
-    if (!isDown && m_menuKeys.erase(keycode) > 0) return;
     m_console.NoteKey(keycode, isDown);
     m_input->Key(keycode, isDown);
 }
-// The menu is one row: left and right move the focus, pushing the knob opens the tile, up and down do nothing.
-void MainWindow::PressMenuKey(unsigned keycode)
+// The controller's arrows and push work the radio's page in front; the media keys (play, track skip) work the radio's
+// own player while it plays or is paused. Otherwise both belong to the phone.
+bool MainWindow::PressLocally(unsigned keycode)
 {
-    if (keycode == keys::DpadLeft) m_homeMenu->Move(-1);
-    else if (keycode == keys::DpadRight) m_homeMenu->Move(+1);
-    else if (keycode == keys::DpadCenter) m_homeMenu->Activate();
+    if (IsControllerKey(keycode)) {
+        MenuPage* page = FrontPage();
+        if (page) PressPageKey(*page, keycode);
+        return page != nullptr;
+    }
+    const bool isTaken = m_music->MediaKey(keycode) || m_radio->MediaKey(keycode);
+    if (isTaken) m_logger.Write("INFO", "MEDIA", "Media key " + std::to_string(keycode) + " for the radio's own player");
+    return isTaken;
 }
-// A tile does what its controller key does; the tiles without a key have nothing behind them yet.
+void MainWindow::PressPageKey(MenuPage& page, unsigned keycode)
+{
+    if (keycode == keys::DpadCenter) page.Push();
+    else page.Nudge(keycode);
+}
+// The radio's player is about to start: the phone's music, if any, pauses, as when a car changes its source.
+void MainWindow::PausePhoneMedia()
+{
+    if (m_console.IsProjectionConnected()) m_input->Tap(keys::MediaPause);
+}
+// A tile opens one of the radio's pages or does what its controller key does; the others have nothing behind them yet.
 void MainWindow::OpenMenuEntry(HomeMenuEntry entry)
 {
+    if (const auto page = HomeMenuPage(entry)) { ApplyConsoleEffect(m_console.Open(*page)); return; }
     if (const auto key = HomeMenuKey(entry)) { PressConsole(*key); return; }
     const std::string message = std::string(HomeMenuTitle(entry)) + ": noch keine Funktion";
     m_logger.Write("INFO", "CONSOLE", message);
@@ -333,7 +386,7 @@ void MainWindow::SetDisplay(const DisplayConfig& display)
     m_display = display;
     m_console.SetDisplay(display);
     m_video->SetDisplay(display);
-    m_homeMenu->SetDisplay(display);
+    for (MenuPage* page : {static_cast<MenuPage*>(m_homeMenu), static_cast<MenuPage*>(m_music), static_cast<MenuPage*>(m_radio)}) page->SetDisplay(display);
     for (int index = 0; index < static_cast<int>(std::size(kDisplays)); ++index)
         if (kDisplays[index] == display) m_displayChoice->setCurrentIndex(index);
 }
@@ -600,9 +653,10 @@ void MainWindow::RunConsoleTest()
             SaveTestShot("console-5-home-again.png");
             expectScreen(ConsoleController::Screen::ProjectionHome, "Home after Media did not end on the phone's dashboard");
             expectPhone(PhoneScreen::Dashboard, "Home after Media did not bring the phone to its dashboard");
-            PressConsole(ConsoleKey::Radio);   // only reported
-            if (!historyHas("Radio: noch keine Belegung")) m_testProblems += "radio key was not reported; ";
-            expectScreen(ConsoleController::Screen::RadioHome, "the radio key did not open the radio menu");
+            PressConsole(ConsoleKey::Radio);
+            if (!historyHas("Radio: Internetradio")) m_testProblems += "radio key was not reported; ";
+            expectScreen(ConsoleController::Screen::Radio, "the radio key did not open the tuner");
+            if (m_screens->currentWidget() != m_radio) m_testProblems += "the radio key did not show the tuner; ";
             PressConsole(ConsoleKey::Nav);
             m_testClock.restart(); m_testStage = 6;
         }

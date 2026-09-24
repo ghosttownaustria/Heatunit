@@ -46,6 +46,7 @@ public:
         m_ring.Clear();
         m_isPrimed = false;
     }
+    std::size_t Queued() const override { return m_ring.Size(); }
 private:
     void Fail(const char* step, HRESULT result) {
         m_logger.Write("ERROR", "AUDIO", std::string(KindName(m_kind)) + " output: " + step + " failed (HRESULT 0x" +

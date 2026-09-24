@@ -407,7 +407,7 @@ CarPanel::CarPanel(QWidget* parent) : QWidget(parent)
         top->setColumnStretch(column, 1);
         return button;
     };
-    hotKey("MEDIA", ConsoleKey::Media, "Medien (Spotify o.ae. auf dem Handy), Taste F3", 0);
+    hotKey("MEDIA", ConsoleKey::Media, "Medien: Spotify o.ae. auf dem Handy, ohne Handy der Musikordner des Radios (F3)", 0);
     hotKey("TEL", ConsoleKey::Tel, "Telefon auf dem Handy, Taste F5", 1);
     hotKey("NAV", ConsoleKey::Nav, "Navigation auf dem Handy, Taste F6", 2);
     auto* projection = hotKey("", ConsoleKey::Projection, "CarPlay / Android Auto: Projektion nach vorn holen; ohne Verbindung: verbinden (Taste F8)", 3);
@@ -421,7 +421,7 @@ CarPanel::CarPanel(QWidget* parent) : QWidget(parent)
         button->setFixedSize(96, kKeyHeight);
         home->addWidget(button);
     };
-    sideKey("HOME", ConsoleKey::Home, "Android-Auto-Startbildschirm; nochmal: Radio-Startmenue (Pos1)");
+    sideKey("HOME", ConsoleKey::Home, "Android-Auto-Startbildschirm; nochmal: Startmenue des Radios (Pos1)");
     home->addStretch(1);
     sideKey("BACK", ConsoleKey::Back, "Zurueck (Esc)");
     layout->addLayout(home);
@@ -449,9 +449,9 @@ CarPanel::CarPanel(QWidget* parent) : QWidget(parent)
 
     auto* more = new QGridLayout();
     more->setSpacing(6);
-    more->addWidget(AddConsoleButton("MENU", ConsoleKey::Menu, "Radio-Startmenue, Taste F1"), 0, 0);
+    more->addWidget(AddConsoleButton("MENU", ConsoleKey::Menu, "Startmenue des Radios, Taste F1"), 0, 0);
     more->addWidget(AddConsoleButton("OPTION", ConsoleKey::Option, "Optionen/Kontextmenue der aktuellen Ansicht (F2)"), 0, 1);
-    more->addWidget(AddConsoleButton("RADIO", ConsoleKey::Radio, "Radio (noch ohne Funktion, zeigt das Radio-Startmenue), Taste F4"), 0, 2);
+    more->addWidget(AddConsoleButton("RADIO", ConsoleKey::Radio, "Radio: Internetradio nach Land, Taste F4"), 0, 2);
     more->addWidget(AddConsoleButton("MAP", ConsoleKey::Map, "Karte auf dem Handy, Taste F7"), 0, 3);
     layout->addLayout(more);
 

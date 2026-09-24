@@ -56,7 +56,7 @@ oder von Hand:
 ```sh
 sudo apt install -y build-essential cmake ninja-build pkg-config \
     qt6-base-dev libboost-dev libssl-dev libprotobuf-dev protobuf-compiler \
-    libusb-1.0-0-dev libavcodec-dev libavutil-dev libswscale-dev \
+    libusb-1.0-0-dev libavcodec-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev \
     libxcb-cursor0
 ```
 
@@ -69,6 +69,7 @@ Wozu die Pakete gut sind:
 | `libboost-dev`, `libssl-dev`, `libprotobuf-dev`, `protobuf-compiler` | Android-Auto-Protokoll (AASDK) |
 | `libusb-1.0-0-dev` | Zugriff aufs Handy per USB |
 | `libavcodec-dev`, `libavutil-dev`, `libswscale-dev` | H.264-Videodekodierung (FFmpeg) |
+| `libavformat-dev`, `libswresample-dev` | Eigener Player des Radios: Musikdateien und Internetradio (FFmpeg) |
 | `libxcb-cursor0` | Qt-Plattform-Plugin unter X11 (Qt 6.5 oder neuer; unter Wayland stattdessen `qt6-wayland`) |
 
 Der Ton laeuft ueber PulseAudio, PipeWire (`pipewire-pulse`) oder ALSA. Auf einem normalen Desktop-System ist das schon

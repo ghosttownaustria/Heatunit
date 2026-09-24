@@ -2,12 +2,16 @@
 #include "androidauto/DisplayConfig.h"
 #include "androidauto/ProjectionInput.h"
 #include "audio/AudioTypes.h"
+#include "media/MusicLibrary.h"
+#include "media/StreamText.h"
 #include "ui/HomeMenuLayout.h"
 #include "ui/KnobZones.h"
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <iterator>
 #include <optional>
 #include <string>
@@ -254,10 +258,26 @@ void TestConsoleController() {
     // Without a projection there is only the radio, and it has no functions yet: everything is a log line.
     auto effect = console.Press(ConsoleKey::Home);
     Check(effect.phoneKeys.empty() && Contains(effect.message, "Radio-Startmenue") && !effect.connect, "Home without a projection did not report the radio menu");
+    // Media without a phone: the radio's own music player; Back and Home lead from it to the home menu.
     effect = console.Press(ConsoleKey::Media);
-    Check(effect.phoneKeys.empty() && Contains(effect.message, "nicht verbunden"), "Media without a projection was sent or not reported");
+    Check(effect.phoneKeys.empty() && console.CurrentScreen() == Screen::Multimedia && !effect.message.empty(), "Media without a projection did not open the music player");
     effect = console.Press(ConsoleKey::Back);
-    Check(effect.phoneKeys.empty() && !effect.message.empty(), "Back without a projection was sent or not reported");
+    Check(effect.phoneKeys.empty() && console.CurrentScreen() == Screen::RadioHome, "Back on the music player did not return to the home menu");
+    effect = console.Press(ConsoleKey::Back);
+    Check(effect.phoneKeys.empty() && !effect.message.empty() && console.CurrentScreen() == Screen::RadioHome, "Back without a projection was sent or not reported");
+    console.Press(ConsoleKey::Radio);
+    Check(console.CurrentScreen() == Screen::Radio, "Radio did not open the tuner");
+    effect = console.Press(ConsoleKey::Home);
+    Check(effect.phoneKeys.empty() && console.CurrentScreen() == Screen::RadioHome, "Home on the tuner did not return to the home menu");
+    // The tiles' pages.
+    effect = console.Open(Screen::Multimedia);
+    Check(console.CurrentScreen() == Screen::Multimedia && !effect.message.empty(), "The Multimedia tile did not open the music player");
+    effect = console.Open(Screen::Projection);
+    Check(console.CurrentScreen() == Screen::Multimedia && effect.message.empty(), "Opening the phone as a page changed the screen");
+    console.Press(ConsoleKey::Menu);
+    Check(ConsoleController::IsRadioScreen(Screen::RadioHome) && ConsoleController::IsRadioScreen(Screen::Radio) &&
+        !ConsoleController::IsRadioScreen(Screen::ProjectionHome) && ConsoleController::IsRadioPage(Screen::Multimedia) &&
+        !ConsoleController::IsRadioPage(Screen::RadioHome), "The radio's screens are not told apart");
     effect = console.Press(ConsoleKey::Projection);
     Check(effect.connect && effect.phoneKeys.empty(), "The projection key did not ask for a connection");
 
@@ -299,11 +319,21 @@ void TestConsoleController() {
     Check(console.CurrentScreen() == Screen::ProjectionHome, "Setup for the Back test failed");
     Check(console.Press(ConsoleKey::Back).phoneKeys == std::vector<unsigned>{keys::Back} && console.CurrentScreen() == Screen::ProjectionHome, "Back changed the home state");
 
-    // Radio and Menu have no function yet: only reported, and the radio side is what is "open".
+    // Radio opens the tuner, Menu the home menu; nothing goes to the phone. Back goes from the tuner to the home menu and
+    // from there to the phone.
     effect = console.Press(ConsoleKey::Radio);
-    Check(effect.phoneKeys.empty() && Contains(effect.message, "Radio") && console.CurrentScreen() == Screen::RadioHome, "Radio is wrong");
+    Check(effect.phoneKeys.empty() && Contains(effect.message, "Radio") && console.CurrentScreen() == Screen::Radio, "Radio is wrong");
+    effect = console.Press(ConsoleKey::Back);
+    Check(effect.phoneKeys.empty() && console.CurrentScreen() == Screen::RadioHome, "Back on the tuner did not return to the home menu");
     effect = console.Press(ConsoleKey::Back);
     Check(effect.phoneKeys.empty() && console.CurrentScreen() == Screen::Projection, "Back in the radio menu did not return to the phone");
+    // With a phone, Media is the phone's media app, even from the radio's music player.
+    console.Open(Screen::Multimedia);
+    Check(console.Press(ConsoleKey::Media).phoneKeys == std::vector<unsigned>{keys::Media} && console.CurrentScreen() == Screen::Projection,
+        "Media with a projection did not go to the phone");
+    console.Open(Screen::Radio);
+    effect = console.Press(ConsoleKey::Projection);
+    Check(effect.phoneKeys.empty() && console.CurrentScreen() == Screen::Projection, "The projection key did not leave the tuner");
     effect = console.Press(ConsoleKey::Menu);
     Check(effect.phoneKeys.empty() && Contains(effect.message, "Menue") && console.CurrentScreen() == Screen::RadioHome, "Menu is wrong");
 
@@ -445,7 +475,7 @@ void TestConsoleHomeWithPicture() {
     Check(effect.phoneTaps == dashboardTap && console.CurrentScreen() == Screen::ProjectionHome && !Contains(effect.message, "Radio"),
         "Home trusted its own state over the picture");
     // In the radio menu with the phone on an app: back to the phone means its dashboard.
-    console.Press(ConsoleKey::Radio);
+    console.Press(ConsoleKey::Menu);
     effect = console.Press(ConsoleKey::Home, PhoneScreen::Other);
     Check(effect.phoneTaps == dashboardTap && Contains(effect.message, "zurueck") && console.CurrentScreen() == Screen::ProjectionHome,
         "Home from the radio menu did not bring an app back to the dashboard");
@@ -538,9 +568,12 @@ void TestHomeMenuLayout() {
     Check(kHomeMenuCount == 6 && std::string(HomeMenuTitle(kHomeMenuEntries[0])) == "Multimedia" &&
         std::string(HomeMenuTitle(kHomeMenuEntries[5])) == "Settings", "The home menu does not have the tiles of the design");
     // A tile does what its controller key does; Vehicle and Settings have nothing behind them yet.
-    Check(HomeMenuKey(HomeMenuEntry::Multimedia) == ConsoleKey::Media && HomeMenuKey(HomeMenuEntry::Radio) == ConsoleKey::Radio &&
+    Check(HomeMenuPage(HomeMenuEntry::Multimedia) == Screen::Multimedia && HomeMenuPage(HomeMenuEntry::Radio) == Screen::Radio &&
+        !HomeMenuKey(HomeMenuEntry::Multimedia) && !HomeMenuKey(HomeMenuEntry::Radio) &&
         HomeMenuKey(HomeMenuEntry::Telephone) == ConsoleKey::Tel && HomeMenuKey(HomeMenuEntry::Navigation) == ConsoleKey::Nav &&
-        !HomeMenuKey(HomeMenuEntry::Vehicle) && !HomeMenuKey(HomeMenuEntry::Settings), "A home menu tile opens the wrong thing");
+        !HomeMenuPage(HomeMenuEntry::Telephone) && !HomeMenuPage(HomeMenuEntry::Navigation) &&
+        !HomeMenuKey(HomeMenuEntry::Vehicle) && !HomeMenuKey(HomeMenuEntry::Settings) && !HomeMenuPage(HomeMenuEntry::Vehicle) &&
+        !HomeMenuPage(HomeMenuEntry::Settings), "A home menu tile opens the wrong thing");
     // The screen is 600 units high and as wide as the display's shape.
     Check(HomeMenuWidth({1600, 600}) == 1600 && HomeMenuWidth(kDefaultDisplay) == 1000 && std::abs(HomeMenuWidth({1920, 1080}) - 1066.67) < 0.01 &&
         HomeMenuWidth({0, 0}) == 0, "The home menu has the wrong width");
@@ -576,9 +609,95 @@ void TestHomeMenuLayout() {
     Check(MoveHomeFocus(0, -1) == 0 && MoveHomeFocus(0, 2) == 2 && MoveHomeFocus(4, 3) == 5 && MoveHomeFocus(5, -9) == 0, "The focus left the row");
 }
 
+// The player pages: a list that scrolls with the focus, and the focus moving between the top buttons, the controls and
+// the list.
+void TestPlayerPageFocus() {
+    Check(ListFirstRow(0, 0, 5, 20) == 0 && ListFirstRow(4, 0, 5, 20) == 0 && ListFirstRow(5, 0, 5, 20) == 1 && ListFirstRow(19, 0, 5, 20) == 15 &&
+        ListFirstRow(10, 15, 5, 20) == 10 && ListFirstRow(12, 10, 5, 20) == 10, "The list does not follow the focus");
+    Check(ListFirstRow(3, 0, 5, 3) == 0 && ListFirstRow(2, 7, 5, 3) == 0 && ListFirstRow(0, 4, 5, 0) == 0 && ListFirstRow(1, 0, 0, 5) == 0,
+        "A short or empty list scrolled");
+    using Part = PageFocus::Part;
+    const PageShape shape{2, 3, 10};
+    PageFocus focus;   // starts in the list
+    focus = TurnFocus(focus, shape, 3);
+    Check(focus.part == Part::List && focus.row == 3, "Turning did not move through the list");
+    focus = TurnFocus(focus, shape, 50);
+    Check(focus.row == 9, "Turning left the end of the list");
+    focus = NudgeFocus(focus, shape, keys::DpadLeft);
+    Check(focus.part == Part::List && focus.row == 9, "Left moved in the list");
+    for (int i = 0; i < 9; ++i) focus = NudgeFocus(focus, shape, keys::DpadUp);
+    Check(focus.part == Part::List && focus.row == 0, "Up did not go through the list");
+    focus = NudgeFocus(focus, shape, keys::DpadUp);
+    Check(focus.part == Part::Controls && focus.button == 1 && focus.row == 0, "Up from the list did not reach the play button");
+    focus = TurnFocus(focus, shape, -5);
+    Check(focus.part == Part::Controls && focus.button == 0, "Turning left the controls");
+    focus = NudgeFocus(focus, shape, keys::DpadRight);
+    focus = NudgeFocus(focus, shape, keys::DpadRight);
+    focus = NudgeFocus(focus, shape, keys::DpadRight);
+    Check(focus.part == Part::Controls && focus.button == 2, "Right did not stop at the last control");
+    focus = NudgeFocus(focus, shape, keys::DpadUp);
+    Check(focus.part == Part::Header && focus.button == 0, "Up from the controls did not reach the top buttons");
+    focus = NudgeFocus(focus, shape, keys::DpadUp);
+    Check(focus.part == Part::Header, "Up left the top of the page");
+    focus = NudgeFocus(NudgeFocus(focus, shape, keys::DpadDown), shape, keys::DpadDown);
+    Check(focus.part == Part::List && focus.row == 0, "Down did not come back to where the list was");
+    // The list becomes empty (a new country loads): the focus waits on the play button; a shorter list keeps it in range.
+    focus.row = 8;
+    Check(FitFocus(focus, {2, 3, 0}) == PageFocus{Part::Controls, 1, 0}, "An empty list kept the focus");
+    Check(FitFocus(focus, {2, 3, 4}).row == 3, "A shorter list left the focus beyond its end");
+    Check(NudgeFocus(PageFocus{Part::Controls, 1, 0}, {0, 3, 4}, keys::DpadUp).part == Part::Controls, "Up went to top buttons that are not there");
+    Check(NudgeFocus(PageFocus{Part::Controls, 1, 0}, {1, 3, 0}, keys::DpadDown).part == Part::Controls, "Down went into an empty list");
+}
+
+// The music folder: every playable file below it, in the order people number them, top folder first.
+void TestMusicLibrary() {
+    Check(NaturalLess("2 Song", "10 Song") && !NaturalLess("10 Song", "2 Song") && NaturalLess("track02", "Track10") &&
+        NaturalLess("abc", "ABD") && NaturalLess("Song", "Song 2") && !NaturalLess("same", "same") && !NaturalLess("01 a", "1 a") && !NaturalLess("1 a", "01 a"),
+        "Natural order is wrong");
+    Check(IsMusicFile("a/b/Song.MP3") && IsMusicFile("x.flac") && IsMusicFile("x.m4a") && IsMusicFile("x.opus") && !IsMusicFile("cover.jpg") &&
+        !IsMusicFile("list.m3u") && !IsMusicFile("mp3") && !IsMusicFile("folder.mp3/"), "Music files are not recognised");
+    namespace fs = std::filesystem;
+    const fs::path root = fs::temp_directory_path() / "headunit-music-test";
+    std::error_code ignored;
+    fs::remove_all(root, ignored);
+    fs::create_directories(root / "Album B");
+    fs::create_directories(root / "Album A" / "CD 2");
+    for (const char* name : {"10 Ten.mp3", "2 Two.flac", "cover.jpg", "Album B/01 First.ogg", "Album A/3 Third.m4a", "Album A/CD 2/1 Disc two.mp3"})
+        std::ofstream(root / fs::path(reinterpret_cast<const char8_t*>(name))) << "x";
+    fs::create_directories(root / u8"Mötley Crüe");
+    std::ofstream(root / u8"Mötley Crüe" / u8"Kickstart ü.mp3") << "x";
+    const auto tracks = ScanMusicFolder(root);
+    std::vector<std::string> names;
+    for (const auto& track : tracks) names.push_back(track.folder + "|" + track.name);
+    fs::remove_all(root, ignored);
+    const std::vector<std::string> expected{"|2 Two", "|10 Ten", "Album A|3 Third", "Album A/CD 2|1 Disc two", "Album B|01 First",
+        "M\xC3\xB6tley Cr\xC3\xBC" "e|Kickstart \xC3\xBC"};
+    std::string found;
+    for (const auto& name : names) found += " [" + name + "]";
+    Check(names == expected, ("The music folder is read in the wrong order or incompletely:" + found).c_str());
+    Check(tracks.size() == expected.size() && tracks[1].path.find("10 Ten.mp3") != std::string::npos, "A track has the wrong path");
+    Check(ScanMusicFolder(root).empty(), "A missing music folder gave tracks");
+}
+
+// "Now playing" of a radio station and the play times.
+void TestStreamText() {
+    Check(IcyStreamTitle("StreamTitle='Queen - Bohemian Rhapsody';StreamUrl='';") == "Queen - Bohemian Rhapsody", "The ICY title was not read");
+    Check(IcyStreamTitle("StreamTitle='Guns N' Roses - Paradise City';") == "Guns N' Roses - Paradise City", "An apostrophe ended the title");
+    Check(IcyStreamTitle("StreamTitle='  Spaced  ';") == "Spaced" && IcyStreamTitle("StreamTitle=' - ';").empty() && IcyStreamTitle("StreamTitle='';").empty() &&
+        IcyStreamTitle("StreamUrl='x';").empty() && IcyStreamTitle("").empty(), "Empty or odd titles are wrong");
+    Check(IcyStreamTitle("StreamTitle='Caf\xE9';") == "Caf\xC3\xA9" && IcyStreamTitle("StreamTitle='Caf\xC3\xA9';") == "Caf\xC3\xA9",
+        "A Latin-1 title was not converted, or a UTF-8 one was");
+    Check(IsValidUtf8("abc \xC3\xA4\xE2\x82\xAC\xF0\x9F\x8E\xB5") && !IsValidUtf8("\xC3") && !IsValidUtf8("\xE9t\xE9") && !IsValidUtf8("\xC3\x28"), "UTF-8 check is wrong");
+    Check(FormatPlayTime(0) == "0:00" && FormatPlayTime(7.9) == "0:07" && FormatPlayTime(187.4) == "3:07" && FormatPlayTime(3725) == "1:02:05" &&
+        FormatPlayTime(-3) == "0:00" && FormatPlayTime(std::nan("")) == "0:00", "Play times are formatted wrongly");
+}
+
 void TestCarControls() {
     TestKnobZones();
     TestHomeMenuLayout();
+    TestPlayerPageFocus();
+    TestMusicLibrary();
+    TestStreamText();
     TestTouchMapping();
     TestTouchMappingOtherDisplays();
     TestDisplayConfig();

@@ -5,6 +5,8 @@
     <Filter Include="src\androidauto" />
     <Filter Include="src\audio" />
     <Filter Include="src\logging" />
+    <Filter Include="src\media" />
+    <Filter Include="src\radio" />
     <Filter Include="src\platform" />
     <Filter Include="src\ui" />
     <Filter Include="src\usb" />
@@ -25,6 +27,18 @@
     <ClCompile Include="src\ui\HomeMenu.cpp"><Filter>src\ui</Filter></ClCompile>
     <ClInclude Include="src\ui\HomeMenu.h"><Filter>src\ui</Filter></ClInclude>
     <ClInclude Include="src\ui\HomeMenuLayout.h"><Filter>src\ui</Filter></ClInclude>
+    <ClCompile Include="src\ui\MenuStyle.cpp"><Filter>src\ui</Filter></ClCompile>
+    <ClInclude Include="src\ui\MenuStyle.h"><Filter>src\ui</Filter></ClInclude>
+    <ClCompile Include="src\ui\MenuPage.cpp"><Filter>src\ui</Filter></ClCompile>
+    <ClInclude Include="src\ui\MenuPage.h"><Filter>src\ui</Filter></ClInclude>
+    <ClCompile Include="src\ui\MediaPages.cpp"><Filter>src\ui</Filter></ClCompile>
+    <ClInclude Include="src\ui\MediaPages.h"><Filter>src\ui</Filter></ClInclude>
+    <ClCompile Include="src\radio\RadioBrowser.cpp"><Filter>src\radio</Filter></ClCompile>
+    <ClInclude Include="src\radio\RadioBrowser.h"><Filter>src\radio</Filter></ClInclude>
+    <ClCompile Include="src\media\AudioPlayer.cpp"><Filter>src\media</Filter></ClCompile>
+    <ClInclude Include="src\media\AudioPlayer.h"><Filter>src\media</Filter></ClInclude>
+    <ClInclude Include="src\media\MusicLibrary.h"><Filter>src\media</Filter></ClInclude>
+    <ClInclude Include="src\media\StreamText.h"><Filter>src\media</Filter></ClInclude>
     <ClInclude Include="src\ui\MainWindow.h"><Filter>src\ui</Filter></ClInclude>
     <ClCompile Include="src\usb\UsbDescriptors.cpp"><Filter>src\usb</Filter></ClCompile>
     <ClInclude Include="src\usb\UsbDescriptors.h"><Filter>src\usb</Filter></ClInclude>

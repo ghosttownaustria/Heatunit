@@ -29,13 +29,20 @@ constexpr const char* HomeMenuTitle(HomeMenuEntry entry)
     return "";
 }
 
-// The controller key a tile stands for: opening the tile is pressing that key. Vehicle and Settings have no key and
-// nothing behind them yet.
+// The radio's own page a tile opens: its music player and its tuner.
+constexpr std::optional<ConsoleController::Screen> HomeMenuPage(HomeMenuEntry entry)
+{
+    switch (entry) {
+    case HomeMenuEntry::Multimedia: return ConsoleController::Screen::Multimedia;
+    case HomeMenuEntry::Radio: return ConsoleController::Screen::Radio;
+    default: return std::nullopt;
+    }
+}
+// The controller key the phone's tiles stand for: opening the tile is pressing that key. Vehicle and Settings have
+// neither a page nor a key yet.
 constexpr std::optional<ConsoleKey> HomeMenuKey(HomeMenuEntry entry)
 {
     switch (entry) {
-    case HomeMenuEntry::Multimedia: return ConsoleKey::Media;
-    case HomeMenuEntry::Radio: return ConsoleKey::Radio;
     case HomeMenuEntry::Telephone: return ConsoleKey::Tel;
     case HomeMenuEntry::Navigation: return ConsoleKey::Nav;
     default: return std::nullopt;
@@ -83,4 +90,71 @@ inline std::optional<int> HomeTileAt(double x, double y, double scroll)
 
 // The focus after moving `steps` tiles (positive: to the right); it stops at both ends of the row.
 constexpr int MoveHomeFocus(int focus, int steps) { return std::clamp(focus + steps, 0, kHomeMenuCount - 1); }
+
+// The first row a list of `count` rows shows, `visible` at a time, so that row `focus` is in view; starting from
+// `first` it moves as little as possible.
+constexpr int ListFirstRow(int focus, int first, int visible, int count)
+{
+    if (count <= 0 || visible <= 0) return 0;
+    if (focus < first) first = focus;
+    if (focus >= first + visible) first = focus - visible + 1;
+    return std::clamp(first, 0, std::max(0, count - visible));
+}
+
+// Where the controller is on a player page (Multimedia, Radio): a row of buttons at the top (header), the player's
+// controls below the title and the list. Turning moves within the part; up and down go through the list and from part
+// to part; left and right go along a row of buttons.
+struct PageFocus {
+    enum class Part { Header, Controls, List };
+    Part part{Part::List};
+    int button{};   // in the header or the controls
+    int row{};      // in the list; kept while the focus is elsewhere
+    friend bool operator==(const PageFocus&, const PageFocus&) = default;
+};
+struct PageShape {
+    int headerButtons{}, controlButtons{}, rows{};
+};
+// The focus made valid again after the page changed (the list got shorter or empty, ...).
+constexpr PageFocus FitFocus(PageFocus focus, const PageShape& shape)
+{
+    focus.row = shape.rows > 0 ? std::clamp(focus.row, 0, shape.rows - 1) : 0;
+    if (focus.part == PageFocus::Part::List && shape.rows == 0) { focus.part = PageFocus::Part::Controls; focus.button = shape.controlButtons / 2; }
+    if (focus.part == PageFocus::Part::Header && shape.headerButtons == 0) focus.part = PageFocus::Part::Controls;
+    const int buttons = focus.part == PageFocus::Part::Header ? shape.headerButtons : shape.controlButtons;
+    focus.button = std::clamp(focus.button, 0, std::max(0, buttons - 1));
+    return focus;
+}
+constexpr PageFocus TurnFocus(PageFocus focus, const PageShape& shape, int steps)
+{
+    focus = FitFocus(focus, shape);
+    if (focus.part == PageFocus::Part::List) focus.row = std::clamp(focus.row + steps, 0, std::max(0, shape.rows - 1));
+    else focus.button += steps;
+    return FitFocus(focus, shape);
+}
+constexpr PageFocus NudgeFocus(PageFocus focus, const PageShape& shape, unsigned keycode)
+{
+    using Part = PageFocus::Part;
+    focus = FitFocus(focus, shape);
+    switch (keycode) {
+    case keys::DpadUp:
+        if (focus.part == Part::List && focus.row > 0) --focus.row;
+        else if (focus.part == Part::List) { focus.part = Part::Controls; focus.button = shape.controlButtons / 2; }
+        else if (focus.part == Part::Controls && shape.headerButtons > 0) { focus.part = Part::Header; focus.button = 0; }
+        break;
+    case keys::DpadDown:
+        if (focus.part == Part::Header) { focus.part = Part::Controls; focus.button = shape.controlButtons / 2; }
+        else if (focus.part == Part::Controls && shape.rows > 0) focus.part = Part::List;
+        else if (focus.part == Part::List) ++focus.row;
+        break;
+    case keys::DpadLeft:
+        if (focus.part != Part::List) --focus.button;
+        break;
+    case keys::DpadRight:
+        if (focus.part != Part::List) ++focus.button;
+        break;
+    default:
+        break;
+    }
+    return FitFocus(focus, shape);
+}
 }

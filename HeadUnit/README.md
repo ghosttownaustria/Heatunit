@@ -48,22 +48,45 @@ einer Groesse, ohne sie zu merken (auch fuer die `--test-...`-Laeufe, die sonst 
   leuchtet auf. Ein Klick, der auf einem anderen Bereich endet als er begann, zaehlt nicht.
 - **Tasten** (angelehnt an ein BMW-iDrive-Multimedia-Bedienteil): Media, Tel, Nav und Map rufen die
   entsprechende App auf dem Handy auf (Map und Nav oeffnen beide die Navigation), Back ist die
-  Zurueck-Taste des Handys, Option sendet dessen Menue-Taste. Menu und Radio holen das Startmenue des Radios
-  nach vorn (Radio hat noch keine eigene Funktion, es gibt noch kein Radio-Betriebssystem).
+  Zurueck-Taste des Handys, Option sendet dessen Menue-Taste. Menu holt das Startmenue des Radios nach vorn,
+  Radio den Radioempfang (siehe unten). Ohne verbundenes Handy oeffnet Media den Musikordner des Radios.
 - **Startmenue des Radios:** Die Uhr und eine Reihe Kacheln (Multimedia, Radio, Telephone, Navigation,
   Vehicle, Settings) nach der Vorlage [docs/design/home-menu.svg](docs/design/home-menu.svg), an der Stelle
   des Handybilds und in der Form des gewaehlten Displays. Ohne verbundenes Handy ist es immer zu sehen, waehrend
-  des Verbindens auch; das Handybild
-  kommt nach vorn, sobald es da ist. Drehen am Regler oder die Pfeile links/rechts waehlen eine Kachel (sie
-  leuchtet orange, die Reihe scrollt mit), Druecken des Reglers oder ein Klick auf eine Kachel oeffnet sie:
-  Multimedia, Telephone und Navigation wie die Tasten Media, Tel und Nav, Radio wie die Radio-Taste; Vehicle
-  und Settings haben noch keine Funktion (nur ein Log-Eintrag). Solange das Menue vorn ist, gehen Regler und
-  Pfeile nicht ans Handy, Titel- und Play-Tasten schon.
+  des Verbindens auch; das Handybild kommt nach vorn, sobald es da ist. Drehen am Regler oder die Pfeile
+  links/rechts waehlen eine Kachel (sie leuchtet orange, die Reihe scrollt mit), Druecken des Reglers oder ein
+  Klick auf eine Kachel oeffnet sie: Multimedia und Radio oeffnen die eigenen Seiten des Radios, Telephone und
+  Navigation wirken wie die Tasten Tel und Nav; Vehicle und Settings haben noch keine Funktion (nur ein
+  Log-Eintrag).
+- **Multimedia (Musikordner):** Spielt Musik aus dem Ordner `HeadUnit` im Musikordner des Benutzers (Windows:
+  `C:\Users\<Name>\Music\HeadUnit`, Linux: meist `~/Music/HeadUnit` oder `~/Musik/HeadUnit`; wird beim Start angelegt, mit
+  `HEADUNIT_MUSIC_DIR` laesst sich ein anderer Ordner waehlen). Einfach Dateien hineinkopieren, gern in
+  Unterordnern (Alben): MP3, FLAC, M4A/AAC, OGG, OPUS, WAV, WMA, AIFF. Die Seite zeigt links die orange
+  leuchtende Kachel, rechts Titel, Interpret (aus den Tags), Fortschritt, die Knoepfe Zurueck/Play-Pause/Weiter
+  und die Titelliste; oben **Open folder** (oeffnet den Ordner im Explorer) und **Rescan** (liest ihn neu ein,
+  passiert auch bei jedem Oeffnen der Seite). Am Ende eines Titels geht es mit dem naechsten weiter.
+- **Radio (Internetradio):** Die Sender eines Landes aus dem freien Senderverzeichnis
+  [radio-browser.info](https://www.radio-browser.info) (die 500 meistgehoerten, alphabetisch sortiert), gespielt als
+  Internet-Stream.
+  Oben **Country** oeffnet die Laenderliste; voreingestellt ist das Land der Windows-Region, Land und zuletzt
+  gehoerter Sender werden gemerkt. Waehrend ein Sender laeuft, steht darunter, was er gerade spielt (Titel aus
+  dem Stream), dazu **LIVE**. Zurueck/Weiter wechseln den Sender, der mittlere Knopf startet und stoppt.
+  DAB+ selbst braucht einen Empfaenger (z. B. einen RTL-SDR-USB-Stick); ohne ihn laeuft dasselbe Programm der
+  Sender ueber ihren Internet-Stream. Dafuer braucht der Rechner Internet.
+- **Bedienung der Seiten:** Drehen am Regler bewegt die Auswahl in der Liste (bzw. in der Knopfreihe), die Pfeile
+  hoch/runter gehen durch die Liste und weiter zu den Knoepfen und den Knoepfen oben, links/rechts entlang einer
+  Knopfreihe; Druecken des Reglers loest aus, ein Mausklick auch. Das Mausrad ueber der Seite blaettert in der
+  Liste. Back und Home fuehren zurueck zum Startmenue (Back schliesst vorher die Laenderliste). Solange eine
+  Seite des Radios vorn ist, gehen Regler und Pfeile nicht ans Handy.
+- **Eigene Wiedergabe und Handy:** Musik und Radio laufen ueber denselben Tonausgang wie das Handy (Lautstaerke,
+  Stumm und die MEDIEN-Anzeige gelten auch dafuer). Titel- und Play-Tasten (auch Leertaste, Bild hoch/runter)
+  steuern die eigene Wiedergabe, solange sie laeuft oder pausiert, sonst das Handy. Startet die eigene
+  Wiedergabe, waehrend ein Handy verbunden ist, bekommt das Handy Pause.
 - **Home** hat zwei Stufen, solange ein Handy uebertragen wird: Beim ersten Druck wechselt das Handy auf
   seinen Startbildschirm (Karte, Medien, Telefon-Karten, z. B. Maps und Spotify). Der zweite Druck
   zeigt das Startmenue des Radios, der dritte geht zurueck zum Handy-Startbildschirm.
-  Ohne verbundenes Handy zeigt Home das Startmenue. Ob das Handy gerade auf seinem Startbildschirm
-  ist, liest die App am Symbol unten links im Bild ab.
+  Ohne verbundenes Handy, oder auf einer Seite des Radios, zeigt Home das Startmenue. Ob das Handy gerade auf
+  seinem Startbildschirm ist, liest die App am Symbol unten links im Bild ab.
 - Das **Handy-Symbol** (CarPlay / Android Auto) startet die Verbindung, wenn noch keine besteht, sonst holt die
   Taste das Handy in den Vordergrund.
 - **Audio-Anzeige:** Lautstaerke (30 Stufen), Stumm und je ein Pegel fuer Medien, Navigation und
@@ -164,7 +187,7 @@ Kurzfassung (Debian, Ubuntu, Raspberry Pi OS; Pakete, Erste Inbetriebnahme und F
 
 ```sh
 sudo apt install build-essential cmake ninja-build pkg-config qt6-base-dev libboost-dev libssl-dev \
-    libprotobuf-dev protobuf-compiler libusb-1.0-0-dev libavcodec-dev libavutil-dev libswscale-dev
+    libprotobuf-dev protobuf-compiler libusb-1.0-0-dev libavcodec-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev
 cd HeadUnit
 cmake --preset linux-debug && cmake --build --preset linux-debug && ctest --preset linux-debug
 bash scripts/install-udev-rules.sh     # einmalig: Zugriff aufs Handy ohne root, danach Handy neu stecken

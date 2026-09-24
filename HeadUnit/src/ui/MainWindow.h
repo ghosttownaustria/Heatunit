@@ -4,6 +4,7 @@
 #include "androidauto/ProjectionInput.h"
 #include "audio/AudioEngine.h"
 #include "audio/AudioTypes.h"
+#include "media/AudioPlayer.h"
 #include "ui/HomeMenuLayout.h"
 #include "usb/AutoConnectSystem.h"
 #include "usb/IUsbBackend.h"
@@ -27,13 +28,18 @@ class QStackedWidget;
 namespace headunit {
 class CarPanel;
 class HomeMenu;
+class MenuPage;
+class MultimediaPage;
+class RadioPage;
 class VideoWidget;
 
 // One button connects (finding the phone, repairing the driver, starting Android Auto, restarting the
 // USB link when needed) and, while running, ends the session again. Next to the picture sits the
 // simulated centre console: rotary knob, hard keys and the audio display. The picture itself takes
-// mouse input as touch. In its place the radio's home menu is shown whenever the console is on the
-// radio's side (always while no phone is projected); the knob then works the menu instead of the phone.
+// mouse input as touch. In its place the radio's own pages are shown whenever the console is on the
+// radio's side (always while no phone is projected): the home menu, the music player and the tuner; the
+// knob then works the page instead of the phone. The radio's own player plays through the same audio
+// output as the phone.
 // The display size (video resolution) is chosen next to the button and only while nothing is connected:
 // the phone is told the size once, when the connection starts.
 class MainWindow final : public QMainWindow {
@@ -67,11 +73,13 @@ private:
     void RunConsoleTest();
     void RunKeysTest();
     void PressConsole(ConsoleKey key);
-    bool IsHomeMenuShown() const;
+    MenuPage* FrontPage() const;
     void ShowScreen();
     void SendKey(unsigned keycode, bool isDown);
-    void PressMenuKey(unsigned keycode);
+    bool PressLocally(unsigned keycode);
+    void PressPageKey(MenuPage& page, unsigned keycode);
     void OpenMenuEntry(HomeMenuEntry entry);
+    void PausePhoneMedia();
     void TapPhone(int x, int y);
     PhoneScreen CurrentPhoneScreen() const;
     void ApplyConsoleEffect(const ConsoleEffect& effect);
@@ -84,11 +92,14 @@ private:
     ConsoleController m_console;
     std::shared_ptr<AudioState> m_audioState;
     std::unique_ptr<IAudioEngine> m_audio;
+    std::unique_ptr<AudioPlayer> m_player;   // the radio's own music and radio; needs m_audio, so declared after it
     DisplayConfig m_display{kDefaultDisplay};
-    QStackedWidget* m_screens{};   // the phone's picture or the home menu
+    QStackedWidget* m_screens{};   // the phone's picture or one of the radio's pages
     VideoWidget* m_video{};
     HomeMenu* m_homeMenu{};
-    std::set<unsigned> m_menuKeys;  // keys held down whose press went to the home menu
+    MultimediaPage* m_music{};
+    RadioPage* m_radio{};
+    std::set<unsigned> m_localKeys;  // keys held down whose press the radio's side took
     CarPanel* m_panel{};
     QLabel* m_status{};
     QLabel* m_step{};

@@ -29,7 +29,9 @@ main (composition/lifetime)
               +-- AndroidAutoSession -> AASDK framing/TLS/channels
               +-- VideoDecoder (FFmpeg H.264 -> RGB)
               +-- latest-frame mailbox -> Qt timer -> VideoWidget
-        +-- QStackedWidget: VideoWidget (phone) or HomeMenu (radio), chosen by ConsoleController
+        +-- QStackedWidget: VideoWidget (phone) or a MenuPage of the radio, chosen by ConsoleController
+        |     +-- HomeMenu, MultimediaPage (MusicLibrary), RadioPage (RadioBrowser -> radio-browser.info)
+        +-- AudioPlayer (FFmpeg avformat/avcodec/swresample, own thread) -> IAudioEngine media output
 ```
 
 `headunit_core` has no Qt or Windows headers. Plain C++ value types carry device
@@ -164,17 +166,53 @@ and `KEYCODE_HOME` only opens the app launcher). `ApplyConsoleEffect` sends keys
 `ProjectionInput` and re-reads the picture once after the phone's home key when the picture was
 not readable. Hardware tests for this are `--test-console` and the diagnostic `--test-keys`.
 
-Home menu: the radio's own screen, drawn after the design `docs/design/home-menu.svg` (clock, six tiles:
-Multimedia, Radio, Telephone, Navigation, Vehicle, Settings; the focused tile's stripes and symbol turn orange).
-`MainWindow` keeps `VideoWidget` and `HomeMenu` in a `QStackedWidget`; `ShowScreen` puts the menu in front whenever
-`ConsoleController::CurrentScreen()` is `RadioHome`, which is always the case without a projection (before the first
-frame, while connecting, after the session). The decoded frames keep flowing into the hidden `VideoWidget`, so Home can
-still read the phone's picture. The layout is portable (`ui/HomeMenuLayout.h`, in CoreTests): design units 600 high and
-as wide as the display's shape, tile positions, the scroll that keeps the focused tile in view with the least movement,
-hit testing and which `ConsoleKey` a tile stands for (Multimedia Media, Radio Radio, Telephone Tel, Navigation Nav;
-Vehicle and Settings only log). `HomeMenu` draws the design's own outlines (its SVG path data, parsed once into
-`QPainterPath`s; no QtSvg dependency) and gradients (with their `gradientTransform` as brush transform), slides the row
-with a short `QVariantAnimation` and opens a clicked tile on release. While the menu is in front the knob works it:
-`MainWindow::SendKey` sends left/right/push to the menu (up/down are swallowed, the menu is one row) and everything else
-to the phone; a key's release always goes where its press went, so neither side sees half a key press. Turning moves
-the focus instead of the phone's.
+Radio pages: the radio's own screens, drawn after the design `docs/design/home-menu.svg`. They share `MenuPage` (a black
+screen of the display's shape, the clock, painting in design units 600 high and as wide as the display's shape; the
+controller as `Turn`/`Nudge`/`Push`/`Back`) and `ui/MenuStyle` (the design's font, colours, the tiles with the design's
+own outlines, parsed once from its SVG path data into `QPainterPath`s with its gradients as brush transforms, no QtSvg
+dependency, and the focus mark: the tiles' frame with orange corner stripes). `MainWindow` keeps `VideoWidget` and the
+pages in a `QStackedWidget`; `ShowScreen` puts the page that `ConsoleController::CurrentScreen()` names in front:
+`RadioHome` the home menu, `Multimedia` and `Radio` the player pages. Without a projection the screen is always one of
+these (before the first frame, while connecting, after the session). The decoded frames keep flowing into the hidden
+`VideoWidget`, so Home can still read the phone's picture. The console decides the pages: Menu and Home's second step
+give the home menu, Radio the tuner, Media without a phone the music player; Home and Back on a player page lead to the
+home menu (Back first goes to the page, which may close something it opened, the tuner's country list).
+
+- `HomeMenu`: the row of tiles (Multimedia, Radio, Telephone, Navigation, Vehicle, Settings; the focused one orange),
+  sliding with a short `QVariantAnimation`. The portable `ui/HomeMenuLayout.h` (CoreTests) has the tile positions, the
+  scroll that keeps the focused tile in view with the least movement, hit testing and what a tile opens (`HomeMenuPage`:
+  Multimedia and Radio; `HomeMenuKey`: Telephone Tel, Navigation Nav; Vehicle and Settings only log).
+- `PlayerPage` (`ui/MediaPages`): the page's tile at the left (orange while its source sounds), what plays now, the
+  controls previous/play/next, a list of five rows and buttons at the top right. The focus moves through them by the
+  portable `PageFocus` rules in `HomeMenuLayout.h` (turning within a part, up/down through the list and from part to
+  part, left/right along a row of buttons; tested) and the list scrolls by `ListFirstRow`. The page polls the player four
+  times a second.
+- `MultimediaPage`: the music folder (`HEADUNIT_MUSIC_DIR`, else `HeadUnit` in `QStandardPaths::MusicLocation`, created
+  when missing), read in the background by the portable `media/MusicLibrary.h` (`std::filesystem`, recursive, natural
+  order, the folder first, then each sub folder; tested with a real temporary folder), again whenever the page is shown.
+  At the end of a title it plays the next one; a file that fails is skipped, but not endlessly.
+- `RadioPage`: the stations of one country from radio-browser.info (`radio/RadioBrowser`, QtNetwork with its Schannel
+  TLS backend on Windows, JSON by QJsonDocument; the servers `de1`, `de2`, `all` in turn; working stations of the country
+  the 500 most listened, shown alphabetically by `QCollator` (case ignored, numbers by value, as
+  is the country list); a click is reported to the directory as it asks). The country defaults to
+  `QLocale::system()`'s territory; country and last station are kept in `QSettings` (`radio/country`, `radio/station`).
+  Real DAB+ reception would need a tuner; a DAB+ source (for example `welle-cli` with an RTL-SDR stick, which serves the
+  programmes as http streams) would plug in as another list of stream URLs.
+
+Knob routing: while a page is in front, `MainWindow::SendKey` gives the controller's arrows and push to it
+(`PressLocally`); the media keys (play/pause, track skip, from the panel or the keyboard) go to the radio's own player
+while it plays or is paused (the page that started it handles them), otherwise to the phone. A key's release always goes
+where its press went (`m_localKeys`), so neither side sees half a key press; held arrows keep nudging the side that took
+the press. Turning goes to the page instead of the phone.
+
+The radio's own player: `media/AudioPlayer` decodes a file path or an http(s) URL with FFmpeg (avformat for the
+container and the network, including ICY "now playing" titles read from the http context, avcodec, swresample to 48 kHz
+stereo 16-bit) and writes it to a media output of the same `IAudioEngine` as the phone's music, so volume, mute and the
+level display apply. It runs one worker thread for its whole life; `Play`, `SetPaused` and `Stop` only hand over a
+request, and every blocking FFmpeg call checks an interrupt callback, so changing the station never blocks the GUI
+thread. The output is paced by `IPcmOutput::Queued()` (new): at most 250 ms decoded ahead in the 500 ms ring, so a file
+plays in real time and pause and stop answer at once. Status (state, tags, stream title, position, duration, error)
+carries a generation that counts `Play` calls: a page owns the player while the generation is the one its own `Play`
+got, and a finished run cannot overwrite a newer one's status. Streams use FFmpeg's reconnect options and a 15 s
+read timeout; a live stream that ends or drops is reported, not retried. When the radio's player starts while a phone
+is projected, the phone gets `MediaPause`.

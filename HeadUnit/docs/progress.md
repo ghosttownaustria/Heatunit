@@ -1,5 +1,43 @@
 # Progress
 
+## 2026-09-24 (later): music folder and internet radio
+
+- **Multimedia page:** plays the music folder (`HeadUnit` in the user's music folder, or `HEADUNIT_MUSIC_DIR`; created
+  at start), sub folders included, in natural order; title and artist from the tags, progress, previous/play-pause/next,
+  the list of titles, "Open folder" and "Rescan"; the next title follows at the end. Formats: whatever FFmpeg decodes
+  (MP3, FLAC, M4A/AAC, OGG, OPUS, WAV, WMA, AIFF are recognised as music files).
+- **Radio page:** internet radio from radio-browser.info, by country (list of all countries, default from the system's
+  region, remembered with the last station), the 500 most listened stations in alphabetical order, "now playing" from the stream's ICY title,
+  LIVE mark, previous/next station, play/stop. The user asked for DAB+: a real DAB+ broadcast needs a tuner (there is
+  no DAB+ web API that delivers the broadcast), so the stations' internet streams are played; a tuner such as an
+  RTL-SDR stick with `welle-cli` could be added later as another source of stream URLs.
+- **One look:** both pages are built from the home menu's design (`MenuStyle`: its tiles, font, frames; the focus
+  marked with the frame and orange corner stripes) on a common `MenuPage` (screen shape, clock, design units).
+- **Controls:** Menu gives the home menu, Radio the tuner, Media without a phone the music player; Home and Back on the
+  pages go to the home menu, Back first closes the country list. The knob works the page in front; the media keys work
+  the radio's own player while it plays or is paused. The phone gets MediaPause when the radio's player starts.
+- **Audio:** `media/AudioPlayer` (FFmpeg avformat/avcodec/swresample) on its own worker thread, into the same audio
+  engine as the phone (volume, mute and the MEDIEN meter apply). `IPcmOutput::Queued()` was added to both engines so a
+  file decoder can pace itself.
+- **Dependencies:** FFmpeg now also needs avformat and swresample (vcpkg features in `Prepare-Dependencies.ps1`, which
+  passes `--recurse` so an existing tree is rebuilt, about 17 minutes here; Linux packages `libavformat-dev`,
+  `libswresample-dev` in the docs, `BuildAndRun.sh` and the CI), Qt also Network (+ the Schannel TLS plugin, deployed by
+  `Qt.targets`).
+- **Tests:** CoreTests cover the console's new pages (Media without a phone, Radio, Home/Back from a page, Media with a
+  phone from the music player), what each tile opens, the pages' focus rules and list scrolling, reading a real
+  temporary music folder (order, sub folders, non-ASCII names, a missing folder), ICY titles (apostrophes, Latin-1) and
+  play time texts. `--test-console` now expects Radio to show the tuner.
+- **Verified on this Windows machine:** MSBuild Debug x64, no warnings from own sources (FFmpeg 9's `common.h` and
+  AASDK headers warn in every file that includes them); CoreTests and ProtocolTests pass; the real window driven by
+  posted keys, muted (the MEDIEN meter still shows the audio): three generated WAV files (48 kHz stereo, 44.1 kHz mono,
+  22.05 kHz stereo in a sub folder) play one after the other, the play/pause key pauses and resumes (checked five times
+  in a row, log lines for each), the tuner loads the German stations, plays https MP3 streams (MANGORADIO,
+  Deutschlandfunk) with their stream titles, opens the country list (the current country in the middle), Back returns to
+  the country button, stop works; at 1600x600 and 800x480. **Not verified:** real music files (MP3/FLAC/M4A with
+  tags), audible output (the tests ran muted), with a phone connected (MediaPause to the phone, the pages while
+  projected), and on Linux (not built there). In two early automated runs a posted key press seemed not to arrive; it
+  did not happen again in five runs with a key trace.
+
 ## 2026-09-24: first home menu of the radio
 
 - **Look** from the user's design (`docs/design/home-menu.svg`, 1600x600): black screen, clock at the top left, a row

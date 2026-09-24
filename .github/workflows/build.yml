@@ -19,7 +19,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build pkg-config qt6-base-dev libboost-dev libssl-dev \
-            libprotobuf-dev protobuf-compiler libusb-1.0-0-dev libavcodec-dev libavutil-dev libswscale-dev
+            libprotobuf-dev protobuf-compiler libusb-1.0-0-dev libavcodec-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev
       - name: Configure
         run: cmake --preset linux-release
       - name: Build

@@ -34,7 +34,7 @@ if(HEADUNIT_BUILD_APP)
   endif()
 
   find_package(Threads REQUIRED)
-  find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Concurrent)
+  find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets Concurrent Network)
   # Wireless Android Auto talks to BlueZ over D-Bus (QtDBus is part of qt6-base-dev) and drives NetworkManager.
   set(HEADUNIT_WIRELESS_ENABLED OFF)
   if(HEADUNIT_WIRELESS AND NOT WIN32)
@@ -93,8 +93,9 @@ if(HEADUNIT_BUILD_APP)
     target_compile_definitions(headunit_wireless PUBLIC HEADUNIT_WIRELESS)
   endif()
 
-  add_executable(HeadUnit src/main.cpp src/ui/MainWindow.cpp src/ui/CarWidgets.cpp src/ui/HomeMenu.cpp)
-  target_link_libraries(HeadUnit PRIVATE headunit_usb Qt6::Widgets Qt6::Concurrent)
+  add_executable(HeadUnit src/main.cpp src/ui/MainWindow.cpp src/ui/CarWidgets.cpp src/ui/MenuStyle.cpp src/ui/MenuPage.cpp src/ui/HomeMenu.cpp
+    src/ui/MediaPages.cpp src/radio/RadioBrowser.cpp)
+  target_link_libraries(HeadUnit PRIVATE headunit_usb headunit_media Qt6::Widgets Qt6::Concurrent Qt6::Network)
   if(HEADUNIT_WIRELESS_ENABLED)
     target_link_libraries(HeadUnit PRIVATE headunit_wireless)
   endif()

@@ -9,7 +9,7 @@ PROJECT_DIR="$REPO_DIR/HeadUnit"
 # Debian, Ubuntu, Raspberry Pi OS: dieselbe Liste wie in HeadUnit/docs/linux.md und .github/workflows/build.yml.
 BUILD_PACKAGES=(build-essential cmake ninja-build pkg-config git
   qt6-base-dev libboost-dev libssl-dev libprotobuf-dev protobuf-compiler
-  libusb-1.0-0-dev libavcodec-dev libavutil-dev libswscale-dev)
+  libusb-1.0-0-dev libavcodec-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev)
 # Nur zum Ausfuehren noetig (Qt-Plattform-Plugin fuer X11).
 RUNTIME_PACKAGES=(libxcb-cursor0)
 
