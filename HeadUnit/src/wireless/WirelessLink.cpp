@@ -57,7 +57,11 @@ WirelessLink EstablishWirelessLink(int rfcommFd, int listenFd, const WifiCredent
             if (got > 0) {
                 for (const auto& message : parser.Feed(buffer, static_cast<std::size_t>(got))) {
                     if (!step(handshake.OnMessage(message))) { link.message = "Die Bluetooth-Verbindung zum Handy brach beim Senden ab."; return link; }
-                    if (handshake.IsFailed()) { link.message = handshake.Failure() + ". Ist das WLAN am Handy an?"; return link; }
+                    if (handshake.IsFailed()) {
+                        link.hasSentInfo = handshake.HasSentInfo();   // then the phone had the details and could not join
+                        link.message = handshake.Failure() + ". Ist das WLAN am Handy an?";
+                        return link;
+                    }
                 }
                 if (handshake.HasSentInfo() && infoSentAt == std::chrono::steady_clock::time_point{}) {
                     infoSentAt = std::chrono::steady_clock::now();

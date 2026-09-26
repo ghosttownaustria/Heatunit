@@ -119,18 +119,22 @@ window, which switches between the phone's picture and the radio's pages.
 
 Wireless Android Auto (Linux only, `src/wireless/`, built by the `headunit_wireless` target when Qt6 DBus is found;
 [wireless.md](wireless.md)) adds a second `ITransport` and leaves the session untouched. `WirelessStation` keeps it
-ready for as long as the watch runs (and retries a failed start every minute): first the hidden NetworkManager hotspot
-(`Hotspot`, `nmcli` without a shell), because the phone expects an answer as soon as it opens the service; then
-Bluetooth (rfkill unblock, adapter power, visible), the Android Auto Wireless service registered with BlueZ on RFCOMM
-channel 8 (`BluetoothService`, QtDBus; without a channel BlueZ opens no RFCOMM server for an unknown UUID), and the
-phones paired before are (re)connected (`ConnectPairedPhones`: a phone PipeWire connected before the service existed
-is disconnected first). When a phone opens the service, `EstablishWirelessLink` hands it the Wi-Fi details over the
+ready for as long as the watch runs (Bluetooth and the Wi-Fi each retry a failed start every minute): first Bluetooth
+(rfkill unblock, adapter power, a `DisplayYesNo` pairing agent that confirms the code comparison by itself, the Android
+Auto Wireless service registered with BlueZ on RFCOMM channel 8, then visible; `BluetoothService`, QtDBus; without a
+channel BlueZ opens no RFCOMM server for an unknown UUID), so the phone finds the head unit within a second or two;
+the hidden NetworkManager hotspot (`Hotspot`, `nmcli` without a shell) starts at the same time in the background
+(`std::async`). Once it is up, the phones paired before are (re)connected (`ConnectPairedPhones`: a phone PipeWire
+connected before the service existed is disconnected first). When a phone opens the service, `WirelessStation::Serve`
+waits for a hotspot that is still starting, then `EstablishWirelessLink` hands the phone the Wi-Fi details over the
 RFCOMM socket (`WirelessHandshake`: pure message logic; both Qt-free and tested against a simulated phone) and accepts
 the phone's TCP connection on port 5288, and `RunAndroidAutoSession` runs on a `SocketTransport` (the TCP twin of
-`ProjectionTransport`: one reader, one writer, `stop()` rejects with OPERATION_ABORTED). Everything runs on the watch's
-worker thread; QtDBus needs that thread to run Qt events, which `BluetoothService::WaitForPhone`/`Pump` do (so BlueZ is
-answered only between sessions). Only this target uses moc (`AUTOMOC`), and `HEADUNIT_WIRELESS` is defined only where
-it is built, so the Windows build watches USB alone.
+`ProjectionTransport`: one reader, one writer, `stop()` rejects with OPERATION_ABORTED). A phone that got the details
+and did not join makes the station broadcast the network's name from then on (remembered in `QSettings`). The station
+and the session run on the watch's worker thread; `BluetoothService` answers BlueZ on a `QThread` of its own with its
+own event loop, so pairing works at any time, also during a session, and hands the phones' RFCOMM sockets over through
+a condition variable. Only this target uses moc (`AUTOMOC`), and `HEADUNIT_WIRELESS` is defined only where it is built,
+so the Windows build watches USB alone.
 
 Input and audio: the window owns a `ProjectionInput` (GUI thread -> protocol thread) and an
 `AudioState` plus an `IAudioEngine`. `ProjectionCallbacks` hands them to the session, which attaches
