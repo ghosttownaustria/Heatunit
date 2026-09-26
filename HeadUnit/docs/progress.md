@@ -1,5 +1,35 @@
 # Progress
 
+## 2026-09-27: wireless pairing like a car, Bluetooth at once
+
+Reported on the Pi with the Samsung SM-F776B: the hotspot runs (hidden), HEATUNIT appeared only after a long wait, and
+pairing from the phone ended with "Keine Kopplung durchgefuehrt. Die Einstellungen fuer dieses Geraet ueberpruefen".
+
+- **Pairing:** the agent registered as `NoInputNoOutput`, i.e. Just Works pairing. BlueZ refuses a Just Works pairing
+  started by a device it still has a bond with (`JustWorksRepairing = never`, the default in `main.conf`); the phone
+  had been paired before and then unpaired on the phone only, so every new attempt was refused. The agent is now
+  `DisplayYesNo` (numeric comparison, as car head units do): the phone shows a six-digit code, the head unit confirms
+  it by itself and shows it in the window ("Bluetooth-Kopplung mit ...: am Handy den Code ... bestaetigen"), and the
+  repairing rule does not apply to a comparison. A finished pairing is shown too.
+- **Always answered:** BlueZ's calls (pairing, connections) used to be handled only while the watch thread waited for
+  a wireless phone, not during a session, a USB attempt or the hotspot start. `BluetoothService` now runs on a `QThread`
+  of its own with its own event loop; the phone's RFCOMM socket is handed to the watch through a condition variable.
+  `Pump` is gone.
+- **Visible at once:** Bluetooth starts first (about a second), the hotspot starts at the same time in the background
+  (`std::async`; nmcli takes seconds, up to 45). Adapter visibility is switched on only after the agent and the Android
+  Auto service are registered. The paired phones are asked to connect once the hotspot is up; a phone that opens the
+  service earlier waits in `Serve` for the hotspot (up to 60 s). Bluetooth and Wi-Fi retry a failed start separately.
+- **Hidden Wi-Fi fallback:** when a phone got the Wi-Fi details and did not join (timeout, or a negative connection
+  status; `EstablishWirelessLink` now reports `hasSentInfo` in that case too), the station broadcasts the network's name
+  from then on (`wireless/wifiVisible` in `QSettings`) and restarts the hotspot. `HEADUNIT_WIFI_HIDDEN` (0 or 1) fixes
+  the choice.
+- **Tests:** `WirelessTests` checks that a phone reporting it cannot join still counts as having had the details.
+- **Verified:** nothing compiled or run: `src/wireless/*` only builds on Linux and this Windows machine has no Linux
+  toolchain; the code was reviewed by reading (CI or the Pi build will show compile errors). **Not verified:** pairing
+  with the phone, the pairing code in the window, Bluetooth answering during a session, the hotspot fallback, and
+  whether Android Auto joins a hidden network at all. The cause of the pairing failure is inferred from BlueZ's rules,
+  not seen in a log.
+
 ## 2026-09-24 (night): home menu navigation, settings, one sound at a time
 
 From the user's list and the design `AA.svg` (now `docs/design/home-menu.svg`):

@@ -7,6 +7,7 @@
 #include <QSettings>
 #include <QString>
 #include <charconv>
+#include <future>
 #include <iostream>
 #include <memory>
 #include <random>
@@ -19,8 +20,12 @@ namespace {
 constexpr const char* kSettingsOrganization = "HeadUnit";
 constexpr const char* kSettingsApplication = "HeadUnit";
 constexpr const char* kPasswordSetting = "wireless/wifiPassword";
+// Set once a phone did not join the hidden network (see WirelessStation::Impl::ShowWifi).
+constexpr const char* kVisibleSetting = "wireless/wifiVisible";
 // After a failed start (Bluetooth not up yet at boot, no NetworkManager, ...) the next try comes this much later.
 constexpr auto kRetryDelay = 60s;
+// How long a phone that opened the Android Auto service waits for a Wi-Fi that is still starting (nmcli takes up to 45 s).
+constexpr auto kWifiWait = 60s;
 
 // Closes a socket when it goes out of scope.
 struct Socket {
@@ -85,64 +90,121 @@ WirelessSettings LoadWirelessSettings()
         int value = 0;
         if (std::from_chars(channel->data(), channel->data() + channel->size(), value).ec == std::errc{} && value > 0) hotspot.channel = value;
     }
-    if (const auto hidden = GetEnv("HEADUNIT_WIFI_HIDDEN"); hidden && (*hidden == "0" || *hidden == "no" || *hidden == "false")) hotspot.isHidden = false;
+    if (const auto hidden = GetEnv("HEADUNIT_WIFI_HIDDEN"); hidden && !hidden->empty()) {
+        hotspot.isHidden = !(*hidden == "0" || *hidden == "no" || *hidden == "false");
+        settings.isVisibilityFixed = true;
+    } else if (QSettings(kSettingsOrganization, kSettingsApplication).value(kVisibleSetting).toBool()) {
+        hotspot.isHidden = false;
+    }
     return settings;
 }
 
 struct WirelessStation::Impl {
     Impl(Logger& log, std::function<void(const std::string&)> status)
-        : logger(log), onStatus(std::move(status)), hotspot(log), bluetooth(log) {}
+        : logger(log), onStatus(std::move(status)), hotspot(log),
+          bluetooth(log, [this](const std::string& text) { if (onStatus) onStatus(text); }) {}
     Logger& logger;
     std::function<void(const std::string&)> onStatus;
     WirelessSettings settings{LoadWirelessSettings()};
     Hotspot hotspot;
     BluetoothService bluetooth;
     Socket listener;
+    // The Wi-Fi starts in the background (nmcli takes seconds), so that Bluetooth is visible at once and USB is watched
+    // meanwhile. `network` is written by that start and read once it has finished.
+    std::future<std::string> wifiStart;
+    HotspotInfo network;
     WifiCredentials credentials;
-    bool isReady{};
-    std::string lastError;
-    std::chrono::steady_clock::time_point nextStart{};
+    bool isWifiReady{};
+    // The causes reported last: a cause that stays is shown once, the retries only go to the log.
+    std::string bluetoothError, wifiError;
+    std::chrono::steady_clock::time_point nextBluetoothStart{}, nextWifiStart{};
 
     void Report(const std::string& text)
     {
         logger.Write("INFO", "WLAN", text);
         if (onStatus) onStatus(text);
     }
+    void ReportFailure(std::string& last, const std::string& error, const std::string& text)
+    {
+        if (error != last) Report(text);
+        else logger.Write("INFO", "WLAN", text);
+        last = error;
+    }
     void Stop()
     {
-        isReady = false;
+        if (wifiStart.valid()) wifiStart.wait();
+        wifiStart = {};
+        isWifiReady = false;
         bluetooth.Stop();
         listener.Close();
         hotspot.Stop();
     }
-    // The Wi-Fi comes first: the phone expects the start request as soon as it has opened the Android Auto service,
-    // and must not wait for nmcli then.
-    void Start()
+    // Bluetooth comes first and takes a second or two: the phone finds HEATUNIT as soon as the head unit is on.
+    void StartBluetooth()
     {
-        Stop();
-        const auto& wifi = settings.hotspot;
-        Report("Starte das WLAN '" + wifi.ssid + "'" + (wifi.isHidden ? " (verborgen)" : "") + " und Bluetooth ...");
-        HotspotInfo network;
-        std::string error = StartHotspot(hotspot, wifi, network, logger);
-        if (error.empty()) error = bluetooth.Start(settings.bluetoothName);
-        if (error.empty()) listener.fd = ListenTcp(kWirelessPort, error);
-        if (listener.fd < 0 && error.empty()) error = "Port " + std::to_string(kWirelessPort) + " laesst sich nicht oeffnen.";
+        const auto& name = settings.bluetoothName;
+        std::string error = bluetooth.Start(name);
+        if (error.empty() && listener.fd < 0) {
+            listener.fd = ListenTcp(kWirelessPort, error);
+            if (listener.fd < 0 && error.empty()) error = "Port " + std::to_string(kWirelessPort) + " laesst sich nicht oeffnen.";
+        }
         if (!error.empty()) {
-            Stop();
-            nextStart = std::chrono::steady_clock::now() + kRetryDelay;
-            const std::string text = "Kabelloses Android Auto ist nicht bereit: " + error + " Neuer Versuch in einer Minute; USB geht weiter.";
-            // A cause that stays is reported once; the retries only go to the log.
-            if (error != lastError) Report(text);
-            else logger.Write("INFO", "WLAN", text);
-            lastError = error;
+            bluetooth.Stop();
+            nextBluetoothStart = std::chrono::steady_clock::now() + kRetryDelay;
+            ReportFailure(bluetoothError, error, "Bluetooth fuer kabelloses Android Auto ist nicht bereit: " + error + " Neuer Versuch in einer Minute; USB geht weiter.");
             return;
         }
-        lastError.clear();
+        bluetoothError.clear();
+        Report("Bluetooth sichtbar als '" + name + "'. Neues Handy: in seinen Bluetooth-Einstellungen " + name + " waehlen und koppeln.");
+        if (isWifiReady) bluetooth.ConnectPairedPhones();
+    }
+    void StartWifi()
+    {
+        isWifiReady = false;
+        const auto config = settings.hotspot;
+        logger.Write("INFO", "WLAN", "Starting the Wi-Fi '" + config.ssid + "'" + (config.isHidden ? " (hidden)" : "") + " in the background");
+        wifiStart = std::async(std::launch::async, [this, config] {
+            HotspotInfo info;
+            auto error = StartHotspot(hotspot, config, info, logger);
+            if (error.empty()) network = info;
+            return error;
+        });
+    }
+    // Takes the result of the background start once it is there, waiting up to `wait` for it.
+    void CheckWifi(std::chrono::milliseconds wait = 0ms)
+    {
+        if (!wifiStart.valid() || wifiStart.wait_for(wait) != std::future_status::ready) return;
+        const auto error = wifiStart.get();
+        if (!error.empty()) {
+            nextWifiStart = std::chrono::steady_clock::now() + kRetryDelay;
+            ReportFailure(wifiError, error, "Das WLAN fuer kabelloses Android Auto ist nicht bereit: " + error + " Neuer Versuch in einer Minute; USB geht weiter.");
+            return;
+        }
+        wifiError.clear();
         credentials = {network.ssid, network.password, network.bssid, network.ipAddress, kWirelessPort};
-        isReady = true;
-        Report("Kabellos bereit: WLAN '" + network.ssid + "'" + (wifi.isHidden ? " (verborgen)" : "") + " laeuft, per Bluetooth sichtbar als '" +
-            settings.bluetoothName + "'. Neues Handy: einmal in seinen Bluetooth-Einstellungen mit " + settings.bluetoothName + " koppeln.");
+        isWifiReady = true;
+        Report("Kabellos bereit: per Bluetooth sichtbar als '" + settings.bluetoothName + "', WLAN '" + network.ssid + "'" +
+            (settings.hotspot.isHidden ? " (verborgen)" : "") + " laeuft.");
+        // The phones paired before are asked only now, when the Wi-Fi they are sent to is there.
         bluetooth.ConnectPairedPhones();
+    }
+    // Starts what is not running, when its time has come.
+    void Keep()
+    {
+        const auto now = std::chrono::steady_clock::now();
+        if (!bluetooth.IsRunning() && now >= nextBluetoothStart) StartBluetooth();
+        CheckWifi();
+        if (!isWifiReady && !wifiStart.valid() && now >= nextWifiStart) StartWifi();
+    }
+    // The phone got the network's details and never joined: Android Auto may not look for a hidden network. From now on
+    // (and in later runs) the network's name is broadcast; the phone still joins by itself, nobody has to pick it.
+    void ShowWifi()
+    {
+        settings.hotspot.isHidden = false;
+        QSettings(kSettingsOrganization, kSettingsApplication).setValue(kVisibleSetting, true);
+        Report("Das Handy ist dem verborgenen WLAN nicht beigetreten. Das WLAN ist ab jetzt sichtbar und startet neu; "
+               "das Handy verbindet sich danach wieder von selbst.");
+        StartWifi();
     }
 };
 
@@ -150,13 +212,19 @@ WirelessStation::WirelessStation(Logger& logger, std::function<void(const std::s
     : m_impl(std::make_unique<Impl>(logger, std::move(onStatus))) {}
 WirelessStation::~WirelessStation() { m_impl->Stop(); }
 
-void WirelessStation::Start() { m_impl->Start(); }
+void WirelessStation::Start()
+{
+    auto& impl = *m_impl;
+    impl.Stop();
+    impl.StartBluetooth();
+    impl.StartWifi();
+}
 
 int WirelessStation::WaitForPhone(std::chrono::milliseconds timeout)
 {
     auto& impl = *m_impl;
-    if (!impl.isReady && std::chrono::steady_clock::now() >= impl.nextStart) impl.Start();
-    if (!impl.isReady) {
+    impl.Keep();
+    if (!impl.bluetooth.IsRunning()) {
         std::this_thread::sleep_for(timeout);
         return -1;
     }
@@ -168,14 +236,27 @@ AutoConnectResult WirelessStation::Serve(int rfcommFd, std::atomic_bool& isStopR
     auto& impl = *m_impl;
     Socket phone(rfcommFd);
     AutoConnectResult result;
-    if (!impl.isReady) { result.message = "Kabelloses Android Auto ist nicht bereit."; return result; }
+    if (!impl.isWifiReady) {
+        // The phone came before the Wi-Fi was up (it was quick, or the last start failed): it waits for the start request.
+        impl.Report("Handy verbindet sich kabellos; das WLAN startet noch ...");
+        if (!impl.wifiStart.valid()) impl.StartWifi();
+        const auto deadline = std::chrono::steady_clock::now() + kWifiWait;
+        while (!isStopRequested && impl.wifiStart.valid() && std::chrono::steady_clock::now() < deadline) impl.CheckWifi(200ms);
+    }
+    if (!impl.isWifiReady) {
+        result.isStoppedByUser = isStopRequested;
+        result.message = "Das WLAN fuer kabelloses Android Auto ist nicht bereit" + (impl.wifiError.empty() ? std::string(".") : ": " + impl.wifiError);
+        return result;
+    }
     impl.Report("Handy verbindet sich kabellos; es bekommt die WLAN-Daten ueber Bluetooth ...");
     auto link = EstablishWirelessLink(phone.fd, impl.listener.fd, impl.credentials, impl.logger, isStopRequested, 60s);
     if (link.tcpFd < 0) {
         result.isStoppedByUser = isStopRequested;
         result.message = link.message;
-        if (link.hasSentInfo && impl.settings.hotspot.isHidden)
-            result.message += " Das WLAN ist verborgen; findet das Handy es nicht, mit HEADUNIT_WIFI_HIDDEN=0 sichtbar machen.";
+        if (link.hasSentInfo && !isStopRequested && impl.settings.hotspot.isHidden) {
+            if (impl.settings.isVisibilityFixed) result.message += " Das WLAN ist verborgen (HEADUNIT_WIFI_HIDDEN); mit HEADUNIT_WIFI_HIDDEN=0 sichtbar machen.";
+            else impl.ShowWifi();
+        }
         return result;
     }
     impl.Report("Handy im WLAN verbunden (" + link.peer + "); starte Android Auto.");
@@ -190,7 +271,7 @@ AutoConnectResult WirelessStation::Serve(int rfcommFd, std::atomic_bool& isStopR
 int RunBluetoothTest(Logger& logger, std::chrono::seconds duration)
 {
     const auto settings = LoadWirelessSettings();
-    BluetoothService bluetooth(logger);
+    BluetoothService bluetooth(logger, [](const std::string& text) { std::cout << text << '\n' << std::flush; });
     if (const auto error = bluetooth.Start(settings.bluetoothName); !error.empty()) {
         logger.Write("ERROR", "BT", error);
         std::cerr << error << '\n';

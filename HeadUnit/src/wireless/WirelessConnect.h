@@ -17,18 +17,20 @@ namespace headunit {
 //   HEADUNIT_WIFI_INTERFACE the Wi-Fi device (default: the first one NetworkManager knows)
 //   HEADUNIT_WIFI_BAND     a = 5 GHz (default), bg = 2.4 GHz
 //   HEADUNIT_WIFI_CHANNEL  default 36 (5 GHz) or 6 (2.4 GHz)
-//   HEADUNIT_WIFI_HIDDEN   0 = the network name is broadcast (default: hidden, the phone learns it over Bluetooth)
+//   HEADUNIT_WIFI_HIDDEN   0 = the network name is broadcast, 1 = always hidden (default: hidden, the phone learns it
+//                          over Bluetooth; broadcast from then on once a phone did not join the hidden network)
 struct WirelessSettings {
     std::string bluetoothName{"HEATUNIT"};
     HotspotConfig hotspot;
+    bool isVisibilityFixed{};   // HEADUNIT_WIFI_HIDDEN decides whether the network is hidden
 };
 WirelessSettings LoadWirelessSettings();
 
 // The wireless half of the automatic mode (RunPhoneWatch), always ready like a car: the hotspot, Bluetooth (visible and
 // pairable as HEATUNIT, with the Android Auto Wireless service) and the TCP port stay up for as long as the object
 // lives. When they cannot start (Bluetooth not up yet at boot, no NetworkManager, ...) they are tried again a minute
-// later. Construct, use and destroy it on one worker thread that can run Qt events: the D-Bus calls of Bluetooth
-// arrive there while WaitForPhone runs.
+// later. Bluetooth comes up first (visible within a second or two), the hotspot starts in the background. Construct,
+// use and destroy it on one worker thread; Bluetooth answers BlueZ on a thread of its own (see BluetoothService).
 class WirelessStation {
 public:
     // `onStatus` receives the steps for the window.
@@ -36,13 +38,14 @@ public:
     ~WirelessStation();
     WirelessStation(const WirelessStation&) = delete;
     WirelessStation& operator=(const WirelessStation&) = delete;
-    // Starts the hotspot, then Bluetooth, then asks the phones paired before to connect (see ConnectPairedPhones).
+    // Starts Bluetooth, then the hotspot in the background, and returns. Once the hotspot is up, the phones paired before
+    // are asked to connect (see ConnectPairedPhones).
     void Start();
     // Waits up to `timeout` for a phone that opened the Android Auto service: its RFCOMM socket, or -1. Starts or
     // restarts everything first when that is due.
     int WaitForPhone(std::chrono::milliseconds timeout);
-    // For that socket (taken over and closed here): the Wi-Fi details over Bluetooth at once, then the Android Auto
-    // session over the TCP connection the phone opens.
+    // For that socket (taken over and closed here): the Wi-Fi details over Bluetooth (once a hotspot that is still
+    // starting is up), then the Android Auto session over the TCP connection the phone opens.
     AutoConnectResult Serve(int rfcommFd, std::atomic_bool& isStopRequested, ProjectionCallbacks callbacks);
 private:
     struct Impl;
