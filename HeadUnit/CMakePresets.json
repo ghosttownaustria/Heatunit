@@ -7,6 +7,7 @@
       "generator": "Visual Studio 17 2022",
       "architecture": "x64",
       "binaryDir": "${sourceDir}/out/build/windows-vs2022",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" },
       "cacheVariables": {
         "CMAKE_PREFIX_PATH": "$env{QT_ROOT}",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install",
@@ -15,18 +16,54 @@
     },
     {
       "name": "core-only",
+      "displayName": "Windows: portable core and its tests only",
       "generator": "Visual Studio 17 2022",
       "architecture": "x64",
       "binaryDir": "${sourceDir}/out/build/core-only",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" },
       "cacheVariables": { "HEADUNIT_BUILD_APP": "OFF", "BUILD_TESTING": "ON" }
+    },
+    {
+      "name": "linux-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "condition": { "type": "notEquals", "lhs": "${hostSystemName}", "rhs": "Windows" },
+      "cacheVariables": { "BUILD_TESTING": "ON", "CMAKE_EXPORT_COMPILE_COMMANDS": "ON" }
+    },
+    {
+      "name": "linux-debug",
+      "displayName": "Linux / Ninja / system Qt 6 (Debug)",
+      "inherits": "linux-base",
+      "binaryDir": "${sourceDir}/out/build/linux-debug",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "linux-release",
+      "displayName": "Linux / Ninja / system Qt 6 (Release)",
+      "inherits": "linux-base",
+      "binaryDir": "${sourceDir}/out/build/linux-release",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "linux-core-only",
+      "displayName": "Linux: portable core and its tests only (no Qt, no libraries)",
+      "inherits": "linux-base",
+      "binaryDir": "${sourceDir}/out/build/linux-core-only",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "HEADUNIT_BUILD_APP": "OFF" }
     }
   ],
   "buildPresets": [
     { "name": "windows-debug", "configurePreset": "windows-vs2022", "configuration": "Debug" },
-    { "name": "core-debug", "configurePreset": "core-only", "configuration": "Debug" }
+    { "name": "core-debug", "configurePreset": "core-only", "configuration": "Debug" },
+    { "name": "linux-debug", "configurePreset": "linux-debug" },
+    { "name": "linux-release", "configurePreset": "linux-release" },
+    { "name": "linux-core-only", "configurePreset": "linux-core-only" }
   ],
   "testPresets": [
     { "name": "windows-debug", "configurePreset": "windows-vs2022", "configuration": "Debug", "output": { "outputOnFailure": true } },
-    { "name": "core-debug", "configurePreset": "core-only", "configuration": "Debug", "output": { "outputOnFailure": true } }
+    { "name": "core-debug", "configurePreset": "core-only", "configuration": "Debug", "output": { "outputOnFailure": true } },
+    { "name": "linux-debug", "configurePreset": "linux-debug", "output": { "outputOnFailure": true } },
+    { "name": "linux-release", "configurePreset": "linux-release", "output": { "outputOnFailure": true } },
+    { "name": "linux-core-only", "configurePreset": "linux-core-only", "output": { "outputOnFailure": true } }
   ]
 }

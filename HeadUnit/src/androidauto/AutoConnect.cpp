@@ -30,6 +30,7 @@ AutoConnectResult RunAutoConnect(const AutoConnectDeps& deps, Logger& logger, co
     const auto step = [&](const std::string& text) { logger.Write("INFO", "AUTO", text); if (onStep) onStep(text); };
     const auto stopped = [&] { outcome.isStoppedByUser = true; outcome.message = "Verbindung beendet."; return outcome; };
     const auto failed = [&](std::string message) { logger.Write("ERROR", "AUTO", message); outcome.message = std::move(message); return outcome; };
+    const std::string confirmHint = deps.needsAdminPrompt ? " - bitte die Windows-Abfrage (Administratorrechte) bestaetigen" : "";
     int recoveries = 0, retries = 0, repairs = 0, findTries = kFindTries;
     for (int round = 0; round < kMaxRounds; ++round) {
         if (isStopRequested) return stopped();
@@ -57,7 +58,7 @@ AutoConnectResult RunAutoConnect(const AutoConnectDeps& deps, Logger& logger, co
             // Windows gave the phone Samsung's driver again; WinUSB is needed to talk to it.
             if (repairs >= kMaxDriverRepairs) return failed("Der USB-Treiber des Handys laesst sich nicht dauerhaft reparieren: " + result.message);
             ++repairs;
-            step("Windows hat dem Handy den falschen USB-Treiber zugewiesen. Repariere ihn - bitte die Windows-Abfrage (Administratorrechte) bestaetigen ...");
+            step("Windows hat dem Handy den falschen USB-Treiber zugewiesen. Repariere ihn" + confirmHint + " ...");
             const auto repaired = deps.repair();
             if (!repaired.IsUsable()) return failed(repaired.message);
             step(repaired.message);
@@ -70,7 +71,7 @@ AutoConnectResult RunAutoConnect(const AutoConnectDeps& deps, Logger& logger, co
             // is what fixes both.
             ++recoveries;
             step("Das Handy reagiert nicht. Starte die USB-Verbindung des Handys neu (" +
-                std::to_string(recoveries) + "/" + std::to_string(kMaxRecoveries) + ") - bitte die Windows-Abfrage (Administratorrechte) bestaetigen ...");
+                std::to_string(recoveries) + "/" + std::to_string(kMaxRecoveries) + ")" + confirmHint + " ...");
             const auto recovered = deps.recover();
             if (!recovered.IsUsable()) return failed(recovered.message + " Alternativ das Kabel einmal abziehen und wieder anstecken.");
             step(recovered.message);

@@ -54,9 +54,12 @@ struct Script {
     }
 };
 UsbScanResult WithPhone(UsbDevice device = Phone()) { UsbScanResult scan; scan.devices.push_back(std::move(device)); return scan; }
-AutoConnectResult Run(Script& script, std::atomic_bool& stop) {
+Logger& TestLogger() {
     static Logger logger(std::filesystem::temp_directory_path() / "headunit-autoconnect-tests.log");
-    return RunAutoConnect(script.Deps(), logger, stop, {});
+    return logger;
+}
+AutoConnectResult Run(Script& script, std::atomic_bool& stop) {
+    return RunAutoConnect(script.Deps(), TestLogger(), stop, {});
 }
 }
 
@@ -129,6 +132,19 @@ void TestAutoConnect() {
         Script script{{Video()}, {two}};
         const auto result = Run(script, stop);
         Check(!result.hasVideo && script.connectCalls == 0 && result.message.find("Mehrere") != std::string::npos, "Ambiguous devices accepted");
+    }
+    {   // Windows shows an administrator prompt for repair and restart, and the steps say so; elsewhere they must not
+        // ask the user to confirm a prompt that never comes.
+        for (const bool hasPrompt : {false, true}) {
+            Script script{{NoAnswer(), WrongDriver(), Video()}, {WithPhone()}};
+            auto deps = script.Deps();
+            deps.needsAdminPrompt = hasPrompt;
+            std::string steps;
+            const auto result = RunAutoConnect(deps, TestLogger(), stop, [&](const std::string& step) { steps += step + '\n'; });
+            Check(result.hasVideo && script.recoverCalls == 1 && script.repairCalls == 1, "The flow with an administrator prompt did not connect");
+            Check((steps.find("Administratorrechte") != std::string::npos) == hasPrompt, "The administrator prompt is mentioned wrongly");
+            Check(steps.find("Starte die USB-Verbindung") != std::string::npos && steps.find("Repariere ihn") != std::string::npos, "Repair and restart steps are missing");
+        }
     }
     {   // Stop pressed while the session starts: no recovery steps afterwards.
         std::atomic_bool userStop{false};

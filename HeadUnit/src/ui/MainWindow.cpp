@@ -1,5 +1,15 @@
 #include "ui/MainWindow.h"
 #include "ui/CarWidgets.h"
+#include "ui/HomeMenu.h"
+#include "ui/MediaPages.h"
+#include "ui/PairingPage.h"
+#include "ui/SettingsPage.h"
+#include "androidauto/PhoneWatch.h"
+#include "platform/Environment.h"
+#include "usb/LibusbUsbBackend.h"
+#ifdef HEADUNIT_WIRELESS
+#include "wireless/WirelessConnect.h"
+#endif
 #include <QApplication>
 #include <QComboBox>
 #include <QDir>
@@ -10,21 +20,36 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSettings>
+#include <QStackedWidget>
+#include <QStandardPaths>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QtConcurrent/QtConcurrentRun>
 #include <array>
+#include <charconv>
+#include <cstdlib>
 #include <exception>
 #include <iterator>
+#include <system_error>
+#include <thread>
 
 namespace headunit {
 namespace {
 QString Text(const std::string& value) { return QString::fromUtf8(value.data(), static_cast<qsizetype>(value.size())); }
+// The touch step of the --test-keys script, "t:X:Y".
+bool ParseTapStep(const std::string& step, int& x, int& y)
+{
+    const char* const end = step.data() + step.size();
+    const auto first = std::from_chars(step.data() + 2, end, x);
+    if (first.ec != std::errc{} || first.ptr == end || *first.ptr != ':') return false;
+    return std::from_chars(first.ptr + 1, end, y).ec == std::errc{};
+}
 constexpr unsigned kProjectionTestFrames = 10;
-// The chosen display size is remembered between runs (per Windows user).
+// The chosen display size is remembered between runs, per user (QSettings: registry on Windows, ~/.config on Linux).
 constexpr const char* kSettingsOrganization = "HeadUnit";
 constexpr const char* kSettingsApplication = "HeadUnit";
 constexpr const char* kDisplaySetting = "display";
+constexpr const char* kTilesSetting = "home/tiles";
 QString DisplayChoiceText(const DisplayConfig& display)
 {
     QString text = Text(DisplayText(display));
@@ -33,24 +58,59 @@ QString DisplayChoiceText(const DisplayConfig& display)
     else if (display.height == 600) text += " (Ultrawide)";
     return text;
 }
+// The folder the music player plays from: HEADUNIT_MUSIC_DIR, else "HeadUnit" in the user's music folder.
+QString MusicFolder()
+{
+    if (const auto folder = GetEnv("HEADUNIT_MUSIC_DIR"); folder && !folder->empty()) return QString::fromStdString(*folder);
+    return QStandardPaths::writableLocation(QStandardPaths::MusicLocation) + "/HeadUnit";
+}
+// The controller's own keys: they work the radio's page in front (the media keys do not).
+bool IsControllerKey(unsigned keycode)
+{
+    return keycode == keys::DpadLeft || keycode == keys::DpadRight || keycode == keys::DpadUp || keycode == keys::DpadDown || keycode == keys::DpadCenter;
+}
 }
 MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
     : m_backend(backend), m_logger(logger), m_mode(mode),
       m_input(std::make_shared<ProjectionInput>()), m_audioState(std::make_shared<AudioState>()),
-      m_audio(std::make_unique<WasapiAudioEngine>(m_audioState, logger))
+      m_audio(CreateAudioEngine(m_audioState, logger)), m_player(std::make_unique<AudioPlayer>(m_audio->Opener(), logger))
 {
     setWindowTitle("Android Auto Headunit");
     resize(1240, 800);
     auto* central = new QWidget(this);
     auto* root = new QHBoxLayout(central);
     auto* left = new QVBoxLayout();
-    m_video = new VideoWidget(central);
+    // The phone's picture and the radio's pages share one place; ShowScreen picks the one in front.
+    m_screens = new QStackedWidget(central);
+    m_video = new VideoWidget(m_screens);
     m_video->ClearFrame("Android Auto ist nicht verbunden.");
     m_video->onTouch = [this](TouchAction action, int x, int y) {
         if (action == TouchAction::Down) m_console.NoteTouch();
         m_input->Touch(action, x, y);
     };
-    left->addWidget(m_video, 1);
+    m_homeMenu = new HomeMenu(m_screens);
+    m_homeMenu->onOpen = [this](HomeMenuEntry entry) { OpenMenuEntry(entry); };
+    // Left and right on a tile move it along the row; hidden tiles are passed over.
+    m_homeMenu->onShift = [this](HomeMenuEntry entry, int direction) {
+        HomeTileSetup setup = m_tiles;
+        if (MoveTile(setup, entry, direction, true)) SetTiles(setup);
+    };
+    m_settings = new SettingsPage(m_screens);
+    m_settings->onChange = [this](const HomeTileSetup& setup) { SetTiles(setup); };
+    // A phone that pairs over Bluetooth asks here too, in front of everything else, until it is answered.
+    m_pairing = new PairingPage(m_screens);
+    m_pairing->onChange = [this] { ShowScreen(); };
+    m_music = new MultimediaPage(*m_player, MusicFolder(), m_screens);
+    m_radio = new RadioPage(*m_player, m_screens);
+    for (PlayerPage* page : {static_cast<PlayerPage*>(m_music), static_cast<PlayerPage*>(m_radio)}) page->onWillPlay = [this] { PausePhoneMedia(); };
+    m_screens->addWidget(m_video);
+    m_screens->addWidget(m_homeMenu);
+    m_screens->addWidget(m_music);
+    m_screens->addWidget(m_radio);
+    m_screens->addWidget(m_settings);
+    m_screens->addWidget(m_pairing);
+    SetTiles(ParseTileSetup(QSettings(kSettingsOrganization, kSettingsApplication).value(kTilesSetting).toString().toStdString()));
+    left->addWidget(m_screens, 1);
     // The display size sits next to the button that connects: it is fixed once the connection starts.
     auto* controls = new QHBoxLayout();
     auto* displayLabel = new QLabel("Displaygroesse:", central);
@@ -69,7 +129,12 @@ MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
     controls->addWidget(m_displayChoice);
     controls->addWidget(m_button, 1);
     left->addLayout(controls);
-    m_step = new QLabel("Handy per USB-Kabel anschliessen, entsperren und auf Android Auto verbinden klicken.", central);
+#ifdef HEADUNIT_WIRELESS
+    m_step = new QLabel("Android Auto startet von selbst: Handy per USB-Kabel anstecken und entsperren, oder kabellos "
+        "(einmal in den Bluetooth-Einstellungen des Handys mit HEATUNIT koppeln).", central);
+#else
+    m_step = new QLabel("Android Auto startet von selbst, sobald ein Handy per USB-Kabel angesteckt wird (Handy entsperren).", central);
+#endif
     m_step->setWordWrap(true);
     m_step->setTextFormat(Qt::PlainText);
     m_step->setTextInteractionFlags(Qt::TextSelectableByMouse);
@@ -86,13 +151,14 @@ MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
     m_panel = new CarPanel(central);
     m_panel->setFixedWidth(310);
     m_panel->onConsole = [this](ConsoleKey key) { PressConsole(key); };
-    m_panel->onKey = [this](unsigned keycode, bool isDown) { m_console.NoteKey(keycode, isDown); m_input->Key(keycode, isDown); };
-    m_panel->onRotate = [this](int detents) { m_input->Rotate(detents); };
+    m_panel->onKey = [this](unsigned keycode, bool isDown) { SendKey(keycode, isDown); };
+    m_panel->onRotate = [this](int detents) { Rotate(detents); };
     m_panel->onVolume = [this](int delta) { m_audioState->ChangeVolume(delta); };
     m_panel->onMute = [this] { m_audioState->ToggleMute(); };
     root->addWidget(m_panel);
     setCentralWidget(central);
     SetState(State::Idle);
+    ShowScreen();
     if (m_mode == TestMode::None || m_mode == TestMode::Smoke) {
         // The scripted runs against the phone always start from the default (or --display), whatever was chosen last.
         const QSettings settings(kSettingsOrganization, kSettingsApplication);
@@ -100,7 +166,7 @@ MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
     }
     // `activated` only fires for a choice made by the user, not for SetDisplay.
     connect(m_displayChoice, &QComboBox::activated, this, [this](int index) {
-        if (m_state != State::Idle || index < 0 || index >= static_cast<int>(std::size(kDisplays))) return;
+        if (m_state == State::Connecting || m_state == State::Stopping || index < 0 || index >= static_cast<int>(std::size(kDisplays))) return;
         SetDisplay(kDisplays[index]);
         QSettings(kSettingsOrganization, kSettingsApplication).setValue(kDisplaySetting, Text(DisplayText(m_display)));
         const std::string message = "Displaygroesse " + DisplayText(m_display) + ": gilt ab der naechsten Verbindung";
@@ -118,19 +184,24 @@ MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
         QTimer::singleShot(250, this, [errors = result.errors.size()] { QApplication::exit(errors == 0 ? 0 : 2); });
     });
     if (m_mode == TestMode::Smoke) {
+        // HEADUNIT_TEST_PAIRING shows the pairing question with a made-up phone, for the window picture.
+        if (qEnvironmentVariableIsSet("HEADUNIT_TEST_PAIRING"))
+            m_pairing->Ask("Galaxy Z Flip5", "123456", [this](bool isAccepted) { m_logger.Write("INFO", "UI", std::string("Test pairing answered: ") + (isAccepted ? "pair" : "cancel")); });
         // Smoke test: real window plus one real USB scan, then exit.
         m_scanWatcher.setFuture(QtConcurrent::run([this] {
             try { return m_backend.EnumerateDevices(); }
             catch (const std::exception& error) { UsbScanResult result; result.errors.push_back(error.what()); return result; }
         }));
-    } else if (m_mode != TestMode::None) {
+    } else {
         // Scripted runs must not blast the phone's music: they start quiet.
-        m_audioState->SetVolume(5);
+        if (m_mode != TestMode::None) m_audioState->SetVolume(5);
+        // Normal runs start watching for phones at once (after --display has been applied); nobody has to press anything.
         QTimer::singleShot(0, this, &MainWindow::StartConnect);
     }
 }
 MainWindow::~MainWindow()
 {
+    m_isWatchStopRequested = true;
     m_isStopRequested = true;
     // Keep backend and logger alive until the worker has released the USB interface.
     m_watcher.waitForFinished();
@@ -139,10 +210,16 @@ MainWindow::~MainWindow()
 void MainWindow::closeEvent(QCloseEvent* event)
 {
     if (m_state != State::Idle) {
-        // Closing mid-session first lets the session say goodbye to the phone and release
-        // the USB interface; FinishConnect closes the window once that has happened.
+        // Closing first lets a session say goodbye to the phone and release the USB interface, and takes the hotspot
+        // and Bluetooth down; FinishConnect closes the window once that has happened. The watch's flag goes first (see
+        // RunPhoneWatch).
         m_isCloseRequested = true;
-        RequestStop();
+        m_isWatchStopRequested = true;
+        m_isStopRequested = true;
+        if (m_state != State::Stopping) {
+            SetState(State::Stopping);
+            ShowStep("Beende ...");
+        }
         event->ignore();
         return;
     }
@@ -184,8 +261,12 @@ bool MainWindow::HandleKey(QKeyEvent* event, bool isDown)
     default: break;
     }
     if (keycode != 0) {
-        if (event->isAutoRepeat()) { if (isDown && isArrow) m_input->Tap(keycode); }  // held arrows keep nudging
-        else { m_console.NoteKey(keycode, isDown); m_input->Key(keycode, isDown); }
+        if (!event->isAutoRepeat()) SendKey(keycode, isDown);
+        else if (isDown && isArrow) {   // held arrows keep nudging, wherever their press went
+            MenuPage* page = FrontPage();
+            if (!m_localKeys.contains(keycode)) m_input->Tap(keycode);
+            else if (page) page->Nudge(keycode);
+        }
         return true;
     }
     if (!isDown) return false;
@@ -193,6 +274,9 @@ bool MainWindow::HandleKey(QKeyEvent* event, bool isDown)
     case Qt::Key_Plus: case Qt::Key_Equal: m_audioState->ChangeVolume(+1); return true;
     case Qt::Key_Minus: m_audioState->ChangeVolume(-1); return true;
     case Qt::Key_M: m_audioState->ToggleMute(); return true;
+    // Turning the controller: the arrow keys are its arrows, so turning needs keys of its own.
+    case Qt::Key_Comma: Rotate(-1); return true;
+    case Qt::Key_Period: Rotate(+1); return true;
     default: return false;
     }
 }
@@ -206,6 +290,10 @@ PhoneScreen MainWindow::CurrentPhoneScreen() const
 }
 void MainWindow::PressConsole(ConsoleKey key)
 {
+    // Back first closes what a page has opened inside itself (the tuner's list of countries).
+    if (key == ConsoleKey::Back) {
+        if (MenuPage* page = FrontPage(); page && page->Back()) return;
+    }
     // Only Home depends on where the phone is.
     PhoneScreen phone = PhoneScreen::Unknown;
     if (key == ConsoleKey::Home && m_console.IsProjectionConnected()) {
@@ -214,6 +302,94 @@ void MainWindow::PressConsole(ConsoleKey key)
             (phone == PhoneScreen::Dashboard ? "dashboard" : phone == PhoneScreen::Other ? "other (app or launcher)" : "unknown"));
     }
     ApplyConsoleEffect(m_console.Press(key, phone));
+}
+// The console decides which side is in front: the phone's picture or one of the radio's pages.
+MenuPage* MainWindow::FrontPage() const
+{
+    if (m_pairing->IsAsking()) return m_pairing;
+    switch (m_console.CurrentScreen()) {
+    case ConsoleController::Screen::RadioHome: return m_homeMenu;
+    case ConsoleController::Screen::Multimedia: return m_music;
+    case ConsoleController::Screen::Radio: return m_radio;
+    case ConsoleController::Screen::Settings: return m_settings;
+    default: return nullptr;
+    }
+}
+void MainWindow::ShowScreen()
+{
+    MenuPage* page = FrontPage();
+    m_screens->setCurrentWidget(page ? static_cast<QWidget*>(page) : m_video);
+}
+// Keys go to the radio's side when it takes them (PressLocally), otherwise to the phone. A release goes where its
+// press went, so neither side sees half a key press.
+void MainWindow::SendKey(unsigned keycode, bool isDown)
+{
+    if (!isDown && m_localKeys.erase(keycode) > 0) return;
+    if (isDown && PressLocally(keycode)) {
+        m_localKeys.insert(keycode);
+        return;
+    }
+    m_console.NoteKey(keycode, isDown);
+    m_input->Key(keycode, isDown);
+}
+// The controller's arrows and push work the radio's page in front; the media keys (play, track skip) work the radio's
+// own player while it plays or is paused. Otherwise both belong to the phone.
+bool MainWindow::PressLocally(unsigned keycode)
+{
+    if (IsControllerKey(keycode)) {
+        MenuPage* page = FrontPage();
+        if (page) PressPageKey(*page, keycode);
+        return page != nullptr;
+    }
+    const bool isTaken = m_music->MediaKey(keycode) || m_radio->MediaKey(keycode);
+    if (isTaken) m_logger.Write("INFO", "MEDIA", "Media key " + std::to_string(keycode) + " for the radio's own player");
+    return isTaken;
+}
+// Turning the controller works the radio's page in front, otherwise the phone.
+void MainWindow::Rotate(int detents)
+{
+    if (MenuPage* page = FrontPage()) page->Turn(detents);
+    else m_input->Rotate(detents);
+}
+void MainWindow::PressPageKey(MenuPage& page, unsigned keycode)
+{
+    if (keycode == keys::DpadCenter) page.Push();
+    else page.Nudge(keycode);
+}
+// The radio's player is about to start or resume: the phone's music, if any, pauses, as when a car changes its source.
+void MainWindow::PausePhoneMedia()
+{
+    m_localStartMs = SteadyNowMs();
+    if (m_console.IsProjectionConnected()) m_input->Tap(keys::MediaPause);
+}
+// Only one source sounds: when the phone starts its music after the radio's player (connecting Android Auto often
+// resumes the phone's last music), the radio's player falls silent (music pauses, radio stops).
+void MainWindow::KeepOneSound()
+{
+    const std::int64_t now = SteadyNowMs();
+    const AudioPlayer::State state = m_player->CurrentStatus().state;
+    const bool isLocalSounding = state == AudioPlayer::State::Opening || state == AudioPlayer::State::Playing;
+    if (!IsPhoneTakingOver(isLocalSounding, m_localStartMs, m_phoneMedia->IsSounding(now), m_phoneMedia->StartMs())) return;
+    m_logger.Write("INFO", "MEDIA", "The phone started its music: the radio's own player gives way");
+    m_music->GiveWay();
+    m_radio->GiveWay();
+}
+// The home menu's tiles changed (moved on the menu, shown or hidden in the settings): shown everywhere and remembered.
+void MainWindow::SetTiles(const HomeTileSetup& setup)
+{
+    m_tiles = setup;
+    m_homeMenu->SetTiles(ShownTiles(m_tiles));
+    m_settings->SetSetup(m_tiles);
+    QSettings(kSettingsOrganization, kSettingsApplication).setValue(kTilesSetting, QString::fromStdString(TileSetupText(m_tiles)));
+}
+// A tile opens one of the radio's pages or does what its controller key does; the others have nothing behind them yet.
+void MainWindow::OpenMenuEntry(HomeMenuEntry entry)
+{
+    if (const auto page = HomeMenuPage(entry)) { ApplyConsoleEffect(m_console.Open(*page)); return; }
+    if (const auto key = HomeMenuKey(entry)) { PressConsole(*key); return; }
+    const std::string message = std::string(HomeMenuTitle(entry)) + ": noch keine Funktion";
+    m_logger.Write("INFO", "CONSOLE", message);
+    ShowStep(Text(message));
 }
 // Keys and taps go to the phone, the message (if any) becomes a line in the window log, and the
 // projection key may start the connection.
@@ -234,6 +410,7 @@ void MainWindow::ApplyConsoleEffect(const ConsoleEffect& effect)
         m_logger.Write("INFO", "CONSOLE", effect.message);
         ShowStep(Text(effect.message));
     }
+    ShowScreen();
     if (effect.connect) StartConnect();
 }
 // A short touch at a fixed spot of the phone's screen.
@@ -248,23 +425,26 @@ void MainWindow::SetState(State state)
 {
     m_state = state;
     m_button->setEnabled(state != State::Stopping);
-    m_button->setText(state == State::Idle ? "Android Auto verbinden" : state == State::Connecting ? "Verbindung beenden" : "Beende ...");
+    m_button->setText(state == State::Connecting ? "Verbindung beenden" : state == State::Stopping ? "Beende ..." : "Android Auto verbinden");
     // The phone learns the display size when the connection starts; afterwards it can no longer change.
-    m_displayChoice->setEnabled(state == State::Idle);
+    m_displayChoice->setEnabled(state == State::Idle || state == State::Watching);
 }
 void MainWindow::SetDisplay(const DisplayConfig& display)
 {
-    if (m_state != State::Idle || !IsSupportedDisplay(display)) return;
-    m_display = display;
+    if (m_state == State::Connecting || m_state == State::Stopping || !IsSupportedDisplay(display)) return;
+    { std::lock_guard lock(m_displayMutex); m_display = display; }
     m_console.SetDisplay(display);
     m_video->SetDisplay(display);
+    for (MenuPage* page : {static_cast<MenuPage*>(m_homeMenu), static_cast<MenuPage*>(m_music), static_cast<MenuPage*>(m_radio),
+             static_cast<MenuPage*>(m_settings), static_cast<MenuPage*>(m_pairing)})
+        page->SetDisplay(display);
     for (int index = 0; index < static_cast<int>(std::size(kDisplays)); ++index)
         if (kDisplays[index] == display) m_displayChoice->setCurrentIndex(index);
 }
 void MainWindow::OnButton()
 {
-    if (m_state == State::Idle) StartConnect();
-    else RequestStop();
+    if (m_state == State::Connecting) RequestStop();
+    else StartConnect();
 }
 void MainWindow::ShowStep(const QString& text)
 {
@@ -280,6 +460,7 @@ void MainWindow::Tick()
         if (++m_displayedFrames == 1) {
             m_logger.Write("INFO", "VIDEO", "First real Android Auto frame displayed in Qt");
             m_console.SetProjectionConnected(true);
+            ShowScreen();
         }
         // A display of another shape than the phone's frame shows only part of it: name both.
         const QString shownArea = VideoLayoutOf(m_display).HasMargins() ? ", Anzeige " + Text(DisplayText(m_display)) : QString();
@@ -289,6 +470,7 @@ void MainWindow::Tick()
     std::array<AudioState::Meter, kAudioKindCount> meters;
     for (int i = 0; i < kAudioKindCount; ++i) meters[i] = m_audioState->ReadMeter(static_cast<AudioKind>(i));
     m_panel->Display()->SetState(m_audioState->Volume(), m_audioState->IsMuted(), meters);
+    KeepOneSound();
     if (m_state == State::Connecting && !m_isTestFinished) {
         if (m_mode == TestMode::Input) RunInputTest();
         else if (m_mode == TestMode::Audio) RunAudioTest();
@@ -296,27 +478,120 @@ void MainWindow::Tick()
         else if (m_mode == TestMode::Keys) RunKeysTest();
     }
 }
+// The button, the Android Auto tile and the projection key. Normally the automatic mode runs already; then this
+// connects the phone on the USB cable once more (after a session, the phone stays plugged in and is not connected again
+// by itself). The scripted test modes connect once over USB and report the result.
 void MainWindow::StartConnect()
+{
+    if (m_mode != TestMode::None) { BeginConnect(); return; }
+    if (m_state == State::Idle) BeginWatch();
+    else if (m_state == State::Watching) {
+        m_isUsbRequested = true;
+#ifdef HEADUNIT_WIRELESS
+        ShowStep("Suche ein Handy am USB-Kabel, sonst kabellos ...");
+#else
+        ShowStep("Suche ein Handy am USB-Kabel ...");
+#endif
+    }
+}
+// What a connection needs from the window; called on the worker for every connection.
+ProjectionCallbacks MainWindow::MakeCallbacks()
+{
+    ProjectionCallbacks callbacks;
+    { std::lock_guard lock(m_displayMutex); callbacks.display = m_display; }
+    m_logger.Write("INFO", "UI", "Display size for this connection: " + DisplayText(callbacks.display));
+    callbacks.onStatus = [this](const std::string& status) { QMetaObject::invokeMethod(this, [this, status] { ShowStep(Text(status)); }, Qt::QueuedConnection); };
+    callbacks.onFrame = [this](VideoFrame frame) { std::lock_guard lock(m_frameMutex); m_latestFrame = std::move(frame); };
+    callbacks.input = m_input;
+    // The phone's music is watched, so the radio's own player can give way when the phone starts playing.
+    callbacks.openAudio = [opener = m_audio->Opener(), activity = m_phoneMedia](AudioKind kind, const PcmFormat& format) -> std::shared_ptr<IPcmOutput> {
+        auto output = opener(kind, format);
+        if (kind != AudioKind::Media || !output) return output;
+        return std::make_shared<WatchedOutput>(std::move(output), activity);
+    };
+    return callbacks;
+}
+void MainWindow::BeginConnect()
 {
     if (m_state != State::Idle) return;
     m_isStopRequested = false;
+    OnAttemptStart();
+    m_history->clear();
+    SetState(State::Connecting);
+    m_watcher.setFuture(QtConcurrent::run([this] { return ConnectPhoneAutomatically(m_backend, m_logger, m_isStopRequested, MakeCallbacks()); }));
+}
+// The automatic mode: a worker that watches USB and wireless until the window closes (RunPhoneWatch).
+void MainWindow::BeginWatch()
+{
+    if (m_state != State::Idle) return;
+    m_isWatchStopRequested = false;
+    m_isStopRequested = false;
+    m_isUsbRequested = false;
+    m_history->clear();
+    SetState(State::Watching);
+    m_watcher.setFuture(QtConcurrent::run([this]() -> AutoConnectResult {
+        try { return WatchPhones(); }
+        catch (const std::exception& error) {
+            // A future that ends in an exception would take the window down with it.
+            m_logger.Write("ERROR", "WATCH", std::string("Automatic mode failed: ") + error.what());
+            AutoConnectResult result;
+            result.message = std::string("Die automatische Verbindung ist ausgefallen: ") + error.what();
+            return result;
+        }
+    }));
+}
+// The worker of the automatic mode.
+AutoConnectResult MainWindow::WatchPhones()
+{
+    const auto onStatus = [this](const std::string& status) { QMetaObject::invokeMethod(this, [this, status] { ShowStep(Text(status)); }, Qt::QueuedConnection); };
+    // Looks at the bus every second, so it keeps quiet in the log; the connection itself uses the platform's backend.
+    LibusbUsbBackend usb(m_logger, true);
+    PhoneWatchDeps deps;
+    deps.usbPhones = [&usb] { return UsbPhoneIdentities(usb.EnumerateDevices()); };
+    deps.connectUsb = [this] { return ConnectPhoneAutomatically(m_backend, m_logger, m_isStopRequested, MakeCallbacks()); };
+    deps.wait = [this](std::chrono::milliseconds time) {
+        for (auto left = time; left.count() > 0 && !m_isWatchStopRequested; left -= std::chrono::milliseconds(100))
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    };
+    deps.onAttemptStart = [this] { QMetaObject::invokeMethod(this, [this] { OnAttemptStart(); }, Qt::QueuedConnection); };
+    deps.onAttemptEnd = [this](const AutoConnectResult& result) { QMetaObject::invokeMethod(this, [this, result] { OnAttemptEnd(result); }, Qt::QueuedConnection); };
+#ifdef HEADUNIT_WIRELESS
+    // Wi-Fi and Bluetooth stay up for as long as the watch runs. A pairing phone's question goes to the pairing page; its
+    // answer goes back from the GUI thread (PairingRequest::answer may be called from any thread).
+    BluetoothEvents events;
+    events.onStatus = onStatus;
+    events.onPairingRequest = [this](const PairingRequest& request) {
+        QMetaObject::invokeMethod(this, [this, request] { m_pairing->Ask(Text(request.phone), Text(request.code), request.answer); }, Qt::QueuedConnection);
+    };
+    events.onPairingEnd = [this] { QMetaObject::invokeMethod(this, [this] { m_pairing->End(); }, Qt::QueuedConnection); };
+    WirelessStation wireless(m_logger, events);
+    wireless.Start();
+    deps.waitForWirelessPhone = [&wireless](std::chrono::milliseconds timeout) { return wireless.WaitForPhone(timeout); };
+    deps.connectWireless = [this, &wireless](int phone) { return wireless.Serve(phone, m_isStopRequested, MakeCallbacks()); };
+    deps.requestWireless = [&wireless] { return wireless.ReconnectPhones(); };
+#endif
+    return RunPhoneWatch(deps, m_logger, m_isWatchStopRequested, m_isStopRequested, m_isUsbRequested, onStatus);
+}
+// A connection starts: the picture area waits for the phone.
+void MainWindow::OnAttemptStart()
+{
     m_displayedFrames = 0;
     { std::lock_guard lock(m_frameMutex); m_latestFrame.reset(); }
     m_console.SetProjectionConnected(false);
+    ShowScreen();
     m_video->ClearFrame("Verbinde Android Auto ...");
     m_status->clear();
-    m_history->clear();
-    SetState(State::Connecting);
-    m_logger.Write("INFO", "UI", "Display size for this connection: " + DisplayText(m_display));
-    m_watcher.setFuture(QtConcurrent::run([this, display = m_display] {
-        ProjectionCallbacks callbacks;
-        callbacks.display = display;
-        callbacks.onStatus = [this](const std::string& status) { QMetaObject::invokeMethod(this, [this, status] { ShowStep(Text(status)); }, Qt::QueuedConnection); };
-        callbacks.onFrame = [this](VideoFrame frame) { std::lock_guard lock(m_frameMutex); m_latestFrame = std::move(frame); };
-        callbacks.input = m_input;
-        callbacks.openAudio = m_audio->Opener();
-        return ConnectPhoneAutomatically(m_backend, m_logger, m_isStopRequested, std::move(callbacks));
-    }));
+    if (m_state == State::Watching) SetState(State::Connecting);
+}
+// A connection of the automatic mode has ended; the mode itself goes on and the radio's pages come back.
+void MainWindow::OnAttemptEnd(const AutoConnectResult& result)
+{
+    m_console.SetProjectionConnected(false);
+    { std::lock_guard lock(m_frameMutex); m_latestFrame.reset(); }
+    m_video->ClearFrame(result.hasVideo || result.isStoppedByUser ? "Android Auto beendet." : "Android Auto ist nicht verbunden.");
+    m_status->setText("Android Auto: nicht verbunden");
+    ShowScreen();
+    if (!m_isCloseRequested && (m_state == State::Connecting || m_state == State::Stopping)) SetState(State::Watching);
 }
 void MainWindow::RequestStop()
 {
@@ -328,6 +603,7 @@ void MainWindow::RequestStop()
 void MainWindow::FinishConnect(const AutoConnectResult& result)
 {
     m_console.SetProjectionConnected(false);
+    ShowScreen();
     SetState(State::Idle);
     if (m_mode == TestMode::Projection) { QApplication::exit(m_displayedFrames >= kProjectionTestFrames ? 0 : 3); return; }
     if (m_mode == TestMode::Input || m_mode == TestMode::Audio || m_mode == TestMode::Console || m_mode == TestMode::Keys) { QApplication::exit(m_isTestFinished ? m_testExitCode : 3); return; }
@@ -485,7 +761,9 @@ void MainWindow::RunConsoleTest()
     case 3:  // second Home: the radio menu, only a log line; the phone must stay where it is
         if (elapsed >= 800) {
             SaveTestShot("console-3-second-home.png");
+            SaveTestShot("console-3-home-menu.png", true);
             expectScreen(ConsoleController::Screen::RadioHome, "second Home did not open the radio menu");
+            if (m_screens->currentWidget() != m_homeMenu) m_testProblems += "second Home did not show the home menu; ";
             expectPhone(PhoneScreen::Dashboard, "second Home changed what the phone shows");
             if (!historyHas("Home: Radio-Startmenue")) m_testProblems += "radio menu line missing in the window log; ";
             PressConsole(ConsoleKey::Media);
@@ -496,6 +774,7 @@ void MainWindow::RunConsoleTest()
         if (elapsed >= 3000) {
             SaveTestShot("console-4-media-again.png");
             expectScreen(ConsoleController::Screen::Projection, "Media did not leave the dashboard");
+            if (m_screens->currentWidget() != m_video) m_testProblems += "Media did not bring back the phone's picture; ";
             expectPhone(PhoneScreen::Other, "the phone did not show an app after Media");
             PressConsole(ConsoleKey::Home);
             m_testClock.restart(); m_testStage = 5;
@@ -506,9 +785,10 @@ void MainWindow::RunConsoleTest()
             SaveTestShot("console-5-home-again.png");
             expectScreen(ConsoleController::Screen::ProjectionHome, "Home after Media did not end on the phone's dashboard");
             expectPhone(PhoneScreen::Dashboard, "Home after Media did not bring the phone to its dashboard");
-            PressConsole(ConsoleKey::Radio);   // only reported
-            if (!historyHas("Radio: noch keine Belegung")) m_testProblems += "radio key was not reported; ";
-            expectScreen(ConsoleController::Screen::RadioHome, "the radio key did not open the radio menu");
+            PressConsole(ConsoleKey::Radio);
+            if (!historyHas("Radio: Internetradio")) m_testProblems += "radio key was not reported; ";
+            expectScreen(ConsoleController::Screen::Radio, "the radio key did not open the tuner");
+            if (m_screens->currentWidget() != m_radio) m_testProblems += "the radio key did not show the tuner; ";
             PressConsole(ConsoleKey::Nav);
             m_testClock.restart(); m_testStage = 6;
         }
@@ -552,7 +832,7 @@ void MainWindow::RunKeysTest()
     m_logger.Write("INFO", "TEST", "Keys test step " + std::to_string(index + 1) + ": " + step);
     if (step.rfind("t:", 0) == 0) {
         int x = 0, y = 0;
-        if (sscanf_s(step.c_str(), "t:%d:%d", &x, &y) == 2) {
+        if (ParseTapStep(step, x, y)) {
             m_input->Touch(TouchAction::Down, x, y);
             m_input->Touch(TouchAction::Up, x, y);
         }

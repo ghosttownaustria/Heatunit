@@ -40,14 +40,41 @@ public:
 private:
     libusb_device_handle* m_handle;
 };
+// What a failed libusb_open of the phone (normal mode) means. `isDriverIssue`: the operating system gave the
+// phone a driver or permission set libusb cannot use, as opposed to a plain failure. `canBeRepaired`: the app
+// can fix that itself. `advice` says what to do about it.
+struct OpenAdvice { bool isDriverIssue; bool canBeRepaired; std::string advice; };
+OpenAdvice AdviseOnOpenFailure(int code)
+{
+#ifdef _WIN32
+    const bool isDriverIssue = code == LIBUSB_ERROR_NOT_FOUND || code == LIBUSB_ERROR_NOT_SUPPORTED || code == LIBUSB_ERROR_ACCESS;
+    if (!isDriverIssue) return {false, false, "Device open failed; rescan and inspect the USB connection."};
+    return {true, true, "Windows exposes the device for discovery, but libusb cannot access it: the phone is bound to the Samsung/MTP driver instead of WinUSB (Windows re-selects the driver whenever the phone re-appears in file-transfer mode). See docs/windows_connection.md. No Android Auto handshake was sent."};
+#else
+    // Linux: the device node belongs to root until the udev rule grants the user access. Nothing to repair in the app.
+    if (code != LIBUSB_ERROR_ACCESS) return {false, false, "Device open failed; rescan and inspect the USB connection."};
+    return {true, false, "Keine Berechtigung, das USB-Geraet des Handys zu oeffnen. Einmalig `bash scripts/install-udev-rules.sh` ausfuehren (siehe docs/linux.md) und das Handy danach neu einstecken. Es wurde kein Android-Auto-Handshake gesendet."};
+#endif
+}
+// The same for the phone in accessory mode, which shows up with a new VID/PID (and on Windows needs its own binding).
+std::string AccessoryOpenAdvice()
+{
+#ifdef _WIN32
+    return "Phone is in accessory mode, but its NEW VID/PID needs a usable WinUSB binding. No AA session started.";
+#else
+    return "Das Handy ist im Accessory-Modus, laesst sich aber nicht oeffnen (fehlt die Berechtigung?). Einmalig `bash scripts/install-udev-rules.sh` ausfuehren (siehe docs/linux.md) und das Handy danach neu einstecken. Es wurde keine Android-Auto-Sitzung gestartet.";
+#endif
+}
 using AccessorySession = std::function<UsbProbeResult(libusb_device_handle*, std::uint8_t, std::uint8_t)>;
 UsbProbeResult CheckAccessory(libusb_device* device, Logger& logger, const AccessorySession& session)
 {
     libusb_device_handle* rawHandle = nullptr;
     auto result = libusb_open(device, &rawHandle);
-    if (result < 0) return {UsbProbeState::DriverUnavailable, "Accessory USB open",
-        Error(result) + ". Phone is in accessory mode, but its NEW VID/PID needs a usable WinUSB binding. No AA session started."};
+    if (result < 0) return {UsbProbeState::DriverUnavailable, "Accessory USB open", Error(result) + ". " + AccessoryOpenAdvice()};
     const std::unique_ptr<libusb_device_handle, HandleDeleter> handle(rawHandle);
+    // Linux: a kernel driver that grabbed the interface is detached while it is claimed and reattached on release.
+    // Other platforms answer NOT_SUPPORTED, which does not matter.
+    libusb_set_auto_detach_kernel_driver(handle.get(), 1);
     libusb_config_descriptor* rawConfig = nullptr;
     result = libusb_get_active_config_descriptor(device, &rawConfig);
     if (result < 0) return {UsbProbeState::Failed, "Accessory descriptors", Error(result)};
@@ -200,13 +227,10 @@ static UsbProbeResult RunAndroidUsb(const UsbDevice& selected, Logger& logger, b
         libusb_device_handle* rawHandle = nullptr;
         result = libusb_open(target, &rawHandle);
         if (result < 0) {
-            const bool hasDriverIssue = result == LIBUSB_ERROR_NOT_FOUND || result == LIBUSB_ERROR_NOT_SUPPORTED || result == LIBUSB_ERROR_ACCESS;
+            const auto advice = AdviseOnOpenFailure(result);
             const bool isNormalMode = !IsAccessory(targetDescriptor);
-            return finish(hasDriverIssue ? UsbProbeState::DriverUnavailable : UsbProbeState::Failed,
-                Error(result) + ". " + (hasDriverIssue ?
-                "Windows exposes the device for discovery, but libusb cannot access it: the phone is bound to the Samsung/MTP driver instead of WinUSB (Windows re-selects the driver whenever the phone re-appears in file-transfer mode). See docs/windows_connection.md. No Android Auto handshake was sent." :
-                "Device open failed; rescan and inspect the USB connection."),
-                hasDriverIssue && isNormalMode);
+            return finish(advice.isDriverIssue ? UsbProbeState::DriverUnavailable : UsbProbeState::Failed,
+                Error(result) + ". " + advice.advice, advice.canBeRepaired && isNormalMode);
         }
         std::unique_ptr<libusb_device_handle, HandleDeleter> handle(rawHandle);
         // Confirm identity after opening; VID/PID alone does not distinguish two phones.

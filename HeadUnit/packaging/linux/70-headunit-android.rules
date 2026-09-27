@@ -1,0 +1,26 @@
+# HeadUnit: lets the user who is logged in on this seat open Android phones over USB (Android Auto).
+# Without it only root may open the USB device, and HeadUnit answers "Keine Berechtigung".
+# Install once with scripts/install-udev-rules.sh (copies this file to /etc/udev/rules.d and reloads udev).
+#
+# The rule only gives access to the raw USB device of a phone (control and bulk transfers), the same access the
+# usual "android udev rules" packages grant. "uaccess" is granted by systemd-logind to the user at the seat;
+# the plugdev group is for sessions without a seat (a service). Mind that the sort order matters: this file
+# must come before 73-seat-late.rules, which applies the tag.
+
+ACTION=="remove", GOTO="headunit_end"
+SUBSYSTEM!="usb", GOTO="headunit_end"
+ENV{DEVTYPE}!="usb_device", GOTO="headunit_end"
+
+# The phone after HeadUnit switched it to Android accessory mode (AOA): Google's vendor ID with the accessory PIDs
+# 2d00 and 2d01 (with ADB), 2d04 and 2d05 (audio, with and without ADB).
+ATTR{idVendor}=="18d1", ATTR{idProduct}=="2d0[0-5]", TAG+="uaccess", GROUP="plugdev", MODE="0660"
+
+# The phone in its normal USB modes (file transfer, tethering, ADB, ...), by vendor: Google, Samsung, Motorola, HTC,
+# Huawei, Xiaomi, OnePlus, LG, Sony, Vivo. These are the vendors HeadUnit itself treats as Android candidates.
+ATTR{idVendor}=="18d1|04e8|22b8|0bb4|12d1|2717|2a70|1004|0fce|2d95", TAG+="uaccess", GROUP="plugdev", MODE="0660"
+
+# ... and any other vendor's device that offers an MTP/PTP interface (06/01/01) or ADB (ff/42/01).
+IMPORT{builtin}="usb_id"
+ENV{ID_USB_INTERFACES}=="*:060101:*|*:ff4201:*", TAG+="uaccess", GROUP="plugdev", MODE="0660"
+
+LABEL="headunit_end"

@@ -1,25 +1,33 @@
-# HeadUnit: Windows Android Auto PoC
+# HeadUnit: Android Auto PoC (Windows und Linux)
 
-C++20 / Visual Studio 2026 x64 / Qt 6. USB discovery, AOA mode switching, Android
+C++20 / Qt 6, ein Quellbaum fuer Windows (Visual Studio 2026 x64) und Linux (CMake, siehe [Linux](docs/linux.md)).
+Was sich pro System unterscheidet (USB-Suche, Treiber-Zugriff, Audioausgang), steckt hinter kleinen Schnittstellen,
+siehe [Architektur](docs/architecture.md#platform-layer). Der Rest dieser Datei beschreibt die Bedienung und den
+Windows-Build; unter Linux gilt dieselbe Bedienung. Die Windows-Schritte "Treiber reparieren" und die
+Administrator-Abfrage entfallen dort, dafuer braucht Linux einmalig eine udev-Regel.
+
+Status: USB discovery, AOA mode switching, Android
 Auto version/TLS negotiation, service and H.264 channel handling, FFmpeg decoding
-and Qt video rendering are implemented. Real phone testing (Samsung SM-F776B) has
+and Qt video rendering are implemented. Real phone testing (Samsung SM-F776B, on Windows) has
 confirmed version 1.7, TLS, service discovery and projected video, including repeated
 sessions and a clean stop. Touch (mouse), a simulated rotary knob with hard keys, and phone audio
 over WASAPI with a simulated audio display work on hardware. There is no simulated phone data or AA screen.
 
-**Bedienung: ein Knopf.** Handy per Datenkabel anschliessen, entsperren und
-**Android Auto verbinden** anklicken. Die App erledigt alle Schritte selbst und meldet
-jeden davon im Fenster: Handy suchen, bei Bedarf den USB-Treiber reparieren (einmal
-die Windows-Abfrage nach Administratorrechten bestaetigen), Android Auto auf dem Handy
-starten und das Video anzeigen. Auf dem Handy nur die Android-Auto-Hinweise bestaetigen.
-Waehrend der Sitzung heisst derselbe Knopf **Verbindung beenden** (oder das Fenster
-schliessen): Das Handy bekommt ein Goodbye, dann wird die USB-Schnittstelle freigegeben.
+**Bedienung: automatisch.** Handy per Datenkabel anschliessen und entsperren: Die App
+erkennt es von selbst (auch wenn es beim Start schon steckt) und erledigt alle Schritte,
+jeden davon im Fenster gemeldet: bei Bedarf den USB-Treiber reparieren (einmal die
+Windows-Abfrage nach Administratorrechten bestaetigen), Android Auto auf dem Handy starten
+und das Video anzeigen. Auf dem Handy nur die Android-Auto-Hinweise bestaetigen. Unter
+Linux kommt kabelloses Android Auto dazu, ebenfalls automatisch ([wireless.md](docs/wireless.md)).
+Waehrend der Sitzung heisst der Knopf **Verbindung beenden**: Das Handy bekommt ein Goodbye,
+dann wird die USB-Schnittstelle freigegeben; die Automatik wartet danach weiter. Ein Handy,
+das stecken bleibt, startet erst nach neuem Anstecken wieder, oder mit **Android Auto verbinden**.
 
-**Displaygroesse.** Solange keine Verbindung besteht, laesst sich neben dem Verbinden-Knopf die Displaygroesse
+**Displaygroesse.** Solange keine Sitzung laeuft, laesst sich neben dem Verbinden-Knopf die Displaygroesse
 waehlen: 800 x 480, 1280 x 720 (HD), 1600 x 600 (Ultrawide) oder 1920 x 1080 (Full HD). Das Handy erfaehrt sie
 beim Verbinden (Video-Aufloesung, Touchflaeche und passende Bilddichte), darum ist die Auswahl waehrend einer
-Verbindung gesperrt. Die Wahl wird gemerkt (Windows-Benutzer, Registry `HKCU\Software\HeadUnit`); das leere
-Bildfeld zeigt schon vor dem Verbinden die Form des gewaehlten Displays.
+Verbindung gesperrt. Die Wahl wird gemerkt (Windows-Benutzer, Registry `HKCU\Software\HeadUnit`); das
+Startmenue im Bildfeld zeigt schon vor dem Verbinden die Form des gewaehlten Displays.
 Android Auto kennt nur feste Video-Aufloesungen. Ein Display anderer Form, wie 1600 x 600, wird in das
 naechstgroessere Bild eingepasst: Das Handy bekommt 1920 x 1080 mit 360 Pixel Rand (oben und unten je 180),
 zeichnet seine Oberflaeche nur in den mittleren 1920 x 720 grossen Streifen (Bilddichte 240 dpi) und die App
@@ -42,23 +50,66 @@ einer Groesse, ohne sie zu merken (auch fuer die `--test-...`-Laeufe, die sonst 
   leuchtet auf. Ein Klick, der auf einem anderen Bereich endet als er begann, zaehlt nicht.
 - **Tasten** (angelehnt an ein BMW-iDrive-Multimedia-Bedienteil): Media, Tel, Nav und Map rufen die
   entsprechende App auf dem Handy auf (Map und Nav oeffnen beide die Navigation), Back ist die
-  Zurueck-Taste des Handys, Option sendet dessen Menue-Taste. Radio und Menu haben noch keine Belegung,
-  weil es kein eigenes Betriebssystem gibt: sie schreiben nur eine Zeile ins Fenster-Log.
+  Zurueck-Taste des Handys, Option sendet dessen Menue-Taste. Menu holt das Startmenue des Radios nach vorn,
+  Radio den Radioempfang (siehe unten). Ohne verbundenes Handy oeffnet Media den Musikordner des Radios.
+- **Startmenue des Radios:** Die Uhr und eine Reihe Kacheln (Android Auto, Multimedia, Radio, Telephone,
+  Navigation, Vehicle, Settings) nach der Vorlage [docs/design/home-menu.svg](docs/design/home-menu.svg), an der
+  Stelle des Handybilds und in der Form des gewaehlten Displays. Ohne verbundenes Handy ist es immer zu sehen,
+  waehrend des Verbindens auch; das Handybild kommt nach vorn, sobald es da ist.
+  - **Drehen** am Regler waehlt eine Kachel (sie leuchtet orange). Die gewaehlte Kachel steht in der Mitte, nur
+    am Anfang und Ende der Reihe nicht. Wo es weitergeht, zeigt der Rand einen orangen Pfeil; der Balken unten
+    zeigt, welcher Teil der Reihe gerade zu sehen ist.
+  - **Pfeil links/rechts** verschiebt die gewaehlte Kachel in der Reihenfolge um einen Platz (wird gemerkt).
+  - **Druecken** oder ein Klick oeffnet die Kachel: Android Auto verbindet bzw. holt das Handy nach vorn (wie
+    das Handy-Symbol), Multimedia, Radio und Settings oeffnen die Seiten des Radios, Telephone und Navigation
+    wirken wie die Tasten Tel und Nav; Vehicle hat noch keine Funktion. Ein Klick auf einen Randpfeil geht eine
+    Kachel weiter, das Mausrad ueber dem Menue dreht.
+- **Settings:** Alle Kacheln in ihrer Reihenfolge mit Haekchen. Drehen waehlt, Druecken blendet die Kachel ein
+  oder aus (Settings bleibt immer), Pfeil hoch/runter verschiebt sie in der Reihenfolge. Wird gemerkt.
+- **Multimedia (Musikordner):** Spielt Musik aus dem Ordner `HeadUnit` im Musikordner des Benutzers (Windows:
+  `C:\Users\<Name>\Music\HeadUnit`, Linux: meist `~/Music/HeadUnit` oder `~/Musik/HeadUnit`; wird beim Start angelegt, mit
+  `HEADUNIT_MUSIC_DIR` laesst sich ein anderer Ordner waehlen). Einfach Dateien hineinkopieren, gern in
+  Unterordnern (Alben): MP3, FLAC, M4A/AAC, OGG, OPUS, WAV, WMA, AIFF. Die Seite zeigt links die orange
+  leuchtende Kachel, rechts Titel, Interpret (aus den Tags), Fortschritt, die Knoepfe Zurueck/Play-Pause/Weiter
+  und die Titelliste; oben **Open folder** (oeffnet den Ordner im Explorer) und **Rescan** (liest ihn neu ein,
+  passiert auch bei jedem Oeffnen der Seite). Am Ende eines Titels geht es mit dem naechsten weiter.
+- **Radio (Internetradio):** Die Sender eines Landes aus dem freien Senderverzeichnis
+  [radio-browser.info](https://www.radio-browser.info) (die 500 meistgehoerten, alphabetisch sortiert), gespielt als
+  Internet-Stream.
+  Oben **Country** oeffnet die Laenderliste; voreingestellt ist das Land der Windows-Region, Land und zuletzt
+  gehoerter Sender werden gemerkt. Waehrend ein Sender laeuft, steht darunter, was er gerade spielt (Titel aus
+  dem Stream), dazu **LIVE**. Zurueck/Weiter wechseln den Sender, der mittlere Knopf startet und stoppt.
+  DAB+ selbst braucht einen Empfaenger (z. B. einen RTL-SDR-USB-Stick); ohne ihn laeuft dasselbe Programm der
+  Sender ueber ihren Internet-Stream. Dafuer braucht der Rechner Internet.
+- **Bedienung der Seiten:** Drehen und Pfeile machen verschiedene Dinge. **Drehen** bewegt die Auswahl innerhalb
+  eines Bereichs (durch die Liste, entlang der Knopfreihe). **Pfeil hoch/runter** springt zwischen den Bereichen
+  (Liste, Knoepfe Zurueck/Play/Weiter, Knoepfe oben), egal wo in der Liste man steht. **Pfeil links/rechts**
+  springt zum vorigen/naechsten Titel bzw. Sender, die Auswahl bleibt stehen. Druecken des Reglers loest aus, ein
+  Mausklick auch; das Mausrad ueber der Seite blaettert in der Liste. Back und Home fuehren zurueck zum
+  Startmenue (Back schliesst vorher die Laenderliste). Solange eine Seite des Radios vorn ist, gehen Regler und
+  Pfeile nicht ans Handy.
+- **Eigene Wiedergabe und Handy:** Musik und Radio laufen ueber denselben Tonausgang wie das Handy (Lautstaerke,
+  Stumm und die MEDIEN-Anzeige gelten auch dafuer). Titel- und Play-Tasten (auch Leertaste, Bild hoch/runter)
+  steuern die eigene Wiedergabe, solange sie laeuft oder pausiert, sonst das Handy. Es spielt immer nur eine
+  Quelle, die zuletzt gestartete: Startet die eigene Wiedergabe, bekommt das Handy Pause; faengt das Handy an zu
+  spielen (z. B. beim Verbinden von Android Auto), pausiert die eigene Musik bzw. stoppt das Radio.
 - **Home** hat zwei Stufen, solange ein Handy uebertragen wird: Beim ersten Druck wechselt das Handy auf
   seinen Startbildschirm (Karte, Medien, Telefon-Karten, z. B. Maps und Spotify). Der zweite Druck
-  oeffnet das Home-Menue des Radios (nur ein Log-Eintrag), der dritte geht zurueck zum Handy-Startbildschirm.
-  Ohne verbundenes Handy meldet Home nur das Radio-Menue. Ob das Handy gerade auf seinem Startbildschirm
-  ist, liest die App am Symbol unten links im Bild ab.
+  zeigt das Startmenue des Radios, der dritte geht zurueck zum Handy-Startbildschirm.
+  Ohne verbundenes Handy, oder auf einer Seite des Radios, zeigt Home das Startmenue. Ob das Handy gerade auf
+  seinem Startbildschirm ist, liest die App am Symbol unten links im Bild ab.
 - Das **Handy-Symbol** (CarPlay / Android Auto) startet die Verbindung, wenn noch keine besteht, sonst holt die
   Taste das Handy in den Vordergrund.
 - **Audio-Anzeige:** Lautstaerke (30 Stufen), Stumm und je ein Pegel fuer Medien, Navigation und
   System. Die Anzeige zeigt, welche Tonspur des Handys gerade Audio liefert. Lautstaerke und Stumm
   wirken in der App (der Windows-Regler bleibt unberuehrt); mehr Lautstaerke schaltet Stumm aus.
-- **Tastatur:** Pfeile, Enter (Regler druecken), Esc/Rueck (Back), Pos1 (Home), F1 Menu, F2 Option,
+- **Tastatur:** Pfeile (die Pfeile des Reglers), Komma/Punkt (Regler drehen), Enter (Regler druecken), Esc/Rueck
+  (Back), Pos1 (Home), F1 Menu, F2 Option,
   F3 Media, F4 Radio, F5 Tel, F6 Nav, F7 Map, F8 CarPlay / Android Auto, Leertaste (Play/Pause),
   Bild hoch/runter (Titel), +/- (Lautstaerke), M (Stumm).
 Der Ton laeuft ueber das Standard-Ausgabegeraet von Windows (WASAPI, andere Programme behalten
-ihren Ton). Das Mikrofon (Sprachbefehle, Telefonate) ist noch nicht angebunden.
+ihren Ton), unter Linux ueber PulseAudio/PipeWire oder ALSA. Das Mikrofon (Sprachbefehle, Telefonate) ist noch
+nicht angebunden.
 
 **Wenn etwas klemmt, versucht die App es selbst:**
 - Das Handy im Accessory-Modus bekommt Android Auto per AOA-Neustart neu gestartet,
@@ -95,7 +146,7 @@ native VS-Projekte; Protobuf-Dateien und DLL-Kopien werden automatisch erzeugt.
 `--start-accessory` (Accessory-Modus starten und Bulk-Paar pruefen), `--repair-driver`
 (WinUSB wiederherstellen), `--recover-phone` (USB-Verbindung des Handys neu starten und
 Treiber reparieren), `--test-projection` (kompletter Ablauf, erfolgreich nach zehn
-angezeigten Videobildern), `--test-input` (schickt Regler-, Tasten- und Touch-Eingaben ans Handy), `--test-audio` (startet Wiedergabe leise und prueft, dass Ton am Ausgabegeraet ankommt), `--test-console` (Media, Home, Home, Media, Home, Radio, Nav: prueft die Zwei-Stufen-Logik von Home am echten Handybild), `--test-keys` (Diagnose: spielt die Schritte aus `HEADUNIT_TEST_KEYS` ab (Zahl = Tastencode, `t:X:Y` = Tipp aufs Display, `c:name` = Konsolentaste), durch Komma getrennt, z. B. `3,t:42:438,c:home`, und speichert nach jedem Schritt ein Bild). Mit `HEADUNIT_TEST_SHOTS=<Ordner>` speichern die Tests Bilder des Handys und des Fensters. Details: [Windows-Verbindung](docs/windows_connection.md).
+angezeigten Videobildern), `--test-input` (schickt Regler-, Tasten- und Touch-Eingaben ans Handy), `--test-audio` (startet Wiedergabe leise und prueft, dass Ton am Ausgabegeraet ankommt), `--test-tone` (spielt zwei Sekunden leisen Ton ueber den Audioausgang, ohne Handy), `--test-console` (Media, Home, Home, Media, Home, Radio, Nav: prueft die Zwei-Stufen-Logik von Home am echten Handybild), `--test-keys` (Diagnose: spielt die Schritte aus `HEADUNIT_TEST_KEYS` ab (Zahl = Tastencode, `t:X:Y` = Tipp aufs Display, `c:name` = Konsolentaste), durch Komma getrennt, z. B. `3,t:42:438,c:home`, und speichert nach jedem Schritt ein Bild). Mit `HEADUNIT_TEST_SHOTS=<Ordner>` speichern die Tests Bilder des Handys und des Fensters. Details: [Windows-Verbindung](docs/windows_connection.md).
 
 ## Visual Studio 2026: oeffnen, bauen, starten
 
@@ -141,9 +192,29 @@ Qt-Modulen/Plugins `msbuild/Qt.props` und `msbuild/Qt.targets` erweitern. Fuer
 Weitergabe an einen anderen PC den passenden VC++ Redistributable mit einplanen;
 Debug ist fuer die lokale Entwicklung gedacht.
 
-## Optional: existing CMake build
+## Linux
 
-CMake remains available for portability and the older VS2022 build path.
+Kurzfassung (Debian, Ubuntu, Raspberry Pi OS; Pakete, Erste Inbetriebnahme und Fehlersuche stehen in
+[docs/linux.md](docs/linux.md)):
+
+```sh
+sudo apt install build-essential cmake ninja-build pkg-config qt6-base-dev libboost-dev libssl-dev \
+    libprotobuf-dev protobuf-compiler libusb-1.0-0-dev libavcodec-dev libavformat-dev libavutil-dev libswresample-dev libswscale-dev
+cd HeadUnit
+cmake --preset linux-debug && cmake --build --preset linux-debug && ctest --preset linux-debug
+bash scripts/install-udev-rules.sh     # einmalig: Zugriff aufs Handy ohne root, danach Handy neu stecken
+./out/build/linux-debug/HeadUnit
+```
+
+Die Linux-Teile (USB-Suche ueber libusb, Audio ueber miniaudio, Zugriffspruefung statt Treiber-Reparatur) sind auf
+einem Windows-Rechner fuer Linux (x86-64, teils ARM64/ARM32) uebersetzt und ohne neue Warnungen geprueft, aber noch
+nicht auf einem Linux-Rechner gebaut oder mit einem Handy ausgefuehrt worden: siehe "Stand der Pruefung" in
+docs/linux.md.
+
+## CMake (Windows und Linux)
+
+CMake baut dieselben Quellen wie die Visual-Studio-Projekte: unter Linux ist es der einzige Weg, unter Windows
+eine Alternative zu `HeadUnit.sln` (und der Weg fuer Visual Studio 2022).
 
 Install Visual Studio 2022 with Desktop development with C++, Windows SDK and
 CMake tools. Use the **Developer PowerShell for VS 2022**. Qt must be the x64
@@ -199,8 +270,9 @@ ADB debugging is not required. If already enabled, its interface provides an
 additional identification hint. Manufacturer IDs alone are only candidates:
 Samsung also makes non-phone USB devices. Unknown/charge-only phones may not be
 identified. Missing descriptors are shown as warnings, never invented.
-The window itself has one button (**Android Auto verbinden**) and does the mode switch,
-driver repair and session by itself; the individual steps stay available on the command line.
+The window connects a phone by itself as soon as it is plugged in (and, on Linux, one that connects wirelessly) and
+does the mode switch, driver repair and session; its one button ends a session or connects the plugged-in phone once
+more. The individual steps stay available on the command line.
 
 See [research and protocol plan](docs/android_auto.md), [architecture](docs/architecture.md),
 [USB diagnostics](docs/usb.md), [dependencies](docs/dependencies.md), and [verified progress](docs/progress.md).

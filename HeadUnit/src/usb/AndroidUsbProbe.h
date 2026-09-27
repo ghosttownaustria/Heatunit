@@ -10,7 +10,8 @@ struct UsbProbeResult {
     std::string stage;
     std::string message;
     // The phone is in its normal USB mode but Windows bound a driver libusb cannot open;
-    // rebinding WinUSB (DriverRepair) can fix exactly this.
+    // rebinding WinUSB (DriverRepair) can fix exactly this. Never set on Linux, where a phone that cannot
+    // be opened lacks the udev rule, which only an administrator can install.
     bool canRepairDriver{};
     // The phone did not switch to accessory mode: asking again (after the phone is unlocked or
     // the prompt on it is confirmed) can help.

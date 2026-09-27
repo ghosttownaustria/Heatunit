@@ -1,5 +1,252 @@
 # Progress
 
+## 2026-09-27 (late night): the Android Auto service was never published (RFCOMM channel 8 is BlueZ's SIM Access)
+
+Evidence from the Pi (SM-F776B): with the PMF fix the phone joins HEATUNIT-AA by hand with the stored password, so the
+hotspot and the password are fine. Yet the last 80 lines of `headunit.log` (five runs) never show "opened the Android Auto Wireless
+service": the phone connects over Bluetooth (and pairs), shows "Wird mit Android Auto verbunden", and never opens the
+service; no TCP connection on port 5288 either (`ss`). `bluetoothctl show`, taken while HeadUnit ran, lists PipeWire's
+Handsfree services and "SIM Access" (0x112d), but not the Android Auto UUID `4de17a00-...`.
+
+- **Cause:** BlueZ's SAP plugin listens on RFCOMM channel 8 (`SAP_SERVER_CHANNEL` in `profiles/sap/server.c`), and
+  Raspberry Pi OS loads it. `RegisterProfile` with Channel 8 still succeeds, but BlueZ cannot open the RFCOMM server
+  and publishes no service record, so the phone never finds the service. The dongle uses 8 on a BlueZ without SAP.
+  The "Falsches Passwort" seen earlier must have come from an older run (before the PMF fix or with other credentials);
+  none of the runs in the log excerpt sent Wi-Fi details.
+- **Fix:** `BluetoothService` registers on channels 22 to 30 (`kAndroidAutoWirelessChannels`) and keeps the first one on
+  which the UUID shows up in `Adapter1.UUIDs`; a taken channel is unregistered and the next tried. If the UUID shows up
+  on none, the first channel is kept with a warning (never worse than before). The log names the channel and whether
+  it is listed.
+- **Verified:** nothing compiled here (`src/wireless/` is Linux only). **Not verified:** the phone opening the service,
+  and everything after it (Wi-Fi details, joining, the session).
+
+## 2026-09-27 (night): "wrong password" at the hotspot, protected management frames off
+
+Reported on the Pi with the Samsung SM-F776B after the previous entry: the pairing page works; the phone still stays at
+"Wird mit Android Auto verbunden", and its Wi-Fi list shows HEATUNIT-AA (5 GHz, now visible) with "Falsches Passwort".
+So the phone got the Wi-Fi details over Bluetooth and tried to join, but the WPA2 handshake failed. The password sent is
+the hotspot's own (same string from `LoadWirelessSettings`, field 2 of `WifiInfoResponse` as in the working dongle).
+
+- **Cause (known for Raspberry Pi hotspots made by NetworkManager):** NetworkManager offers protected management frames
+  (PMF, 802.11w) by default; the Pi's brcmfmac chip does not handle them as an access point, and phones that use them
+  fail the handshake with "incorrect password". The documented fix is `wifi-sec.pmf disable`
+  ([Pi My Life Up](https://pimylifeup.com/raspberry-pi-wireless-access-point/),
+  [Raspberry Pi forum](https://forums.raspberrypi.com/viewtopic.php?t=358481)). `Hotspot::Start` now adds it.
+- **Readable failures:** a negative status from the phone now gets advice in the window (`WifiFailureAdvice`): wrong
+  password (forget HEATUNIT-AA on the phone, connect again), Wi-Fi off, channel not usable, network not found.
+  `WirelessHandshake::FailureStatus` keeps the code. WirelessTests checks the wrong-password advice.
+- **Verified:** nothing here compiles on Windows (`src/wireless/` only); CI or the Pi build will show errors.
+  **Not verified:** that PMF is the cause (inferred from the symptom and the known Pi issue, no log); the phone joining.
+
+## 2026-09-27 (later): pairing question in the menu, visible Wi-Fi, Android Auto key goes wireless
+
+Reported on the Pi with the Samsung SM-F776B after the previous entry: pairing now works (the phone asks with the
+six-digit code), but then the phone stays at "Wird mit Android Auto verbunden", and the window said "Kein Handy am USB
+gefunden ..." (the Android Auto key had been pressed; it only looked at the cable). No log was available.
+
+- **Visible Wi-Fi:** compared with [WirelessAndroidAutoDongle](https://github.com/nisargjhaveri/WirelessAndroidAutoDongle),
+  which works with real phones on a Raspberry Pi 4: same RFCOMM channel 8, same message sequence (start request, info
+  request, info response with WPA2 8 and DYNAMIC), same 5 GHz channel 36, but its hostapd broadcasts the network name.
+  Android Auto looks for the network it was told about in its Wi-Fi scan, where a hidden network does not appear by
+  name, so the hidden hotspot is the likely reason the phone never got further. The hotspot is now visible by default;
+  `HEADUNIT_WIFI_HIDDEN=1` hides it. The automatic switch to visible after a failed join (previous entry) is gone. The
+  same project's BlueZ configuration has `JustWorksRepairing = always`, which confirms the previous entry's diagnosis.
+- **Pairing question in the menu** (asked for by the user): new `PairingPage` with the phone's name, the code large in
+  orange, Pair / Cancel; knob, arrows, Back and clicks work it; it goes in front of everything while it asks and refuses
+  after a minute without an answer. The agent now answers `RequestConfirmation` with a delayed D-Bus reply once the
+  person has chosen (`BluetoothEvents`, `PairingRequest::answer`, callable from the GUI thread); BlueZ's `Cancel`, the
+  finished pairing and the service's stop take the question away. `--test-bluetooth` still confirms by itself.
+- **Android Auto key without a phone on the cable** now asks the paired phones to connect wirelessly
+  (`PhoneWatchDeps::requestWireless` -> `WirelessStation::ReconnectPhones`): a connected phone is disconnected and
+  connected again, which starts Android Auto on it anew. The window says so instead of asking for a data cable.
+- **No reconnect in the middle of a start:** the automatic reconnect once the hotspot is up now only takes down phones
+  that were connected before the Bluetooth service existed; before, a phone that had just paired (and was starting
+  Android Auto) was disconnected too when the hotspot came up a few seconds later.
+- **Window steps** for the Bluetooth link: "... ist verbunden. Warte, bis Android Auto am Handy den Dienst oeffnet",
+  so the window shows whether the phone got as far as opening the Android Auto service.
+- **Tests:** CoreTests cover the key with and without wireless and with a phone on the cable (PhoneWatch).
+- **Verified on this Windows machine:** CoreTests pass (CMake core-only); MSBuild Debug x64 builds the app with no
+  warnings from own sources; `HEADUNIT_TEST_PAIRING=1 HeadUnit --smoke-test` pictures of the pairing page at 1600x600
+  and 800x480 (layout only; knob and click not driven). **Not verified:** everything in
+  `src/wireless/` (Linux only, not compiled here); on the phone: the visible Wi-Fi getting Android Auto to a session,
+  the pairing page with a real pairing, the key's reconnect.
+
+## 2026-09-27: wireless pairing like a car, Bluetooth at once
+
+Reported on the Pi with the Samsung SM-F776B: the hotspot runs (hidden), HEATUNIT appeared only after a long wait, and
+pairing from the phone ended with "Keine Kopplung durchgefuehrt. Die Einstellungen fuer dieses Geraet ueberpruefen".
+
+- **Pairing:** the agent registered as `NoInputNoOutput`, i.e. Just Works pairing. BlueZ refuses a Just Works pairing
+  started by a device it still has a bond with (`JustWorksRepairing = never`, the default in `main.conf`); the phone
+  had been paired before and then unpaired on the phone only, so every new attempt was refused. The agent is now
+  `DisplayYesNo` (numeric comparison, as car head units do): the phone shows a six-digit code, the head unit confirms
+  it by itself and shows it in the window ("Bluetooth-Kopplung mit ...: am Handy den Code ... bestaetigen"), and the
+  repairing rule does not apply to a comparison. A finished pairing is shown too.
+- **Always answered:** BlueZ's calls (pairing, connections) used to be handled only while the watch thread waited for
+  a wireless phone, not during a session, a USB attempt or the hotspot start. `BluetoothService` now runs on a `QThread`
+  of its own with its own event loop; the phone's RFCOMM socket is handed to the watch through a condition variable.
+  `Pump` is gone.
+- **Visible at once:** Bluetooth starts first (about a second), the hotspot starts at the same time in the background
+  (`std::async`; nmcli takes seconds, up to 45). Adapter visibility is switched on only after the agent and the Android
+  Auto service are registered. The paired phones are asked to connect once the hotspot is up; a phone that opens the
+  service earlier waits in `Serve` for the hotspot (up to 60 s). Bluetooth and Wi-Fi retry a failed start separately.
+- **Hidden Wi-Fi fallback:** when a phone got the Wi-Fi details and did not join (timeout, or a negative connection
+  status; `EstablishWirelessLink` now reports `hasSentInfo` in that case too), the station broadcasts the network's name
+  from then on (`wireless/wifiVisible` in `QSettings`) and restarts the hotspot. `HEADUNIT_WIFI_HIDDEN` (0 or 1) fixes
+  the choice.
+- **Tests:** `WirelessTests` checks that a phone reporting it cannot join still counts as having had the details.
+- **Verified:** nothing compiled or run: `src/wireless/*` only builds on Linux and this Windows machine has no Linux
+  toolchain; the code was reviewed by reading (CI or the Pi build will show compile errors). **Not verified:** pairing
+  with the phone, the pairing code in the window, Bluetooth answering during a session, the hotspot fallback, and
+  whether Android Auto joins a hidden network at all. The cause of the pairing failure is inferred from BlueZ's rules,
+  not seen in a log.
+
+## 2026-09-24 (night): home menu navigation, settings, one sound at a time
+
+From the user's list and the design `AA.svg` (now `docs/design/home-menu.svg`):
+
+- **Bar at the bottom** (position in the menu): the whole row dark, the part in view light, as in the design.
+- **Edge arrows:** where more tiles follow, the tiles fade into a black strip with a line and an orange arrow (from the
+  design); a click on it moves the focus that way.
+- **Focused tile in the middle**, except near the ends of the row (then the row stops at its end).
+- **Moving tiles:** left/right on the home menu move the focused tile along the row; turning moves the focus. The
+  order is remembered (`QSettings` `home/tiles`).
+- **Settings tile** opens a page with every tile and a tick box: push shows/hides (Settings cannot be hidden),
+  up/down move the tile in the order. New tile **Android Auto** (symbol from the design): connects, or brings the
+  phone to the front.
+- **One sound at a time:** before, the radio kept playing when Android Auto connected and the phone started its
+  music. Now the source started last wins: the phone's media output is watched, and when the phone starts playing
+  after the radio's player, the music pauses / the radio stops; starting or resuming the radio's player pauses the
+  phone as before.
+- **Turning and arrows are separate:** on the player pages turning moves within the list or the row of buttons, up/down
+  jump between list, controls and top buttons (the up arrow in the station list goes straight to the buttons), left/right
+  skip to the previous/next title or station. Keyboard: comma/period turn the knob.
+- **Tests:** CoreTests cover the new layout (centring on every display and tile count, focused tile never under an
+  edge, edges, the bar against the design's numbers, hits), the tile setup (show/hide, Settings fixed, moving on the
+  menu and in the settings, text form and repair of damaged text), the audio rule (starts after gaps, who takes over,
+  the watched output), the new page focus rules and the settings page in the console.
+- **Verified on this Windows machine:** build without warnings from own sources, CoreTests pass; the real window at
+  1600x600: arrows and bar, the focused tile centred (also with three quick turns), Telephone moved right and back,
+  the settings page hiding Vehicle and moving it, the menu without it, restored afterwards; on the tuner the up arrow
+  jumps from a station to the play button and left plays the previous station (an AAC stream). **Not verified:** the
+  phone taking over the sound (needs a phone; covered by unit tests only). In one run a screenshot showed the focused
+  tile not yet centred; two repeats did not show it again.
+
+## 2026-09-24 (later): music folder and internet radio
+
+- **Multimedia page:** plays the music folder (`HeadUnit` in the user's music folder, or `HEADUNIT_MUSIC_DIR`; created
+  at start), sub folders included, in natural order; title and artist from the tags, progress, previous/play-pause/next,
+  the list of titles, "Open folder" and "Rescan"; the next title follows at the end. Formats: whatever FFmpeg decodes
+  (MP3, FLAC, M4A/AAC, OGG, OPUS, WAV, WMA, AIFF are recognised as music files).
+- **Radio page:** internet radio from radio-browser.info, by country (list of all countries, default from the system's
+  region, remembered with the last station), the 500 most listened stations in alphabetical order, "now playing" from the stream's ICY title,
+  LIVE mark, previous/next station, play/stop. The user asked for DAB+: a real DAB+ broadcast needs a tuner (there is
+  no DAB+ web API that delivers the broadcast), so the stations' internet streams are played; a tuner such as an
+  RTL-SDR stick with `welle-cli` could be added later as another source of stream URLs.
+- **One look:** both pages are built from the home menu's design (`MenuStyle`: its tiles, font, frames; the focus
+  marked with the frame and orange corner stripes) on a common `MenuPage` (screen shape, clock, design units).
+- **Controls:** Menu gives the home menu, Radio the tuner, Media without a phone the music player; Home and Back on the
+  pages go to the home menu, Back first closes the country list. The knob works the page in front; the media keys work
+  the radio's own player while it plays or is paused. The phone gets MediaPause when the radio's player starts.
+- **Audio:** `media/AudioPlayer` (FFmpeg avformat/avcodec/swresample) on its own worker thread, into the same audio
+  engine as the phone (volume, mute and the MEDIEN meter apply). `IPcmOutput::Queued()` was added to both engines so a
+  file decoder can pace itself.
+- **Dependencies:** FFmpeg now also needs avformat and swresample (vcpkg features in `Prepare-Dependencies.ps1`, which
+  passes `--recurse` so an existing tree is rebuilt, about 17 minutes here; Linux packages `libavformat-dev`,
+  `libswresample-dev` in the docs, `BuildAndRun.sh` and the CI), Qt also Network (+ the Schannel TLS plugin, deployed by
+  `Qt.targets`).
+- **Tests:** CoreTests cover the console's new pages (Media without a phone, Radio, Home/Back from a page, Media with a
+  phone from the music player), what each tile opens, the pages' focus rules and list scrolling, reading a real
+  temporary music folder (order, sub folders, non-ASCII names, a missing folder), ICY titles (apostrophes, Latin-1) and
+  play time texts. `--test-console` now expects Radio to show the tuner.
+- **Verified on this Windows machine:** MSBuild Debug x64, no warnings from own sources (FFmpeg 9's `common.h` and
+  AASDK headers warn in every file that includes them); CoreTests and ProtocolTests pass; the real window driven by
+  posted keys, muted (the MEDIEN meter still shows the audio): three generated WAV files (48 kHz stereo, 44.1 kHz mono,
+  22.05 kHz stereo in a sub folder) play one after the other, the play/pause key pauses and resumes (checked five times
+  in a row, log lines for each), the tuner loads the German stations, plays https MP3 streams (MANGORADIO,
+  Deutschlandfunk) with their stream titles, opens the country list (the current country in the middle), Back returns to
+  the country button, stop works; at 1600x600 and 800x480. **Not verified:** real music files (MP3/FLAC/M4A with
+  tags), audible output (the tests ran muted), with a phone connected (MediaPause to the phone, the pages while
+  projected), and on Linux (not built there). In two early automated runs a posted key press seemed not to arrive; it
+  did not happen again in five runs with a key trace.
+
+## 2026-09-24: first home menu of the radio
+
+- **Look** from the user's design (`docs/design/home-menu.svg`, 1600x600): black screen, clock at the top left, a row
+  of six framed tiles (Multimedia, Radio, Telephone, Navigation, Vehicle, Settings) with diagonal stripes and a symbol.
+  The orange tile of the design is read as the focus: the focused tile's stripes and symbol are orange, the others
+  grey. `HomeMenu` draws the design's outlines and gradients itself (SVG path data parsed into `QPainterPath`s, no
+  QtSvg), scaled to the display's height; other shapes show more or less of the row (800x480 and 16:9: three tiles and
+  a bit), and the row slides to keep the focused tile in view.
+- **Where it shows:** in place of the phone's picture (`QStackedWidget`) whenever the console is on the radio's side:
+  always without a phone (so also at start and while connecting; the phone's picture comes to the front with its first
+  frame), after the second Home, after Menu and Radio. It replaces the empty "not connected" screen.
+- **Operation:** turning the knob or the left/right arrows move the focus, pushing the knob (Enter) or clicking a tile
+  opens it. Multimedia, Telephone, Navigation and Radio act like the keys Media, Tel, Nav and Radio; Vehicle and
+  Settings have no function yet and only log. While the menu is in front, knob and arrows no longer reach the phone
+  (up/down do nothing); track and play keys still do. Messages: "Home: Radio-Startmenue" and "Menue:
+  Radio-Startmenue" lost their "keine Funktion" remark, Radio now says it shows the menu.
+- **Tests:** CoreTests cover the portable layout (`ui/HomeMenuLayout.h`): tiles and their keys, widths per display,
+  scrolling on 1600x600 (as in the design: nothing scrolls up to Vehicle, Settings scrolls by 200) and 800x480, every
+  focused tile fully in view on every display, hit testing, focus limits. `--test-console` additionally checks that the
+  second Home shows the menu and Media brings back the picture, and saves `console-3-home-menu.png` (whole window).
+- **Verified on this Windows machine:** MSBuild Debug x64 without warnings from own sources, CoreTests and
+  ProtocolTests pass, `--smoke-test` window pictures at 1600x600, 800x480 and 1920x1080, and the real window driven by
+  posted key and mouse messages (right x4 lights Vehicle, right again scrolls to Settings, Enter on Settings logs, Enter
+  on Multimedia reports "nicht verbunden", a click on Radio focuses and opens it).
+  **Not verified:** with a phone connected (switching between picture and menu, knob routing while projected,
+  `--test-console`), and on Linux (not built there).
+
+## 2026-09-21: one code base for Windows and Linux
+
+Goal: the same C++ sources build and run reliably on Windows and Linux, not two projects. The survey showed that
+the code was already portable except for three operating system concerns, so the work was to put those behind
+interfaces and to make the build portable. Details: [architecture](architecture.md#platform-layer), [linux](linux.md).
+
+- **USB discovery:** `CreateUsbBackend()` returns `WindowsUsbBackend` on Windows (unchanged behaviour) and the new
+  `LibusbUsbBackend` elsewhere: libusb's cached descriptors, strings from sysfs so that a phone that cannot be opened
+  yet still shows its name and serial number. Shared device logging moved to `UsbLogging.cpp`.
+- **Driver access:** `DriverRepair.h` keeps its contract (plus `RepairOutcome::AccessDenied`); `DriverRepair.cpp` stays
+  the Windows implementation, `DriverRepairLinux.cpp` detects a missing udev rule (which only an administrator can
+  add: `scripts/install-udev-rules.sh`, `packaging/linux/70-headunit-android.rules`) and restarts the USB link on a
+  best-effort basis (libusb reset, then sysfs `authorized` for root). `AndroidUsbProbe.cpp` gives per-platform advice,
+  never sets `canRepairDriver` on Linux and detaches kernel drivers from the accessory interface.
+- **Audio:** `IAudioEngine` + `CreateAudioEngine()`; `WasapiAudioEngine` (only its header changed) on Windows,
+  `MiniaudioEngine` (vendored miniaudio 0.11.25, PulseAudio/PipeWire, ALSA, JACK chosen at run time, device opened on
+  the stream's own thread) elsewhere. New phone-independent check `HeadUnit --test-tone`.
+- **Smaller portability fixes:** `sscanf_s` -> `std::from_chars`; `getenv` -> `GetEnv` (also removes a C4996
+  warning); the log file falls back to the user's state directory when the working directory is read-only;
+  Windows-only wording in `AutoConnect` is shown only where the administrator prompt exists
+  (`AutoConnectDeps::needsAdminPrompt`, with a unit test); `.vscode/settings.json` no longer holds an absolute path of
+  an older checkout; `.gitattributes` keeps LF in shell scripts and udev rules.
+- **Build:** `CMakeLists.txt`, `cmake/Protocol.cmake` and the new `cmake/Libusb.cmake` build the same sources on both
+  systems (vcpkg tree on Windows, system packages through pkg-config/`find_package` on Linux); presets `linux-debug`,
+  `linux-release`, `linux-core-only` were added and the Windows presets are only offered on Windows. The MSBuild
+  projects list the new sources. `.github/workflows/build.yml` builds and tests Linux fully and the portable core on
+  Windows.
+
+Verified on this Windows machine: MSBuild Debug x64 with 0 errors and no warnings from own sources; `CoreTests` (with
+the new AutoConnect test) and `ProtocolTests` pass; `--scan` lists the same 15 USB devices with the same 47
+interfaces and 40 endpoints through the native backend and through `HEADUNIT_USB_BACKEND=libusb`; `--test-tone`
+through WASAPI plays all 384000 bytes without drops; `--smoke-test` opens the Qt window; the log falls back to
+`%LOCALAPPDATA%\HeadUnit` when the working directory is read-only. The CMake path on Windows (`windows-vs2022` preset,
+Visual Studio 2022 generator, built in a temporary directory) configures, builds and passes `ctest` (2 of 2). With
+`-DHEADUNIT_AUDIO_BACKEND=miniaudio` (the Linux audio engine, on Windows running on top of WASAPI) `--test-tone` also
+delivers all 384000 bytes, and `HEADUNIT_AUDIO_DEVICE` switches between output devices (four search words, three
+different devices).
+
+Verified for Linux by cross-compiling only (zig 0.16 / clang with libc++ against the same Boost, OpenSSL, protobuf,
+FFmpeg, libusb and Qt headers): every application source and test compiles for x86-64 with `-Wall -Wextra` and no
+new warnings (three sign-compare warnings in `ProtocolTests.cpp` predate this work); the libusb backend, the Linux driver
+check, the USB probe, the miniaudio engine, the logger, `AutoConnect` and `main` also compile for ARM64 and ARM32; the
+AASDK sources compile for x86-64; the UI sources also compile against the Qt 6.4.3 headers; all `#include` spellings
+match the file names in their case.
+**Not verified:** nothing has been linked or run on Linux (no Linux environment was available), so the udev rule,
+sysfs string reading, the PulseAudio/ALSA paths, the CMake Linux branches and the USB restart on Linux are unproven
+until the first run there; the checklist is in [linux.md](linux.md). The Windows behaviour with a real phone was not
+re-tested after the refactoring (no phone connected); the Windows code paths for the phone are unchanged except for
+the shared logging and the `AdviseOnOpenFailure` helper, which keeps the texts and flags.
+
 ## 2026-09-20 (last): console layout from the user's sketch
 
 - **Layout** (`CarPanel`): top row MEDIA, TEL, NAV and the projection key as a phone-with-play symbol

@@ -1,6 +1,6 @@
 #include "usb/WindowsUsbBackend.h"
 #include "usb/UsbDescriptors.h"
-#include "androidauto/AndroidDeviceDetector.h"
+#include "usb/UsbLogging.h"
 #include <windows.h>
 #include <winioctl.h>
 #include <setupapi.h>
@@ -35,12 +35,6 @@ std::string Error(const std::string& operation)
     wchar_t message[512]{};
     FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, nullptr, code, 0, message, 512, nullptr);
     return operation + ": Win32=" + std::to_string(code) + " " + Utf8(message);
-}
-std::string Hex(unsigned value, int width = 4)
-{
-    std::ostringstream stream;
-    stream << std::uppercase << std::hex << std::setfill('0') << std::setw(width) << value;
-    return stream.str();
 }
 std::vector<std::uint8_t> ReadDescriptor(HANDLE hub, ULONG port, UCHAR type, UCHAR index, USHORT language, USHORT size)
 {
@@ -96,28 +90,6 @@ void ReadDetails(HANDLE hub, ULONG port, const USB_DEVICE_DESCRIPTOR& descriptor
         } catch (const std::exception& error) { device.diagnostics.push_back("Configuration " + std::to_string(index) + ": " + error.what()); }
     }
 }
-void LogDevice(Logger& logger, const UsbDevice& device)
-{
-    logger.Write("INFO", "USB", "Device detected at " + device.location);
-    logger.Write("DEBUG", "USB", "VID=" + Hex(device.vendorId) + " PID=" + Hex(device.productId) + " activeConfiguration=" + std::to_string(device.activeConfiguration));
-    logger.Write("DEBUG", "USB", "Manufacturer=" + device.manufacturer + " Product=" + device.product + " Serial=" + device.serial);
-    for (const auto& config : device.configurations) {
-        logger.Write("DEBUG", "USB", "Configuration=" + std::to_string(config.value) + " interface descriptors=" + std::to_string(config.interfaces.size()));
-        for (const auto& interface : config.interfaces) {
-            logger.Write("DEBUG", "USB", "Interface=" + std::to_string(interface.number) + " alt=" + std::to_string(interface.alternateSetting) +
-                " class/subclass/protocol=" + Hex(interface.classCode, 2) + "/" + Hex(interface.subclassCode, 2) + "/" + Hex(interface.protocolCode, 2));
-            for (const auto& endpoint : interface.endpoints)
-                logger.Write("DEBUG", "USB", "Endpoint=0x" + Hex(endpoint.address, 2) + ((endpoint.address & 0x80) ? " IN" : " OUT") +
-                    " type=" + std::to_string(endpoint.attributes & 3) + " maxPacket=" + std::to_string(endpoint.maxPacketSize) + " interval=" + std::to_string(endpoint.interval));
-        }
-    }
-    for (const auto& diagnostic : device.diagnostics) logger.Write("WARN", "USB", diagnostic);
-    const auto detection = DetectAndroidDevice(device);
-    logger.Write("INFO", "ANDROID", detection.reason);
-    if (detection.evidence == AndroidEvidence::AccessoryMode)
-        logger.Write(detection.hasAccessoryBulkPair ? "INFO" : "WARN", "USB", detection.hasAccessoryBulkPair ?
-            "Accessory interface has bulk IN/OUT descriptors; transport access not tested" : "Accessory bulk endpoint pair unavailable in active configuration");
-}
 }
 
 UsbScanResult WindowsUsbBackend::EnumerateDevices()
@@ -172,7 +144,7 @@ UsbScanResult WindowsUsbBackend::EnumerateDevices()
             device.productId = connection->DeviceDescriptor.idProduct;
             device.activeConfiguration = connection->CurrentConfigurationValue;
             ReadDetails(hub.get(), port, connection->DeviceDescriptor, device);
-            LogDevice(m_logger, device);
+            LogUsbDevice(m_logger, device);
             result.devices.push_back(std::move(device));
         }
     }

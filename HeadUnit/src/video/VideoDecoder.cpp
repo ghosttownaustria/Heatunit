@@ -1,4 +1,5 @@
 #include "video/VideoDecoder.h"
+#include <algorithm>
 #include <stdexcept>
 #include <string>
 extern "C" {

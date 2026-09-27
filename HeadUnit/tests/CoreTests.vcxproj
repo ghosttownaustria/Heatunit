@@ -25,7 +25,9 @@
     <ClCompile Include="AoaTests.cpp" />
     <ClCompile Include="AutoConnectTests.cpp" />
     <ClCompile Include="CarControlTests.cpp" />
+    <ClCompile Include="PhoneWatchTests.cpp" />
     <ClCompile Include="..\src\androidauto\AutoConnect.cpp" />
+    <ClCompile Include="..\src\androidauto\PhoneWatch.cpp" />
     <ClCompile Include="..\src\androidauto\AoaNegotiator.cpp" />
     <ClCompile Include="..\src\androidauto\AndroidDeviceDetector.cpp" />
     <ClCompile Include="..\src\usb\UsbDescriptors.cpp" />

@@ -20,6 +20,7 @@
 #include <vector>
 #include <string>
 #include <cstddef>
+#include <cstring>
 #include <stdint.h>
 
 
