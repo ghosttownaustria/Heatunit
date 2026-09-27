@@ -121,8 +121,10 @@ Wireless Android Auto (Linux only, `src/wireless/`, built by the `headunit_wirel
 [wireless.md](wireless.md)) adds a second `ITransport` and leaves the session untouched. `WirelessStation` keeps it
 ready for as long as the watch runs (Bluetooth and the Wi-Fi each retry a failed start every minute): first Bluetooth
 (rfkill unblock, adapter power, a `DisplayYesNo` pairing agent, the Android Auto Wireless service registered with BlueZ
-on RFCOMM channel 8, then visible; `BluetoothService`, QtDBus; without a channel BlueZ opens no RFCOMM server for an
-unknown UUID), so the phone finds the head unit within a second or two. The agent answers the code comparison with a
+on the first free RFCOMM channel of `kAndroidAutoWirelessChannels`, then visible; `BluetoothService`, QtDBus; without a
+channel BlueZ opens no RFCOMM server for an unknown UUID, and on a taken one, such as 8, which Raspberry Pi OS's SIM
+Access plugin holds, it accepts the registration but publishes nothing, so each channel is checked in `Adapter1.UUIDs`),
+so the phone finds the head unit within a second or two. The agent answers the code comparison with a
 delayed D-Bus reply: `BluetoothEvents::onPairingRequest` hands the window the phone's name, the code and an answer
 function (callable from any thread; it holds only a `weak_ptr` to the pending request), and the window's `PairingPage`
 asks in front of everything else (`MainWindow::FrontPage`); BlueZ's `Cancel`, a finished pairing or the service's

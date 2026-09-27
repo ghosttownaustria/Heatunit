@@ -1,5 +1,25 @@
 # Progress
 
+## 2026-09-27 (late night): the Android Auto service was never published (RFCOMM channel 8 is BlueZ's SIM Access)
+
+Evidence from the Pi (SM-F776B): with the PMF fix the phone joins HEATUNIT-AA by hand with the stored password, so the
+hotspot and the password are fine. Yet the last 80 lines of `headunit.log` (five runs) never show "opened the Android Auto Wireless
+service": the phone connects over Bluetooth (and pairs), shows "Wird mit Android Auto verbunden", and never opens the
+service; no TCP connection on port 5288 either (`ss`). `bluetoothctl show`, taken while HeadUnit ran, lists PipeWire's
+Handsfree services and "SIM Access" (0x112d), but not the Android Auto UUID `4de17a00-...`.
+
+- **Cause:** BlueZ's SAP plugin listens on RFCOMM channel 8 (`SAP_SERVER_CHANNEL` in `profiles/sap/server.c`), and
+  Raspberry Pi OS loads it. `RegisterProfile` with Channel 8 still succeeds, but BlueZ cannot open the RFCOMM server
+  and publishes no service record, so the phone never finds the service. The dongle uses 8 on a BlueZ without SAP.
+  The "Falsches Passwort" seen earlier must have come from an older run (before the PMF fix or with other credentials);
+  none of the runs in the log excerpt sent Wi-Fi details.
+- **Fix:** `BluetoothService` registers on channels 22 to 30 (`kAndroidAutoWirelessChannels`) and keeps the first one on
+  which the UUID shows up in `Adapter1.UUIDs`; a taken channel is unregistered and the next tried. If the UUID shows up
+  on none, the first channel is kept with a warning (never worse than before). The log names the channel and whether
+  it is listed.
+- **Verified:** nothing compiled here (`src/wireless/` is Linux only). **Not verified:** the phone opening the service,
+  and everything after it (Wi-Fi details, joining, the session).
+
 ## 2026-09-27 (night): "wrong password" at the hotspot, protected management frames off
 
 Reported on the Pi with the Samsung SM-F776B after the previous entry: the pairing page works; the phone still stays at
