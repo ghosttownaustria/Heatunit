@@ -1,0 +1,682 @@
+# Progress
+
+## 2026-09-27 (late night): the Android Auto service was never published (RFCOMM channel 8 is BlueZ's SIM Access)
+
+Evidence from the Pi (SM-F776B): with the PMF fix the phone joins HEATUNIT-AA by hand with the stored password, so the
+hotspot and the password are fine. Yet the last 80 lines of `headunit.log` (five runs) never show "opened the Android Auto Wireless
+service": the phone connects over Bluetooth (and pairs), shows "Wird mit Android Auto verbunden", and never opens the
+service; no TCP connection on port 5288 either (`ss`). `bluetoothctl show`, taken while HeadUnit ran, lists PipeWire's
+Handsfree services and "SIM Access" (0x112d), but not the Android Auto UUID `4de17a00-...`.
+
+- **Cause:** BlueZ's SAP plugin listens on RFCOMM channel 8 (`SAP_SERVER_CHANNEL` in `profiles/sap/server.c`), and
+  Raspberry Pi OS loads it. `RegisterProfile` with Channel 8 still succeeds, but BlueZ cannot open the RFCOMM server
+  and publishes no service record, so the phone never finds the service. The dongle uses 8 on a BlueZ without SAP.
+  The "Falsches Passwort" seen earlier must have come from an older run (before the PMF fix or with other credentials);
+  none of the runs in the log excerpt sent Wi-Fi details.
+- **Fix:** `BluetoothService` registers on channels 22 to 30 (`kAndroidAutoWirelessChannels`) and keeps the first one on
+  which the UUID shows up in `Adapter1.UUIDs`; a taken channel is unregistered and the next tried. If the UUID shows up
+  on none, the first channel is kept with a warning (never worse than before). The log names the channel and whether
+  it is listed.
+- **Verified:** nothing compiled here (`src/wireless/` is Linux only). **Not verified:** the phone opening the service,
+  and everything after it (Wi-Fi details, joining, the session).
+
+## 2026-09-27 (night): "wrong password" at the hotspot, protected management frames off
+
+Reported on the Pi with the Samsung SM-F776B after the previous entry: the pairing page works; the phone still stays at
+"Wird mit Android Auto verbunden", and its Wi-Fi list shows HEATUNIT-AA (5 GHz, now visible) with "Falsches Passwort".
+So the phone got the Wi-Fi details over Bluetooth and tried to join, but the WPA2 handshake failed. The password sent is
+the hotspot's own (same string from `LoadWirelessSettings`, field 2 of `WifiInfoResponse` as in the working dongle).
+
+- **Cause (known for Raspberry Pi hotspots made by NetworkManager):** NetworkManager offers protected management frames
+  (PMF, 802.11w) by default; the Pi's brcmfmac chip does not handle them as an access point, and phones that use them
+  fail the handshake with "incorrect password". The documented fix is `wifi-sec.pmf disable`
+  ([Pi My Life Up](https://pimylifeup.com/raspberry-pi-wireless-access-point/),
+  [Raspberry Pi forum](https://forums.raspberrypi.com/viewtopic.php?t=358481)). `Hotspot::Start` now adds it.
+- **Readable failures:** a negative status from the phone now gets advice in the window (`WifiFailureAdvice`): wrong
+  password (forget HEATUNIT-AA on the phone, connect again), Wi-Fi off, channel not usable, network not found.
+  `WirelessHandshake::FailureStatus` keeps the code. WirelessTests checks the wrong-password advice.
+- **Verified:** nothing here compiles on Windows (`src/wireless/` only); CI or the Pi build will show errors.
+  **Not verified:** that PMF is the cause (inferred from the symptom and the known Pi issue, no log); the phone joining.
+
+## 2026-09-27 (later): pairing question in the menu, visible Wi-Fi, Android Auto key goes wireless
+
+Reported on the Pi with the Samsung SM-F776B after the previous entry: pairing now works (the phone asks with the
+six-digit code), but then the phone stays at "Wird mit Android Auto verbunden", and the window said "Kein Handy am USB
+gefunden ..." (the Android Auto key had been pressed; it only looked at the cable). No log was available.
+
+- **Visible Wi-Fi:** compared with [WirelessAndroidAutoDongle](https://github.com/nisargjhaveri/WirelessAndroidAutoDongle),
+  which works with real phones on a Raspberry Pi 4: same RFCOMM channel 8, same message sequence (start request, info
+  request, info response with WPA2 8 and DYNAMIC), same 5 GHz channel 36, but its hostapd broadcasts the network name.
+  Android Auto looks for the network it was told about in its Wi-Fi scan, where a hidden network does not appear by
+  name, so the hidden hotspot is the likely reason the phone never got further. The hotspot is now visible by default;
+  `HEADUNIT_WIFI_HIDDEN=1` hides it. The automatic switch to visible after a failed join (previous entry) is gone. The
+  same project's BlueZ configuration has `JustWorksRepairing = always`, which confirms the previous entry's diagnosis.
+- **Pairing question in the menu** (asked for by the user): new `PairingPage` with the phone's name, the code large in
+  orange, Pair / Cancel; knob, arrows, Back and clicks work it; it goes in front of everything while it asks and refuses
+  after a minute without an answer. The agent now answers `RequestConfirmation` with a delayed D-Bus reply once the
+  person has chosen (`BluetoothEvents`, `PairingRequest::answer`, callable from the GUI thread); BlueZ's `Cancel`, the
+  finished pairing and the service's stop take the question away. `--test-bluetooth` still confirms by itself.
+- **Android Auto key without a phone on the cable** now asks the paired phones to connect wirelessly
+  (`PhoneWatchDeps::requestWireless` -> `WirelessStation::ReconnectPhones`): a connected phone is disconnected and
+  connected again, which starts Android Auto on it anew. The window says so instead of asking for a data cable.
+- **No reconnect in the middle of a start:** the automatic reconnect once the hotspot is up now only takes down phones
+  that were connected before the Bluetooth service existed; before, a phone that had just paired (and was starting
+  Android Auto) was disconnected too when the hotspot came up a few seconds later.
+- **Window steps** for the Bluetooth link: "... ist verbunden. Warte, bis Android Auto am Handy den Dienst oeffnet",
+  so the window shows whether the phone got as far as opening the Android Auto service.
+- **Tests:** CoreTests cover the key with and without wireless and with a phone on the cable (PhoneWatch).
+- **Verified on this Windows machine:** CoreTests pass (CMake core-only); MSBuild Debug x64 builds the app with no
+  warnings from own sources; `HEADUNIT_TEST_PAIRING=1 HeadUnit --smoke-test` pictures of the pairing page at 1600x600
+  and 800x480 (layout only; knob and click not driven). **Not verified:** everything in
+  `src/wireless/` (Linux only, not compiled here); on the phone: the visible Wi-Fi getting Android Auto to a session,
+  the pairing page with a real pairing, the key's reconnect.
+
+## 2026-09-27: wireless pairing like a car, Bluetooth at once
+
+Reported on the Pi with the Samsung SM-F776B: the hotspot runs (hidden), HEATUNIT appeared only after a long wait, and
+pairing from the phone ended with "Keine Kopplung durchgefuehrt. Die Einstellungen fuer dieses Geraet ueberpruefen".
+
+- **Pairing:** the agent registered as `NoInputNoOutput`, i.e. Just Works pairing. BlueZ refuses a Just Works pairing
+  started by a device it still has a bond with (`JustWorksRepairing = never`, the default in `main.conf`); the phone
+  had been paired before and then unpaired on the phone only, so every new attempt was refused. The agent is now
+  `DisplayYesNo` (numeric comparison, as car head units do): the phone shows a six-digit code, the head unit confirms
+  it by itself and shows it in the window ("Bluetooth-Kopplung mit ...: am Handy den Code ... bestaetigen"), and the
+  repairing rule does not apply to a comparison. A finished pairing is shown too.
+- **Always answered:** BlueZ's calls (pairing, connections) used to be handled only while the watch thread waited for
+  a wireless phone, not during a session, a USB attempt or the hotspot start. `BluetoothService` now runs on a `QThread`
+  of its own with its own event loop; the phone's RFCOMM socket is handed to the watch through a condition variable.
+  `Pump` is gone.
+- **Visible at once:** Bluetooth starts first (about a second), the hotspot starts at the same time in the background
+  (`std::async`; nmcli takes seconds, up to 45). Adapter visibility is switched on only after the agent and the Android
+  Auto service are registered. The paired phones are asked to connect once the hotspot is up; a phone that opens the
+  service earlier waits in `Serve` for the hotspot (up to 60 s). Bluetooth and Wi-Fi retry a failed start separately.
+- **Hidden Wi-Fi fallback:** when a phone got the Wi-Fi details and did not join (timeout, or a negative connection
+  status; `EstablishWirelessLink` now reports `hasSentInfo` in that case too), the station broadcasts the network's name
+  from then on (`wireless/wifiVisible` in `QSettings`) and restarts the hotspot. `HEADUNIT_WIFI_HIDDEN` (0 or 1) fixes
+  the choice.
+- **Tests:** `WirelessTests` checks that a phone reporting it cannot join still counts as having had the details.
+- **Verified:** nothing compiled or run: `src/wireless/*` only builds on Linux and this Windows machine has no Linux
+  toolchain; the code was reviewed by reading (CI or the Pi build will show compile errors). **Not verified:** pairing
+  with the phone, the pairing code in the window, Bluetooth answering during a session, the hotspot fallback, and
+  whether Android Auto joins a hidden network at all. The cause of the pairing failure is inferred from BlueZ's rules,
+  not seen in a log.
+
+## 2026-09-24 (night): home menu navigation, settings, one sound at a time
+
+From the user's list and the design `AA.svg` (now `docs/design/home-menu.svg`):
+
+- **Bar at the bottom** (position in the menu): the whole row dark, the part in view light, as in the design.
+- **Edge arrows:** where more tiles follow, the tiles fade into a black strip with a line and an orange arrow (from the
+  design); a click on it moves the focus that way.
+- **Focused tile in the middle**, except near the ends of the row (then the row stops at its end).
+- **Moving tiles:** left/right on the home menu move the focused tile along the row; turning moves the focus. The
+  order is remembered (`QSettings` `home/tiles`).
+- **Settings tile** opens a page with every tile and a tick box: push shows/hides (Settings cannot be hidden),
+  up/down move the tile in the order. New tile **Android Auto** (symbol from the design): connects, or brings the
+  phone to the front.
+- **One sound at a time:** before, the radio kept playing when Android Auto connected and the phone started its
+  music. Now the source started last wins: the phone's media output is watched, and when the phone starts playing
+  after the radio's player, the music pauses / the radio stops; starting or resuming the radio's player pauses the
+  phone as before.
+- **Turning and arrows are separate:** on the player pages turning moves within the list or the row of buttons, up/down
+  jump between list, controls and top buttons (the up arrow in the station list goes straight to the buttons), left/right
+  skip to the previous/next title or station. Keyboard: comma/period turn the knob.
+- **Tests:** CoreTests cover the new layout (centring on every display and tile count, focused tile never under an
+  edge, edges, the bar against the design's numbers, hits), the tile setup (show/hide, Settings fixed, moving on the
+  menu and in the settings, text form and repair of damaged text), the audio rule (starts after gaps, who takes over,
+  the watched output), the new page focus rules and the settings page in the console.
+- **Verified on this Windows machine:** build without warnings from own sources, CoreTests pass; the real window at
+  1600x600: arrows and bar, the focused tile centred (also with three quick turns), Telephone moved right and back,
+  the settings page hiding Vehicle and moving it, the menu without it, restored afterwards; on the tuner the up arrow
+  jumps from a station to the play button and left plays the previous station (an AAC stream). **Not verified:** the
+  phone taking over the sound (needs a phone; covered by unit tests only). In one run a screenshot showed the focused
+  tile not yet centred; two repeats did not show it again.
+
+## 2026-09-24 (later): music folder and internet radio
+
+- **Multimedia page:** plays the music folder (`HeadUnit` in the user's music folder, or `HEADUNIT_MUSIC_DIR`; created
+  at start), sub folders included, in natural order; title and artist from the tags, progress, previous/play-pause/next,
+  the list of titles, "Open folder" and "Rescan"; the next title follows at the end. Formats: whatever FFmpeg decodes
+  (MP3, FLAC, M4A/AAC, OGG, OPUS, WAV, WMA, AIFF are recognised as music files).
+- **Radio page:** internet radio from radio-browser.info, by country (list of all countries, default from the system's
+  region, remembered with the last station), the 500 most listened stations in alphabetical order, "now playing" from the stream's ICY title,
+  LIVE mark, previous/next station, play/stop. The user asked for DAB+: a real DAB+ broadcast needs a tuner (there is
+  no DAB+ web API that delivers the broadcast), so the stations' internet streams are played; a tuner such as an
+  RTL-SDR stick with `welle-cli` could be added later as another source of stream URLs.
+- **One look:** both pages are built from the home menu's design (`MenuStyle`: its tiles, font, frames; the focus
+  marked with the frame and orange corner stripes) on a common `MenuPage` (screen shape, clock, design units).
+- **Controls:** Menu gives the home menu, Radio the tuner, Media without a phone the music player; Home and Back on the
+  pages go to the home menu, Back first closes the country list. The knob works the page in front; the media keys work
+  the radio's own player while it plays or is paused. The phone gets MediaPause when the radio's player starts.
+- **Audio:** `media/AudioPlayer` (FFmpeg avformat/avcodec/swresample) on its own worker thread, into the same audio
+  engine as the phone (volume, mute and the MEDIEN meter apply). `IPcmOutput::Queued()` was added to both engines so a
+  file decoder can pace itself.
+- **Dependencies:** FFmpeg now also needs avformat and swresample (vcpkg features in `Prepare-Dependencies.ps1`, which
+  passes `--recurse` so an existing tree is rebuilt, about 17 minutes here; Linux packages `libavformat-dev`,
+  `libswresample-dev` in the docs, `BuildAndRun.sh` and the CI), Qt also Network (+ the Schannel TLS plugin, deployed by
+  `Qt.targets`).
+- **Tests:** CoreTests cover the console's new pages (Media without a phone, Radio, Home/Back from a page, Media with a
+  phone from the music player), what each tile opens, the pages' focus rules and list scrolling, reading a real
+  temporary music folder (order, sub folders, non-ASCII names, a missing folder), ICY titles (apostrophes, Latin-1) and
+  play time texts. `--test-console` now expects Radio to show the tuner.
+- **Verified on this Windows machine:** MSBuild Debug x64, no warnings from own sources (FFmpeg 9's `common.h` and
+  AASDK headers warn in every file that includes them); CoreTests and ProtocolTests pass; the real window driven by
+  posted keys, muted (the MEDIEN meter still shows the audio): three generated WAV files (48 kHz stereo, 44.1 kHz mono,
+  22.05 kHz stereo in a sub folder) play one after the other, the play/pause key pauses and resumes (checked five times
+  in a row, log lines for each), the tuner loads the German stations, plays https MP3 streams (MANGORADIO,
+  Deutschlandfunk) with their stream titles, opens the country list (the current country in the middle), Back returns to
+  the country button, stop works; at 1600x600 and 800x480. **Not verified:** real music files (MP3/FLAC/M4A with
+  tags), audible output (the tests ran muted), with a phone connected (MediaPause to the phone, the pages while
+  projected), and on Linux (not built there). In two early automated runs a posted key press seemed not to arrive; it
+  did not happen again in five runs with a key trace.
+
+## 2026-09-24: first home menu of the radio
+
+- **Look** from the user's design (`docs/design/home-menu.svg`, 1600x600): black screen, clock at the top left, a row
+  of six framed tiles (Multimedia, Radio, Telephone, Navigation, Vehicle, Settings) with diagonal stripes and a symbol.
+  The orange tile of the design is read as the focus: the focused tile's stripes and symbol are orange, the others
+  grey. `HomeMenu` draws the design's outlines and gradients itself (SVG path data parsed into `QPainterPath`s, no
+  QtSvg), scaled to the display's height; other shapes show more or less of the row (800x480 and 16:9: three tiles and
+  a bit), and the row slides to keep the focused tile in view.
+- **Where it shows:** in place of the phone's picture (`QStackedWidget`) whenever the console is on the radio's side:
+  always without a phone (so also at start and while connecting; the phone's picture comes to the front with its first
+  frame), after the second Home, after Menu and Radio. It replaces the empty "not connected" screen.
+- **Operation:** turning the knob or the left/right arrows move the focus, pushing the knob (Enter) or clicking a tile
+  opens it. Multimedia, Telephone, Navigation and Radio act like the keys Media, Tel, Nav and Radio; Vehicle and
+  Settings have no function yet and only log. While the menu is in front, knob and arrows no longer reach the phone
+  (up/down do nothing); track and play keys still do. Messages: "Home: Radio-Startmenue" and "Menue:
+  Radio-Startmenue" lost their "keine Funktion" remark, Radio now says it shows the menu.
+- **Tests:** CoreTests cover the portable layout (`ui/HomeMenuLayout.h`): tiles and their keys, widths per display,
+  scrolling on 1600x600 (as in the design: nothing scrolls up to Vehicle, Settings scrolls by 200) and 800x480, every
+  focused tile fully in view on every display, hit testing, focus limits. `--test-console` additionally checks that the
+  second Home shows the menu and Media brings back the picture, and saves `console-3-home-menu.png` (whole window).
+- **Verified on this Windows machine:** MSBuild Debug x64 without warnings from own sources, CoreTests and
+  ProtocolTests pass, `--smoke-test` window pictures at 1600x600, 800x480 and 1920x1080, and the real window driven by
+  posted key and mouse messages (right x4 lights Vehicle, right again scrolls to Settings, Enter on Settings logs, Enter
+  on Multimedia reports "nicht verbunden", a click on Radio focuses and opens it).
+  **Not verified:** with a phone connected (switching between picture and menu, knob routing while projected,
+  `--test-console`), and on Linux (not built there).
+
+## 2026-09-21: one code base for Windows and Linux
+
+Goal: the same C++ sources build and run reliably on Windows and Linux, not two projects. The survey showed that
+the code was already portable except for three operating system concerns, so the work was to put those behind
+interfaces and to make the build portable. Details: [architecture](architecture.md#platform-layer), [linux](linux.md).
+
+- **USB discovery:** `CreateUsbBackend()` returns `WindowsUsbBackend` on Windows (unchanged behaviour) and the new
+  `LibusbUsbBackend` elsewhere: libusb's cached descriptors, strings from sysfs so that a phone that cannot be opened
+  yet still shows its name and serial number. Shared device logging moved to `UsbLogging.cpp`.
+- **Driver access:** `DriverRepair.h` keeps its contract (plus `RepairOutcome::AccessDenied`); `DriverRepair.cpp` stays
+  the Windows implementation, `DriverRepairLinux.cpp` detects a missing udev rule (which only an administrator can
+  add: `scripts/install-udev-rules.sh`, `packaging/linux/70-headunit-android.rules`) and restarts the USB link on a
+  best-effort basis (libusb reset, then sysfs `authorized` for root). `AndroidUsbProbe.cpp` gives per-platform advice,
+  never sets `canRepairDriver` on Linux and detaches kernel drivers from the accessory interface.
+- **Audio:** `IAudioEngine` + `CreateAudioEngine()`; `WasapiAudioEngine` (only its header changed) on Windows,
+  `MiniaudioEngine` (vendored miniaudio 0.11.25, PulseAudio/PipeWire, ALSA, JACK chosen at run time, device opened on
+  the stream's own thread) elsewhere. New phone-independent check `HeadUnit --test-tone`.
+- **Smaller portability fixes:** `sscanf_s` -> `std::from_chars`; `getenv` -> `GetEnv` (also removes a C4996
+  warning); the log file falls back to the user's state directory when the working directory is read-only;
+  Windows-only wording in `AutoConnect` is shown only where the administrator prompt exists
+  (`AutoConnectDeps::needsAdminPrompt`, with a unit test); `.vscode/settings.json` no longer holds an absolute path of
+  an older checkout; `.gitattributes` keeps LF in shell scripts and udev rules.
+- **Build:** `CMakeLists.txt`, `cmake/Protocol.cmake` and the new `cmake/Libusb.cmake` build the same sources on both
+  systems (vcpkg tree on Windows, system packages through pkg-config/`find_package` on Linux); presets `linux-debug`,
+  `linux-release`, `linux-core-only` were added and the Windows presets are only offered on Windows. The MSBuild
+  projects list the new sources. `.github/workflows/build.yml` builds and tests Linux fully and the portable core on
+  Windows.
+
+Verified on this Windows machine: MSBuild Debug x64 with 0 errors and no warnings from own sources; `CoreTests` (with
+the new AutoConnect test) and `ProtocolTests` pass; `--scan` lists the same 15 USB devices with the same 47
+interfaces and 40 endpoints through the native backend and through `HEADUNIT_USB_BACKEND=libusb`; `--test-tone`
+through WASAPI plays all 384000 bytes without drops; `--smoke-test` opens the Qt window; the log falls back to
+`%LOCALAPPDATA%\HeadUnit` when the working directory is read-only. The CMake path on Windows (`windows-vs2022` preset,
+Visual Studio 2022 generator, built in a temporary directory) configures, builds and passes `ctest` (2 of 2). With
+`-DHEADUNIT_AUDIO_BACKEND=miniaudio` (the Linux audio engine, on Windows running on top of WASAPI) `--test-tone` also
+delivers all 384000 bytes, and `HEADUNIT_AUDIO_DEVICE` switches between output devices (four search words, three
+different devices).
+
+Verified for Linux by cross-compiling only (zig 0.16 / clang with libc++ against the same Boost, OpenSSL, protobuf,
+FFmpeg, libusb and Qt headers): every application source and test compiles for x86-64 with `-Wall -Wextra` and no
+new warnings (three sign-compare warnings in `ProtocolTests.cpp` predate this work); the libusb backend, the Linux driver
+check, the USB probe, the miniaudio engine, the logger, `AutoConnect` and `main` also compile for ARM64 and ARM32; the
+AASDK sources compile for x86-64; the UI sources also compile against the Qt 6.4.3 headers; all `#include` spellings
+match the file names in their case.
+**Not verified:** nothing has been linked or run on Linux (no Linux environment was available), so the udev rule,
+sysfs string reading, the PulseAudio/ALSA paths, the CMake Linux branches and the USB restart on Linux are unproven
+until the first run there; the checklist is in [linux.md](linux.md). The Windows behaviour with a real phone was not
+re-tested after the refactoring (no phone connected); the Windows code paths for the phone are unchanged except for
+the shared logging and the `AdviseOnOpenFailure` helper, which keeps the texts and flags.
+
+## 2026-09-20 (last): console layout from the user's sketch
+
+- **Layout** (`CarPanel`): top row MEDIA, TEL, NAV and the projection key as a phone-with-play symbol
+  (tooltip "CarPlay / Android Auto", the old wide text button is gone), HOME at the left and BACK at the right
+  below it, then a large round controller (260 px). Everything else (MENU, OPTION, RADIO, MAP, track skip and
+  play/pause, Leiser/Stumm/Lauter) is in a separate section "WEITERE TASTEN" underneath, followed by the audio
+  display. The panel needs about 684 px of height.
+- **The round controller now carries the four arrows** (`RotaryKnob`, zones in the portable `ui/KnobZones.h`):
+  an arrow drawn at each side of the disc, a click without dragging on one of them (the rim outside half the
+  radius, four 90 degree sectors) sends that direction key, a click on the inner circle presses the controller
+  (DPAD_CENTER), dragging around it or the mouse wheel still turns it (detents of 15 degrees, no turning right
+  at the middle). A click that ends in another zone than it began is dropped; the zone under the mouse lights up
+  and per-zone tooltips explain the places. The separate arrow buttons are gone. Arrows now send down and up
+  together when the click ends (before: down on press, up on release), so a mouse cannot hold a direction key;
+  the keyboard arrows still repeat.
+- **Checked** with a scratch program that drives the real `CarPanel` with synthetic mouse and wheel events
+  (not part of the project): every arrow, the middle, the outside, drag turns in both directions, wobble,
+  cancelled clicks, the wheel, all buttons and their console/media keys, and the position of the sections; plus
+  screenshots of the normal, hovered and pressed states. CoreTests cover the zones.
+
+## 2026-09-20 (even later): 1600x600 display
+
+- **New size 1600 x 600 (Ultrawide)** in the list (800x480, 1280x720, 1600x600, 1920x1080). Android Auto has no
+  1600x600 resolution, so the display is fitted into a fixed one with the video configuration's margins:
+  `VideoLayoutOf` picks the smallest fixed resolution that holds the display (1920x1080) and fits the display's
+  shape inside it (height margin 360, width margin 0, sizes kept even). Density follows the shown height (720
+  -> 240 dpi, so the phone's layout height stays 480 units).
+- **Measured on the Samsung SM-F776B** (raw frames saved by `--test-keys`, with a temporary switch that has
+  been removed again): with codec 1920x1080 and height margin 360 the phone still sends the full 1920x1080
+  frame, draws its interface only in the centred 1920x720 strip (y 180..899) and leaves the rest black. Touch
+  coordinates count in pixels of that strip: a tap at strip position (60,347) hit the Spotify icon whatever
+  touchscreen size was advertised, while the same icon addressed with frame coordinates (60,527) hit the
+  microphone icon (and opened the Google Assistant on the phone for a moment; no microphone is connected).
+  So the app advertises the strip as the touchscreen, crops each frame to the strip (`VideoWidget::SetFrame`,
+  so the picture, the touch mapping, the screenshots and the phone-screen reading all see the strip) and sends
+  strip coordinates. The window scales the 1920x720 strip to whatever room the picture has (8:3).
+- **Wide layout:** on this display the phone moves its navigation bar to a rail at the left and shows the dashboard
+  as a big map card next to the media card. The button at the bottom left of the rail is at the same place as
+  on 720 px high displays (63,657), shows nine dots on the dashboard and the framed symbol elsewhere, so the
+  Home logic needed no change. The Nav key does not open the map as an app there (the map already is the big
+  card), so `--test-console` now starts with Media (opens an app in every layout) and only reads, not judges,
+  the picture after Nav at the end.
+- **Verified on the phone at 1600x600:** frames 1920x1080 with the strip cropped correctly, `--test-console`
+  (Home read "other" -> tapped -> read "dashboard", second Home only logged the radio menu, Media -> Home
+  -> dashboard, Radio, Nav), `--test-input` (rotary, keys and a touch tap in the middle of the strip reach the
+  phone).
+- **Tests:** CoreTests cover the layout of every offered size and of other shapes (a taller one such as
+  1024x600 gets a width margin, sizes that no frame holds and non-positive sizes get none), touch mapping onto
+  the 1920x720 strip, the picture reading and the Home tap for 1600x600; ProtocolTests check the video
+  configuration built for it (1920x1080, height margin 360, 240 dpi). A test found that a size of 0x0 was given
+  a frame; fixed.
+
+## 2026-09-20 (later): selectable display size
+
+- **Feature:** while nothing is connected, a combo box next to the connect button offers 800x480, 1280x720
+  (HD) and 1920x1080 (Full HD). The size is announced to the phone once, in the service discovery: the video
+  resolution constant, the touchscreen size and a screen density that grows with the height
+  (`160 * height / 480`, so 240 dpi at 720p and 360 dpi at 1080p), which keeps the phone's interface the same
+  size in layout units at every resolution. During a connection the combo box is disabled. The choice is
+  remembered per Windows user (`HKCU\Software\HeadUnit\HeadUnit`, value `display`); `--display WxH` overrides it
+  for one run without saving, and all scripted phone tests ignore the remembered value (default 800x480 unless
+  `--display` is given). The empty picture area shows a screen of the chosen shape and "Display W x H".
+  Android Auto only has fixed resolutions; other shapes need margins in the video configuration (added
+  afterwards for 1600x600, see the section above).
+- **Code:** `DisplayConfig.h` (portable list, density, text/parse), `DisplayService.h` (video configuration for
+  the service discovery), `MapToTouch` takes the display, `DetectPhoneScreen` and the Home tap position now scale
+  with the display height (`LayoutScale`, anchored at the left/bottom edge, so wide 16:9 pictures work),
+  `ConsoleController::SetDisplay`. The old `kTouchWidth/kTouchHeight` constants are gone.
+- **Verified on the Samsung SM-F776B:** `--test-console` at 1280x720 (frames arrive as 1280x720; the dashboard
+  button sits at 63,657 as computed; Home reads "other" then "dashboard", second Home only logs the radio menu),
+  `--test-console` at 1920x1080 (frames 1920x1080, same Home sequence), `--test-input` at 1280x720 (rotary,
+  keys and a touch tap in the middle of the picture reach the phone), and `--test-projection` / `--test-audio` at
+  the default size. Picking a size in the real window was driven through the window's own popup: the value
+  is written to the registry and loaded again at the next start.
+- **Also fixed:** a phone whose USB link stopped answering (accessory device `18D1:2D00` idle for a long time;
+  Windows: "device does not work", `LIBUSB_ERROR_TIMEOUT` when reading the serial number) ended the one-button
+  flow with an error. That failure now counts like a silent Android Auto: the connection ladder restarts the
+  phone's USB link through the elevated helper and tries again (which recovered the phone during the tests above).
+- **Tests:** CoreTests cover the size list, parsing (valid and invalid texts), density, touch mapping for the
+  other sizes, the picture reading and Home tap position at all three sizes; ProtocolTests cover the video
+  configuration built for each size (resolution constant, density, frame rate, margins).
+
+## 2026-09-20: BMW-style hard keys and a two-step Home
+
+- **Keys:** the console follows a BMW iDrive multimedia controller: Media, Radio, Menu, Tel, Nav, Back,
+  Option, plus Map, CarPlay/Android Auto, Home, volume up/down, mute, skip forward/back (and play/pause),
+  around the rotary knob with its four nudge keys. Pressing a key goes through `ConsoleController`
+  (portable, header-only, in CoreTests): Media, Tel, Nav and Map send the phone's Media, Phone and
+  Navigation car keys (Map and Nav both open the phone's navigation app, there is only one key; Nav and
+  Media verified on the phone), Option sends `KEYCODE_MENU` (its effect on the phone was not verified),
+  Back sends `KEYCODE_BACK`. Radio and Menu
+  have no function without an operating system behind them and only write a line to the window log, as
+  does the radio side of Home. The CarPlay/Android Auto key starts the connection when nothing is
+  connected. Keyboard: Pos1 Home, Esc/Backspace Back, F1 Menu, F2 Option, F3 Media, F4 Radio, F5 Tel,
+  F6 Nav, F7 Map, F8 CarPlay/Android Auto.
+- **Home is a two-step key while a phone is projected:** the first press brings the phone to its
+  dashboard (map, media and phone cards), a second press while the phone shows that dashboard goes to the
+  radio's home menu (log line only), a third press goes back to the phone's dashboard. Without a
+  projection Home only logs the radio menu.
+- **`KEYCODE_HOME` cannot be used for the dashboard:** on this phone it always opens Android Auto's
+  app launcher (the 3x3 grid), and `KEYCODE_APP_SWITCH` and Back do nothing useful. The bottom-left
+  button of the navigation bar (touch position 42,438) toggles: it shows a framed split-view symbol
+  everywhere except on the dashboard, where tapping it goes to the dashboard, and nine dots on the
+  dashboard itself, where tapping it opens the launcher. So Home **reads the phone's picture**
+  (`DetectPhoneScreen`: shape of that symbol, nine small separate dots against one large connected
+  frame, independent of colours and picture size; a focus ring around the button is ignored) and taps
+  the button only when the phone is not on the dashboard. When the picture cannot be read (a
+  transition), it sends the phone's home key and looks at the picture again after one second.
+- **Verified on the Samsung SM-F776B:** `--test-console` (Nav opens Maps, Home reads "other" and returns
+  to the dashboard with Maps and Spotify cards, the second Home reads "dashboard" and only logs the radio
+  menu and leaves the phone alone, Media opens Spotify, Home again reads "other" and returns to the
+  dashboard, Radio logs); `--test-input`, `--test-audio` and `--test-projection` still pass.
+  `--test-keys` with `HEADUNIT_TEST_KEYS` (steps: a number is a car key code, `t:X:Y` a tap, `c:name` a
+  console key) is the diagnostic used to find out what the phone does with a key.
+- **Tests:** CoreTests now also cover the picture reading (synthetic frames: dots, frame, focus ring
+  with and without symbol, black, light, stray blobs, two picture sizes) and the Home logic for all
+  three picture readings.
+
+## 2026-09-19 (later still): touch, rotary knob and keys, audio playback
+
+- **Input:** mouse on the picture becomes touch (`InputReport.touch_event`, coordinates mapped from the
+  letterboxed picture into the 800x480 touch space, moves paced at ~125 Hz). A simulated centre console
+  sends the rotary controller (`RelativeEvent`, `KEYCODE_ROTARY_CONTROLLER`, one detent per 15 degrees),
+  the four nudge keys, Enter, Home, Back, Media, Navigation, Phone and track/play keys. Keyboard shortcuts
+  mirror them. The service description now lists these key codes; the phone bound all 20 of them.
+  Events cross from the GUI thread to the protocol thread through `ProjectionInput` (token based
+  attach/detach, so a finished session can never detach its successor).
+- **Audio:** the three audio sinks (media 48 kHz stereo, guidance and system 16 kHz mono) play through
+  WASAPI shared mode with a per-stream ring buffer (500 ms, oldest audio dropped when late, 60 ms
+  prime), AUTOCONVERTPCM for any output format, master volume in 30 steps (squared gain), mute, and
+  level meters for the on-screen audio display. Qt Multimedia is not part of the local Qt install, so
+  no extra dependency was added.
+- **Verified on the Samsung SM-F776B** (Debug and Release): `--test-input` showed the blue rotary
+  focus ring after rotary/direction keys and the map opening after a touch tap in the middle
+  (screenshots via `HEADUNIT_TEST_SHOTS`); `--test-audio` played Spotify at volume 5/30 for three
+  seconds: 581,632 bytes rendered, 0 bytes dropped, 0 underruns, and Windows' own audio-session meter
+  for `HeadUnit.exe` read a peak of 0.0148 (matches the gain). The full stale-Android-Auto recovery
+  (`TLS record decode` -> USB restart, attempt 2 with a longer off time -> new session) ran end to end
+  once during these tests.
+- **Not done:** microphone capture (voice commands, calls), audio focus ducking, night-mode switch.
+- **Tests:** CoreTests cover the touch mapping, input bus, ring buffer, PCM peak/gain and audio state;
+  ProtocolTests cover the protocol messages for touch, keys and rotary and the session's attach/detach
+  of the input bus.
+
+## 2026-09-19 (later): why the one-button flow never got past "connected to the car"
+
+- **Root cause:** after AOA START the app looked for the accessory device "on the same USB port" as
+  the phone. The phone's port is not stable: in file-transfer mode it links at SuperSpeed
+  (`root_hub30 ... port-2`, bulk `maxPacket=1024`), in accessory mode it often links at USB 2.0 and
+  shows up on another root-hub port (`port-6`) or even another root hub. The phone had switched
+  ("Mit dem Fahrzeug verbunden"), but the app never saw it, waited 30 s, and its recovery steps (USB
+  restart, repeated AOA START) made it worse. The evidence is in the old Release log (accessory on
+  `2bce96aa/port-6` and `2c35141/port-8` while the phone sat on `2bce96aa/port-2`).
+- **Fix:** the accessory device is found by the phone's **serial number** (read through libusb from
+  every accessory-mode candidate; the port is only logged). Verified on hardware right after the
+  fix: normal mode on port 2 -> accessory on bus 1 port 6 found after 912 ms -> video.
+- **Retry ladder is now split by cause:** the phone did not switch to accessory mode (locked phone /
+  prompt) -> plain retries (max. 2), no USB restart and no admin prompt; accessory mode up but
+  Android Auto silent (no version answer, or `TLS record decode` from a stale Android Auto) -> USB
+  restart of the phone with driver check (max. 2). Version requests are repeated every 2 s (max. 10).
+- **USB restart helper:** disabling the accessory device node for 1.5 s did not always make the
+  phone leave accessory mode; 3 s did (verified repeatedly). The helper now waits 3 s, checks what
+  the phone comes back as and retries with longer off times (3 / 5.5 / 8 s).
+- **Hardware results:** 6 consecutive `--test-projection` runs (in-place restart) and 3 runs after a
+  helper restart (normal mode -> accessory, incl. the port-6 case) all reached real video (exit 0),
+  Debug and Release; also after killing the app mid-session. Not reproduced on demand: the "stale
+  Android Auto" (`TLS record decode` right after an in-place restart) seen once; the ladder handles
+  it by design but it was not exercised end to end.
+
+## 2026-09-19: one button, automatic recovery
+
+- The window has one button. `RunAutoConnect` (`src/androidauto/AutoConnect.cpp`, portable and
+  unit-tested with 11 scripted scenarios in `tests/AutoConnectTests.cpp`) finds the phone, repairs
+  the USB driver when Windows reverted it, starts Android Auto and, when the phone never answers
+  the version request (20 s, previously up to 90 s), restarts the phone's USB connection and
+  retries (max. 2 recoveries, max. 3 driver repairs). Progress is shown step by step.
+- Failure seen on hardware: restarting Android Auto in place (AOA START on a phone already in
+  accessory mode) worked repeatedly, then failed five times in a row (`USB write deadline after
+  0 of 10 bytes`, phone not reading the accessory endpoint). Likely a phone-side state (phone
+  locked or Android Auto not launching); not confirmed.
+- Recovery, verified on hardware in a scratch program: disabling and re-enabling the accessory
+  device node (elevated) makes the phone re-enumerate and leave accessory mode, i.e. it comes back
+  as `04E8:6860` like after a cable replug. `libusb_reset_device` and `IOCTL_USB_HUB_CYCLE_PORT`
+  do not do this on Windows (no re-enumeration / Win32 31 on the xHCI root hub).
+  `HeadUnit.exe --recover-phone` does restart + driver repair in one elevated process
+  (one UAC prompt).
+- After such a restart the phone shows a single MTP interface (not MTP + modem). The composite
+  driver is not offered as "compatible" then, so `--repair-driver` selects it from the USB class
+  list (`DI_FLAGSEX_ALLOWEXCLUDEDDRVS`, hardware ID `USB\COMPOSITE`), after which `MI_00` receives the
+  existing WinUSB package. Verified on hardware: WinUSB bound and the following AOA START
+  accepted. **Not verified:** the complete flow up to video after the recovery; the phone dropped
+  off USB entirely during the last test run and needed a physical replug.
+- `Repair-PhoneDriver.ps1` and the device list / probe buttons are gone from the window.
+
+## 2026-09-18 (later): reconnect without replug, in-window driver repair
+
+- Cause of the recurring `LIBUSB_ERROR_NOT_FOUND`: Windows re-selects Samsung's driver
+  whenever the phone re-appears as `04E8:6860` (setupapi log, Kernel-PnP event 442), so the
+  forced `usbccgp`/WinUSB binding is lost each time. Details: `windows_connection.md`.
+- Reconnect: a phone already in accessory mode gets AOA identity + START again, which makes
+  Android relaunch Android Auto. **Verified on hardware** (Samsung SM-F776B): three
+  consecutive `--test-projection` runs, each with real video and a clean ByeBye stop,
+  without replugging. Version requests are repeated (max. 6, every 4 s) until the phone
+  answers; waiting for the accessory device is now 30 s (was 15 s, too short once) and
+  honours the Stop button.
+- Repair: `HeadUnit.exe --repair-driver` (elevated, started by the window via UAC when a
+  driver error occurs, then rescan and automatic connect). The elevated helper and the
+  window flow are new; only the "nothing to repair" paths were exercised on hardware,
+  the actual rebinding needs the phone in file-transfer mode after a replug.
+- `scripts/Repair-PhoneDriver.ps1` was removed (replaced by the in-app repair).
+
+## 2026-09-18: connection lifecycle (start, stability, clean shutdown)
+
+- **Clean shutdown:** a user stop now sends `ByeByeRequest(USER_SELECTION)` and waits
+  up to 2 s for the phone's answer before the transport is stopped. Before TLS is
+  established the session ends immediately. Aim: the phone leaves Android Auto
+  properly so the next connect does not require replugging the cable. **Not yet
+  verified on hardware.**
+- **Transport:** `stop()` is idempotent (previously joined the same thread pools
+  twice), requests after `stop()` are rejected instead of silently dropped, USB stalls
+  are cleared with CLEAR_HALT (max. 3 in a row), errors carry a readable libusb text.
+- **Session:** liveness watchdog (30 s), stage-specific startup timeout message,
+  undecodable video packets are dropped instead of ending the session, a throwing
+  handler no longer skips queued completions, leak check after shutdown.
+- **UI:** one state machine controls all buttons; the only Android phone is used
+  automatically when nothing is selected; closing the window mid-session ends it
+  cleanly first; automatic rescan 1.5 s after a session; the last video frame is
+  cleared when the session ends.
+- **Tests:** ProtocolTests now cover stopping a session that is waiting for the phone
+  (prompt end, transport stopped, no leaked session) and repeated transport `stop()`
+  with rejected follow-up requests. Debug build, CoreTests, ProtocolTests and the GUI
+  smoke run pass. The graceful ByeBye path itself needs a real phone or a scripted
+  TLS peer and is untested.
+
+
+## 2026-09-18: native protocol/video implementation and real handshake
+
+Added the pinned AASDK native static-library project, automatic protoc generation,
+vcpkg dependency preparation, bounded libusb bulk transport, cancellation,
+control/video/input/sensor service handling, H.264 FFmpeg decoding and a bounded
+latest-frame mailbox feeding Qt. The Connect action combines AOA switching and
+the protocol session. Audio playback and touch event transmission remain absent.
+
+Debug build and core/protocol tests pass. TLS regression tests exercise TLS 1.2
+and 1.3 in both directions, including multi-record payloads. CMake app configure
+passes with the prepared dependencies. Dependency builds completed locally.
+
+The real Samsung accepted Android Auto **1.7**, completed TLS and sent service
+discovery. The headunit sent its response, but the phone did not open a video
+channel; the first run ended at its 90-second deadline. A keepalive attempt after
+discovery encountered a USB write timeout. **No projected video is confirmed.**
+Artifacts: `out/projection-live-test.log`, `out/projection-fresh-trace.log`.
+
+Corrected upstream version byte order (previously printed 256.1792), suppressed
+false SSL_ERROR_WANT_READ error logs, and added legacy identity fields to the
+service response for compatibility. The fresh hardware test of that change
+reproduced the same failure (`out/projection-legacy-identity.log`); it did not
+resolve projection. Phone-side ADB diagnostics are the next step. A previous
+accessory session must be reset by reconnecting the cable
+before another version exchange; reopening the same interface is insufficient.
+
+## 2026-09-17: real accessory mode transition succeeded
+
+Implemented AOA SEND_STRING (52) for all six identity fields and START (53),
+bounded re-enumeration on the original bus/port chain, and accessory interface 0
+bulk endpoint validation with claim/release. Exposed through the GUI and
+`--start-accessory`; the GUI rescans after the attempt. Failed or short string
+transfers stop before START. A disconnect during START alone is never considered
+success; the new accessory device must actually appear and open.
+
+Hardware run: `04E8:6860` became **`18D1:2D00`** in about 0.6 seconds. Interface 0
+was claimed successfully, with bulk **IN `0x81`, OUT `0x01`**. The accessory uses
+the already installed Samsung WinUSB driver `oem118.inf`; no additional driver
+installation was needed. CLI exit 0, artifact `out/accessory-start.log`.
+This confirms USB transport readiness only; the probe then releases the handle.
+Android Auto TLS, services and video remain unimplemented.
+
+Core tests cover the six identity transfers, null termination, short/error
+responses at each field, and disconnect/error handling on START.
+
+## 2026-09-17: successful real USB/AOA access
+
+The approved Windows driver change was carried out on the connected Samsung.
+Its parent now uses Microsoft's compatible `usbccgp` driver; interface 00 uses
+WinUSB (`oem151.inf`). Original Samsung packages and device identity were backed
+up before the change. No driver signing enforcement or system security setting
+was disabled. Details and the prepared rollback are in `windows_connection.md`.
+
+The existing VS2026 Debug app was run with `--probe-usb`: **exit 0**, device handle
+opened, **AOA version 2 received from the real phone**. This resolves the earlier
+`LIBUSB_ERROR_NOT_FOUND` blocker. Artifact: `out/winusb-probe.log`.
+
+MTP file transfer for that interface is replaced by WinUSB. Mode switching was
+subsequently implemented and verified above. Android Auto protocol negotiation,
+TLS, video decoding and rendering remain unimplemented. A driver change alone
+is not a completed AA connection.
+
+## 2026-09-16: actual USB access attempt
+
+The Samsung was tested with libusb 1.0.30. Opening `04E8:6860` fails with
+`LIBUSB_ERROR_NOT_FOUND (-5)` before any AOA/TLS handshake. The current Samsung
+composite/MTP/modem bindings do not expose a usable libusb handle. No driver was
+changed. The full Android Auto projection objective remains unmet.
+
+Added a selected-device USB access/AOA probe to the GUI and `--probe-usb` CLI,
+RAII for libusb resources, a bounded AOA read, explicit stage/error reporting,
+and libusb deployment in both build systems. Reproduced the actual failure with
+the C++ app (exit 3) and an independent libusb call. Diagnostic artifact:
+`out/connection-probe.log`. A successful probe would still not mean AA connected.
+VS2026 Debug and Release builds passed; both GUI smoke runs exited 0, and core
+tests passed. The USB-probe failure is a tested hardware-access result, not a
+build or application-start failure.
+
+The native AASDK port was investigated, not completed; compiler and dependency
+obstacles and the proposed targeted WinUSB change are documented in
+`windows_connection.md`. Next hardware step requires deciding on the Windows
+driver change, which may affect MTP file transfer, or using an ADB development
+transport. Authentication, discovery and video still require implementation.
+
+## 2026-09-16: native Visual Studio 2026 build
+
+- Added repository-root `HeadUnit.sln` with native `HeadUnit` and `CoreTests`
+  vcxproj projects. No CMake execution or Qt VS extension is needed for this path.
+- x64 Debug/Release, v145, C++20, UTF-8, shared compiler settings and automatic
+  discovery of the existing local Qt 6.8.3 MSVC x64 SDK.
+- Build copies the current app's Qt DLLs and Windows platform plugin into its
+  output directory. F5 uses that directory as its working directory.
+- Verified using VS2026 Insiders MSBuild and installed MSVC 14.51.36231:
+  Debug and Release compile/link, both CoreTests runs and both real Qt/USB smoke
+  runs passed (exit 0). Each scan saw 16 devices including Samsung `04E8:6860`.
+- Outputs: `out/vs2026/x64/Debug` and `out/vs2026/x64/Release`.
+- CMake remains an optional portability build. The native project source lists
+  must be maintained alongside CMake when adding files. Current Qt classes do
+  not require moc/uic/rcc; introduce those build steps if future code uses
+  Q_OBJECT, .ui files or Qt resources.
+
+
+## 2026-09-16: first discovery milestone
+
+Implemented:
+
+- C++20 CMake targets with VS2022 x64 presets and a core-only option.
+- Qt6 test window with a genuine USB device tree, scan button and explicit AA-not-implemented status.
+- Background USB scan through Windows SetupAPI and hub descriptor IOCTLs.
+- VID/PID, manufacturer, product, serial, configurations, alternate interfaces
+  and endpoints in both UI and diagnostic logs.
+- Android identification evidence: vendor/name candidate, ADB interface, or AOA
+  data mode; no unsupported claim of a confirmed AA-capable smartphone.
+- Thread-safe UTF-8 file/console logger with UTC millisecond timestamps, explicit
+  missing-descriptor diagnostics and Win32 error codes.
+- Open-source research with dated revisions and component decisions.
+
+Verification on the current Windows development machine:
+
+| Check | Observed result |
+| --- | --- |
+| Configure | PASS, CMake 3.31.6-msvc6, VS2022 MSVC 19.44.35222.0, Windows SDK 10.0.26100.0 |
+| Debug x64 build | PASS, Qt 6.8.3 MSVC2022 x64 |
+| CTest | PASS, 1 executable covers malformed/truncated descriptors, parsing, candidate/ADB/AOA evidence and endpoint selection |
+| Real console USB scan | PASS, exit 0; 15 devices, 47 interface descriptors, 40 endpoint descriptors, 0 scan errors |
+| Qt runtime deployment | Completed; local runtime starts |
+| Qt GUI smoke run | Window initialized, real scan completed, result tree populated, event loop stopped; empty stderr |
+| Smartphone recognition on hardware | NOT VERIFIED: no Android candidate present in the observed scan |
+| Linux/Pi and Windows 10 | NOT RUN; current host reports Windows build 26200 |
+| Android Auto handshake/video | NOT IMPLEMENTED in this milestone |
+
+Local artifacts (ignored): `out/usb-scan.log`, `out/ui-smoke.log`,
+`out/ui-smoke-error.log`, `headunit.log`; app in `out/install/bin/HeadUnit.exe`.
+
+Known issues/limits:
+
+- Device `1532:0226` returned Win32 31 for its serial string. Hub `2109:0813`
+  returned Win32 31 for language/manufacturer/product strings. Remaining device
+  and endpoint data was retained; no dummy strings were supplied as real values.
+- MSBuild printed a missing `pwsh.exe` message during post-build processing on
+  this machine; the actual compile/link succeeded. This message is not from a
+  project-defined PowerShell build command (there are none).
+- Minimal qtbase-only installation causes deployment warnings about missing
+  translations, dxcompiler/dxil and VCINSTALLDIR. The diagnostic Widgets app
+  starts locally. Deployment to a clean PC, especially Debug CRT availability,
+  is not verified; use a proper Release runtime package for distribution.
+- No automatic hotplug, transport open, AOA probe/mode switch, authentication,
+  service discovery, video, touch or audio yet.
+- USB vendor/string heuristics can miss a phone or flag a non-phone. ADB/AOA
+  descriptors also do not distinguish smartphones from other Android devices.
+- Synchronous hub requests have no application-level timeout; closing waits for
+  an outstanding scan. Handle cancellation before implementing persistent sessions.
+
+## Smartphone test record
+
+| Phone | Android version | Android Auto version | USB VID/PID before/after AOA | Driver | Result |
+| --- | --- | --- | --- | --- | --- |
+| Samsung phone (model not independently verified) | Unknown | Unknown; user reports enabled | `04E8:6860` / no AOA switch attempted | `dg_ssudbus` composite, `WUDFWpdMtp` MTP, `Modem` | USB discovery verified on 2026-09-16; AA session not attempted |
+
+Observed non-phone VID/PID values:
+`1532:0064`, `1532:0531`, `1532:0226`, `045E:0B12`, `1532:0522`,
+`0B05:1939`, `05E3:0608`, `1532:0517`, `1532:0F3C`, `1532:0F1F`,
+`1532:0F17`, `1532:0C02`, `1532:00A4`, `2109:2813`, `2109:0813`.
+No observed VID/PID has been presented as a tested smartphone.
+
+## 2026-09-16 18:27 UTC: phone connected
+
+After the user connected their phone with data transfer and Android Auto enabled,
+a new real scan found 16 devices (exit 0, zero scan errors). The new device reports
+manufacturer `SAMSUNG`, product `SAMSUNG_Android`, VID/PID `04E8:6860`, active
+configuration 1. Its descriptors were read without warnings:
+
+- Interface 0: `06/01/01`, bulk IN `81`, bulk OUT `01`, interrupt IN `82`.
+- Interface 1: `02/02/01`, interrupt IN `84`.
+- Interface 2: `0A/00/00`, bulk IN `83`, bulk OUT `02`.
+
+Windows PnP reports the MTP, modem and composite nodes as OK. Bound services are
+recorded in the table above. No ADB descriptor or AOA data-mode PID was observed.
+The app identifies this device as an Android candidate based on its vendor/name;
+the user's connection report corroborates that it is the intended phone.
+Android and Android Auto versions cannot be established from this scan.
+Existing warnings concerned other peripherals, not the phone.
+
+Log artifact: `out/phone-scan.log` (ignored, includes serial numbers). This verifies
+phone discovery only. Enabling AA on the phone does not establish a protocol
+session in our app, whose transport/handshake is still unimplemented. Next work
+is the native protocol adapter and selected-device AOA/transport access, with
+the currently bound Samsung/MTP drivers accounted for.
+
+Next steps:
+
+1. Attach the target phone, rescan and complete the hardware record above.
+2. Verify native MSVC build of the pinned AASDK candidate and establish the
+   Windows libusb/WinUSB transport for that phone/interface.
+3. Implement and test AOA re-enumeration and the actual protocol lifecycle,
+   following `android_auto.md`, with state-specific failures and timeouts.
+4. Receive/decode/display real negotiated video. The overall projection goal
+   remains open until a phone's genuine AA screen appears in our Qt window.
