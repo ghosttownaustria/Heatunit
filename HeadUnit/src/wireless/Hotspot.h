@@ -9,7 +9,9 @@ struct HotspotConfig {
     std::string password;        // WPA2, 8 to 63 characters
     std::string band{"a"};       // "a" = 5 GHz, "bg" = 2.4 GHz
     int channel{36};
-    bool isHidden{true};         // the name is not broadcast: only the phone knows it, from Bluetooth
+    // The name is not broadcast. Off by default: Android Auto looks for the network it was told about over Bluetooth in
+    // its Wi-Fi scan, and a hidden network does not show up there by name (the working wireless adapters broadcast theirs).
+    bool isHidden{false};
 };
 struct HotspotInfo {
     std::string interfaceName;

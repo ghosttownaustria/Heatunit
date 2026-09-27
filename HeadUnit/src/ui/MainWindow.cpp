@@ -2,6 +2,7 @@
 #include "ui/CarWidgets.h"
 #include "ui/HomeMenu.h"
 #include "ui/MediaPages.h"
+#include "ui/PairingPage.h"
 #include "ui/SettingsPage.h"
 #include "androidauto/PhoneWatch.h"
 #include "platform/Environment.h"
@@ -96,6 +97,9 @@ MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
     };
     m_settings = new SettingsPage(m_screens);
     m_settings->onChange = [this](const HomeTileSetup& setup) { SetTiles(setup); };
+    // A phone that pairs over Bluetooth asks here too, in front of everything else, until it is answered.
+    m_pairing = new PairingPage(m_screens);
+    m_pairing->onChange = [this] { ShowScreen(); };
     m_music = new MultimediaPage(*m_player, MusicFolder(), m_screens);
     m_radio = new RadioPage(*m_player, m_screens);
     for (PlayerPage* page : {static_cast<PlayerPage*>(m_music), static_cast<PlayerPage*>(m_radio)}) page->onWillPlay = [this] { PausePhoneMedia(); };
@@ -104,6 +108,7 @@ MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
     m_screens->addWidget(m_music);
     m_screens->addWidget(m_radio);
     m_screens->addWidget(m_settings);
+    m_screens->addWidget(m_pairing);
     SetTiles(ParseTileSetup(QSettings(kSettingsOrganization, kSettingsApplication).value(kTilesSetting).toString().toStdString()));
     left->addWidget(m_screens, 1);
     // The display size sits next to the button that connects: it is fixed once the connection starts.
@@ -179,6 +184,9 @@ MainWindow::MainWindow(IUsbBackend& backend, Logger& logger, TestMode mode)
         QTimer::singleShot(250, this, [errors = result.errors.size()] { QApplication::exit(errors == 0 ? 0 : 2); });
     });
     if (m_mode == TestMode::Smoke) {
+        // HEADUNIT_TEST_PAIRING shows the pairing question with a made-up phone, for the window picture.
+        if (qEnvironmentVariableIsSet("HEADUNIT_TEST_PAIRING"))
+            m_pairing->Ask("Galaxy Z Flip5", "123456", [this](bool isAccepted) { m_logger.Write("INFO", "UI", std::string("Test pairing answered: ") + (isAccepted ? "pair" : "cancel")); });
         // Smoke test: real window plus one real USB scan, then exit.
         m_scanWatcher.setFuture(QtConcurrent::run([this] {
             try { return m_backend.EnumerateDevices(); }
@@ -298,6 +306,7 @@ void MainWindow::PressConsole(ConsoleKey key)
 // The console decides which side is in front: the phone's picture or one of the radio's pages.
 MenuPage* MainWindow::FrontPage() const
 {
+    if (m_pairing->IsAsking()) return m_pairing;
     switch (m_console.CurrentScreen()) {
     case ConsoleController::Screen::RadioHome: return m_homeMenu;
     case ConsoleController::Screen::Multimedia: return m_music;
@@ -427,7 +436,7 @@ void MainWindow::SetDisplay(const DisplayConfig& display)
     m_console.SetDisplay(display);
     m_video->SetDisplay(display);
     for (MenuPage* page : {static_cast<MenuPage*>(m_homeMenu), static_cast<MenuPage*>(m_music), static_cast<MenuPage*>(m_radio),
-             static_cast<MenuPage*>(m_settings)})
+             static_cast<MenuPage*>(m_settings), static_cast<MenuPage*>(m_pairing)})
         page->SetDisplay(display);
     for (int index = 0; index < static_cast<int>(std::size(kDisplays)); ++index)
         if (kDisplays[index] == display) m_displayChoice->setCurrentIndex(index);
@@ -478,7 +487,11 @@ void MainWindow::StartConnect()
     if (m_state == State::Idle) BeginWatch();
     else if (m_state == State::Watching) {
         m_isUsbRequested = true;
+#ifdef HEADUNIT_WIRELESS
+        ShowStep("Suche ein Handy am USB-Kabel, sonst kabellos ...");
+#else
         ShowStep("Suche ein Handy am USB-Kabel ...");
+#endif
     }
 }
 // What a connection needs from the window; called on the worker for every connection.
@@ -543,11 +556,19 @@ AutoConnectResult MainWindow::WatchPhones()
     deps.onAttemptStart = [this] { QMetaObject::invokeMethod(this, [this] { OnAttemptStart(); }, Qt::QueuedConnection); };
     deps.onAttemptEnd = [this](const AutoConnectResult& result) { QMetaObject::invokeMethod(this, [this, result] { OnAttemptEnd(result); }, Qt::QueuedConnection); };
 #ifdef HEADUNIT_WIRELESS
-    // Hidden Wi-Fi and Bluetooth stay up for as long as the watch runs.
-    WirelessStation wireless(m_logger, onStatus);
+    // Wi-Fi and Bluetooth stay up for as long as the watch runs. A pairing phone's question goes to the pairing page; its
+    // answer goes back from the GUI thread (PairingRequest::answer may be called from any thread).
+    BluetoothEvents events;
+    events.onStatus = onStatus;
+    events.onPairingRequest = [this](const PairingRequest& request) {
+        QMetaObject::invokeMethod(this, [this, request] { m_pairing->Ask(Text(request.phone), Text(request.code), request.answer); }, Qt::QueuedConnection);
+    };
+    events.onPairingEnd = [this] { QMetaObject::invokeMethod(this, [this] { m_pairing->End(); }, Qt::QueuedConnection); };
+    WirelessStation wireless(m_logger, events);
     wireless.Start();
     deps.waitForWirelessPhone = [&wireless](std::chrono::milliseconds timeout) { return wireless.WaitForPhone(timeout); };
     deps.connectWireless = [this, &wireless](int phone) { return wireless.Serve(phone, m_isStopRequested, MakeCallbacks()); };
+    deps.requestWireless = [&wireless] { return wireless.ReconnectPhones(); };
 #endif
     return RunPhoneWatch(deps, m_logger, m_isWatchStopRequested, m_isStopRequested, m_isUsbRequested, onStatus);
 }

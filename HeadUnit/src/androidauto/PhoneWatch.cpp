@@ -91,7 +91,15 @@ AutoConnectResult RunPhoneWatch(const PhoneWatchDeps& deps, Logger& logger, cons
                 // What has left is forgotten, so that plugging it in again counts as new.
                 known = std::set<std::string>(phones.begin(), phones.end());
                 if (settleRounds > 0) { --settleRounds; hasNew = false; }
-                if (isRequested && phones.empty()) step("Kein Handy am USB-Kabel gefunden. Bitte ein Datenkabel anstecken und das Handy entsperren.");
+                if (isRequested && phones.empty()) {
+                    if (hasWireless && deps.requestWireless) {
+                        step(deps.requestWireless()
+                            ? "Kein Handy am USB-Kabel: verbinde die gekoppelten Handys kabellos (Bluetooth und WLAN) ..."
+                            : "Kein Handy am USB-Kabel, und kabellos ist noch nicht bereit (Bluetooth oder WLAN startet noch).");
+                    } else {
+                        step("Kein Handy am USB-Kabel gefunden. Bitte ein Datenkabel anstecken und das Handy entsperren.");
+                    }
+                }
                 if (hasNew) {
                     step("Handy per USB erkannt; starte Android Auto ...");
                     attempt(deps.connectUsb, true);

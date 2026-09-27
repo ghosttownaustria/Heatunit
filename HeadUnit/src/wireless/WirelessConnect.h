@@ -2,6 +2,7 @@
 #include "androidauto/AndroidAutoSession.h"
 #include "androidauto/AutoConnect.h"
 #include "logging/Logger.h"
+#include "wireless/BluetoothService.h"
 #include "wireless/Hotspot.h"
 #include <atomic>
 #include <chrono>
@@ -17,12 +18,11 @@ namespace headunit {
 //   HEADUNIT_WIFI_INTERFACE the Wi-Fi device (default: the first one NetworkManager knows)
 //   HEADUNIT_WIFI_BAND     a = 5 GHz (default), bg = 2.4 GHz
 //   HEADUNIT_WIFI_CHANNEL  default 36 (5 GHz) or 6 (2.4 GHz)
-//   HEADUNIT_WIFI_HIDDEN   0 = the network name is broadcast, 1 = always hidden (default: hidden, the phone learns it
-//                          over Bluetooth; broadcast from then on once a phone did not join the hidden network)
+//   HEADUNIT_WIFI_HIDDEN   1 = the network name is not broadcast (default: broadcast; Android Auto does not find a
+//                          hidden network in its scan)
 struct WirelessSettings {
     std::string bluetoothName{"HEATUNIT"};
     HotspotConfig hotspot;
-    bool isVisibilityFixed{};   // HEADUNIT_WIFI_HIDDEN decides whether the network is hidden
 };
 WirelessSettings LoadWirelessSettings();
 
@@ -33,8 +33,8 @@ WirelessSettings LoadWirelessSettings();
 // use and destroy it on one worker thread; Bluetooth answers BlueZ on a thread of its own (see BluetoothService).
 class WirelessStation {
 public:
-    // `onStatus` receives the steps for the window.
-    WirelessStation(Logger& logger, std::function<void(const std::string&)> onStatus);
+    // `events.onStatus` receives the steps for the window, the pairing events the question to show (BluetoothEvents).
+    WirelessStation(Logger& logger, BluetoothEvents events);
     ~WirelessStation();
     WirelessStation(const WirelessStation&) = delete;
     WirelessStation& operator=(const WirelessStation&) = delete;
@@ -44,6 +44,9 @@ public:
     // Waits up to `timeout` for a phone that opened the Android Auto service: its RFCOMM socket, or -1. Starts or
     // restarts everything first when that is due.
     int WaitForPhone(std::chrono::milliseconds timeout);
+    // The person asked for Android Auto: the paired phones are asked to connect, a connected one after reconnecting it
+    // (that starts Android Auto on the phone again). False when Bluetooth or the Wi-Fi is not up.
+    bool ReconnectPhones();
     // For that socket (taken over and closed here): the Wi-Fi details over Bluetooth (once a hotspot that is still
     // starting is up), then the Android Auto session over the TCP connection the phone opens.
     AutoConnectResult Serve(int rfcommFd, std::atomic_bool& isStopRequested, ProjectionCallbacks callbacks);

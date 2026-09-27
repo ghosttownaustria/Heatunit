@@ -120,18 +120,22 @@ window, which switches between the phone's picture and the radio's pages.
 Wireless Android Auto (Linux only, `src/wireless/`, built by the `headunit_wireless` target when Qt6 DBus is found;
 [wireless.md](wireless.md)) adds a second `ITransport` and leaves the session untouched. `WirelessStation` keeps it
 ready for as long as the watch runs (Bluetooth and the Wi-Fi each retry a failed start every minute): first Bluetooth
-(rfkill unblock, adapter power, a `DisplayYesNo` pairing agent that confirms the code comparison by itself, the Android
-Auto Wireless service registered with BlueZ on RFCOMM channel 8, then visible; `BluetoothService`, QtDBus; without a
-channel BlueZ opens no RFCOMM server for an unknown UUID), so the phone finds the head unit within a second or two;
-the hidden NetworkManager hotspot (`Hotspot`, `nmcli` without a shell) starts at the same time in the background
-(`std::async`). Once it is up, the phones paired before are (re)connected (`ConnectPairedPhones`: a phone PipeWire
-connected before the service existed is disconnected first). When a phone opens the service, `WirelessStation::Serve`
+(rfkill unblock, adapter power, a `DisplayYesNo` pairing agent, the Android Auto Wireless service registered with BlueZ
+on RFCOMM channel 8, then visible; `BluetoothService`, QtDBus; without a channel BlueZ opens no RFCOMM server for an
+unknown UUID), so the phone finds the head unit within a second or two. The agent answers the code comparison with a
+delayed D-Bus reply: `BluetoothEvents::onPairingRequest` hands the window the phone's name, the code and an answer
+function (callable from any thread; it holds only a `weak_ptr` to the pending request), and the window's `PairingPage`
+asks in front of everything else (`MainWindow::FrontPage`); BlueZ's `Cancel`, a finished pairing or the service's
+stop take the question away (`onPairingEnd`). Without that event (`--test-bluetooth`) the agent confirms by itself.
+The NetworkManager hotspot (`Hotspot`, `nmcli` without a shell; its name is broadcast, as Android Auto does not find a
+hidden network) starts at the same time in the background (`std::async`). Once it is up, the phones paired before are
+(re)connected (`ConnectPairedPhones`: a phone that was connected before the service existed is disconnected first; with
+"Android Auto verbinden" and no phone on the cable, `PhoneWatchDeps::requestWireless` reconnects every connected
+phone). When a phone opens the service, `WirelessStation::Serve`
 waits for a hotspot that is still starting, then `EstablishWirelessLink` hands the phone the Wi-Fi details over the
 RFCOMM socket (`WirelessHandshake`: pure message logic; both Qt-free and tested against a simulated phone) and accepts
 the phone's TCP connection on port 5288, and `RunAndroidAutoSession` runs on a `SocketTransport` (the TCP twin of
-`ProjectionTransport`: one reader, one writer, `stop()` rejects with OPERATION_ABORTED). A phone that got the details
-and did not join makes the station broadcast the network's name from then on (remembered in `QSettings`). The station
-and the session run on the watch's worker thread; `BluetoothService` answers BlueZ on a `QThread` of its own with its
+`ProjectionTransport`: one reader, one writer, `stop()` rejects with OPERATION_ABORTED). The station and the session run on the watch's worker thread; `BluetoothService` answers BlueZ on a `QThread` of its own with its
 own event loop, so pairing works at any time, also during a session, and hands the phones' RFCOMM sockets over through
 a condition variable. Only this target uses moc (`AUTOMOC`), and `HEADUNIT_WIRELESS` is defined only where it is built,
 so the Windows build watches USB alone.
@@ -204,6 +208,10 @@ home menu (Back first goes to the page, which may close something it opened, the
   `AndroidAuto,Radio,-Vehicle,...`; damaged or older texts are repaired, new tiles appended).
 - `SettingsPage`: every tile with a tick box in the menu's order; turning chooses, pushing shows or hides, up/down move
   the tile along the order.
+- `PairingPage`: a phone's Bluetooth pairing question (its name, the six-digit code large in orange, Pair / Cancel).
+  While it asks, `FrontPage` returns it before anything else, also over the phone's picture; turning or left/right
+  choose, pushing answers, Back cancels, a minute without an answer refuses. `HEADUNIT_TEST_PAIRING` shows it with a
+  made-up phone in `--smoke-test` (for the window picture).
 - `PlayerPage` (`ui/MediaPages`): the page's tile at the left (orange while its source sounds), what plays now, the
   controls previous/play/next, a list of five rows and buttons at the top right. The focus moves through them by the
   portable `PageFocus` rules in `HomeMenuLayout.h` (tested): turning moves within a part (list rows, a row of buttons),
