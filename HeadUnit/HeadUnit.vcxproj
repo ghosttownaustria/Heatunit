@@ -51,6 +51,7 @@
     <ClCompile Include="src\ui\MenuPage.cpp" />
     <ClCompile Include="src\ui\MediaPages.cpp" />
     <ClCompile Include="src\ui\SettingsPage.cpp" />
+    <ClCompile Include="src\ui\PairingPage.cpp" />
     <ClCompile Include="src\radio\RadioBrowser.cpp" />
     <ClCompile Include="src\media\AudioPlayer.cpp" />
     <ClCompile Include="src\androidauto\InputReports.cpp" />
@@ -63,6 +64,7 @@
     <ClInclude Include="src\ui\MenuPage.h" />
     <ClInclude Include="src\ui\MediaPages.h" />
     <ClInclude Include="src\ui\SettingsPage.h" />
+    <ClInclude Include="src\ui\PairingPage.h" />
     <ClInclude Include="src\audio\AudioFocus.h" />
     <ClInclude Include="src\radio\RadioBrowser.h" />
     <ClInclude Include="src\media\AudioPlayer.h" />

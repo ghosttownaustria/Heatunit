@@ -45,7 +45,7 @@ Qt6 DBus), so on Windows it can only be reviewed by reading; CI or the Pi catche
 App diagnostics (no window needed for most): `--scan`, `--probe-usb`, `--start-accessory`, `--repair-driver`,
 `--recover-phone`, `--test-projection`, `--test-input`, `--test-audio`, `--test-tone`, `--test-console`, `--test-keys`,
 `--smoke-test`, `--display WxH`. Useful env vars: `HEADUNIT_PROTOCOL_TRACE=1`, `HEADUNIT_TEST_SHOTS=<dir>`,
-`HEADUNIT_TEST_KEYS`, `HEADUNIT_MUSIC_DIR`, `HEADUNIT_USB_BACKEND=libusb`, `HEADUNIT_WIFI_*`, `HEADUNIT_BT_NAME`.
+`HEADUNIT_TEST_KEYS`, `HEADUNIT_TEST_PAIRING=1` (with `--smoke-test`: shows the Bluetooth pairing page), `HEADUNIT_MUSIC_DIR`, `HEADUNIT_USB_BACKEND=libusb`, `HEADUNIT_WIFI_*`, `HEADUNIT_BT_NAME`.
 `headunit.log` is appended in the working directory; lines carry a level and a `[TAG]` such as `WATCH`, `BT`,
 `WLAN`, `AA`, `USB`, `REPAIR`, `AUDIO` (`logger.Write("INFO", "WATCH", ...)`). Without a phone attached, the default (automatic) mode will connect
 any plugged-in Android phone on its own — check `--scan` first when smoke-running.
@@ -86,7 +86,7 @@ touch mapping share the shown-area coordinate space. Phone screen state is infer
 since the protocol does not report it.
 
 UI: `QStackedWidget` with `VideoWidget` and radio pages (`MenuPage` subclasses: `HomeMenu`, `SettingsPage`,
-`MultimediaPage`, `RadioPage`), drawn from `docs/design/home-menu.svg` via `ui/MenuStyle` (no QtSvg). Hard keys go
+`MultimediaPage`, `RadioPage`, and `PairingPage`, which goes in front of everything while a phone pairs), drawn from `docs/design/home-menu.svg` via `ui/MenuStyle` (no QtSvg). Hard keys go
 through `ConsoleController` → `ConsoleEffect`; knob input goes to the front page or the phone (`SendKey`,
 `m_localKeys` keeps press/release on the same side). Persisted settings use `QSettings`.
 

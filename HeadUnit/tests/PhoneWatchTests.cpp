@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 using namespace headunit;
@@ -28,7 +29,8 @@ struct World {
     std::function<void(World&)> onWait;    // runs in every wait, before the stop check
     std::function<void(World&)> duringUsb; // runs inside every USB attempt
     std::atomic_bool stop{false}, attemptStop{false}, usbRequested{false};
-    int scanCalls{}, waitCalls{}, usbConnects{}, wirelessConnects{}, starts{}, ends{};
+    int scanCalls{}, waitCalls{}, usbConnects{}, wirelessConnects{}, wirelessRequests{}, starts{}, ends{};
+    std::vector<std::string> steps;
     std::vector<int> servedSockets;
     PhoneWatchDeps Deps() {
         PhoneWatchDeps deps;
@@ -47,6 +49,7 @@ struct World {
                 return socket;
             };
             deps.connectWireless = [this](int socket) { ++wirelessConnects; servedSockets.push_back(socket); return Video(); };
+            deps.requestWireless = [this] { ++wirelessRequests; return true; };
         }
         deps.wait = [pace](std::chrono::milliseconds) { pace(); };
         deps.onAttemptStart = [this] { ++starts; };
@@ -55,7 +58,10 @@ struct World {
     }
     AutoConnectResult Run() {
         const auto deps = Deps();
-        return RunPhoneWatch(deps, TestLogger(), stop, attemptStop, usbRequested, {});
+        return RunPhoneWatch(deps, TestLogger(), stop, attemptStop, usbRequested, [this](const std::string& step) { steps.push_back(step); });
+    }
+    bool HasStep(const std::string& part) const {
+        return std::any_of(steps.begin(), steps.end(), [&](const std::string& step) { return step.find(part) != std::string::npos; });
     }
 };
 UsbDevice Device(std::uint16_t vendor, std::uint16_t product, std::string serial, std::string location) {
@@ -95,6 +101,23 @@ void TestPhoneWatch() {
         world.onWait = [](World& w) { if (w.waitCalls == 12) w.usbRequested = true; };
         world.Run();
         Check(world.usbConnects == 2, "The button did not start a new USB attempt");
+        Check(world.wirelessRequests == 0, "The button reconnected the wireless phones although a phone is on the USB cable");
+    }
+    {   // "Android Auto verbinden" without a phone on the cable asks the paired phones to connect wirelessly.
+        World world;
+        world.bus = {Bus{}};
+        world.onWait = [](World& w) { if (w.waitCalls == 5) w.usbRequested = true; };
+        world.Run();
+        Check(world.wirelessRequests == 1 && world.usbConnects == 0, "The button did not reconnect the wireless phones");
+        Check(world.HasStep("kabellos") && !world.HasStep("Datenkabel"), "The button's message does not tell about the wireless connection");
+    }
+    {   // Without wireless the button only asks for a cable.
+        World world;
+        world.hasWireless = false;
+        world.bus = {Bus{}};
+        world.onWait = [](World& w) { if (w.waitCalls == 5) w.usbRequested = true; };
+        world.Run();
+        Check(world.HasStep("Datenkabel"), "Without wireless the button does not ask for a USB cable");
     }
     {   // A phone over Bluetooth: its socket goes to the wireless flow.
         World world;

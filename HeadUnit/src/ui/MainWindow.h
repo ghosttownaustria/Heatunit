@@ -31,6 +31,7 @@ class CarPanel;
 class HomeMenu;
 class MenuPage;
 class MultimediaPage;
+class PairingPage;
 class RadioPage;
 class SettingsPage;
 class VideoWidget;
@@ -112,6 +113,7 @@ private:
     MultimediaPage* m_music{};
     RadioPage* m_radio{};
     SettingsPage* m_settings{};
+    PairingPage* m_pairing{};                         // a phone's Bluetooth pairing question; in front while it asks
     HomeTileSetup m_tiles;                            // which tiles the home menu shows (remembered)
     std::shared_ptr<MediaActivity> m_phoneMedia{std::make_shared<MediaActivity>()};   // when the phone's music plays
     std::int64_t m_localStartMs{};                    // when the radio's own player last started or resumed

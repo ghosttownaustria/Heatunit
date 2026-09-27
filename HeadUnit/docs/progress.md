@@ -1,5 +1,38 @@
 # Progress
 
+## 2026-09-27 (later): pairing question in the menu, visible Wi-Fi, Android Auto key goes wireless
+
+Reported on the Pi with the Samsung SM-F776B after the previous entry: pairing now works (the phone asks with the
+six-digit code), but then the phone stays at "Wird mit Android Auto verbunden", and the window said "Kein Handy am USB
+gefunden ..." (the Android Auto key had been pressed; it only looked at the cable). No log was available.
+
+- **Visible Wi-Fi:** compared with [WirelessAndroidAutoDongle](https://github.com/nisargjhaveri/WirelessAndroidAutoDongle),
+  which works with real phones on a Raspberry Pi 4: same RFCOMM channel 8, same message sequence (start request, info
+  request, info response with WPA2 8 and DYNAMIC), same 5 GHz channel 36, but its hostapd broadcasts the network name.
+  Android Auto looks for the network it was told about in its Wi-Fi scan, where a hidden network does not appear by
+  name, so the hidden hotspot is the likely reason the phone never got further. The hotspot is now visible by default;
+  `HEADUNIT_WIFI_HIDDEN=1` hides it. The automatic switch to visible after a failed join (previous entry) is gone. The
+  same project's BlueZ configuration has `JustWorksRepairing = always`, which confirms the previous entry's diagnosis.
+- **Pairing question in the menu** (asked for by the user): new `PairingPage` with the phone's name, the code large in
+  orange, Pair / Cancel; knob, arrows, Back and clicks work it; it goes in front of everything while it asks and refuses
+  after a minute without an answer. The agent now answers `RequestConfirmation` with a delayed D-Bus reply once the
+  person has chosen (`BluetoothEvents`, `PairingRequest::answer`, callable from the GUI thread); BlueZ's `Cancel`, the
+  finished pairing and the service's stop take the question away. `--test-bluetooth` still confirms by itself.
+- **Android Auto key without a phone on the cable** now asks the paired phones to connect wirelessly
+  (`PhoneWatchDeps::requestWireless` -> `WirelessStation::ReconnectPhones`): a connected phone is disconnected and
+  connected again, which starts Android Auto on it anew. The window says so instead of asking for a data cable.
+- **No reconnect in the middle of a start:** the automatic reconnect once the hotspot is up now only takes down phones
+  that were connected before the Bluetooth service existed; before, a phone that had just paired (and was starting
+  Android Auto) was disconnected too when the hotspot came up a few seconds later.
+- **Window steps** for the Bluetooth link: "... ist verbunden. Warte, bis Android Auto am Handy den Dienst oeffnet",
+  so the window shows whether the phone got as far as opening the Android Auto service.
+- **Tests:** CoreTests cover the key with and without wireless and with a phone on the cable (PhoneWatch).
+- **Verified on this Windows machine:** CoreTests pass (CMake core-only); MSBuild Debug x64 builds the app with no
+  warnings from own sources; `HEADUNIT_TEST_PAIRING=1 HeadUnit --smoke-test` pictures of the pairing page at 1600x600
+  and 800x480 (layout only; knob and click not driven). **Not verified:** everything in
+  `src/wireless/` (Linux only, not compiled here); on the phone: the visible Wi-Fi getting Android Auto to a session,
+  the pairing page with a real pairing, the key's reconnect.
+
 ## 2026-09-27: wireless pairing like a car, Bluetooth at once
 
 Reported on the Pi with the Samsung SM-F776B: the hotspot runs (hidden), HEATUNIT appeared only after a long wait, and

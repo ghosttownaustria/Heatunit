@@ -24,6 +24,7 @@
 #include <atomic>
 #include <cerrno>
 #include <condition_variable>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <deque>
@@ -32,6 +33,8 @@
 #include <fstream>
 #include <linux/rfkill.h>
 #include <mutex>
+#include <optional>
+#include <set>
 #include <thread>
 #include <unistd.h>
 #include <utility>
@@ -41,20 +44,45 @@ namespace headunit {
 namespace bluez {
 constexpr const char* kService = "org.bluez";
 
+// The one pairing request that waits for the person's answer (BlueZ's call, answered later). The answer functions
+// handed out hold it too, and may outlive the service: then they find nothing to answer.
+struct PendingPairing {
+    std::mutex mutex;
+    std::uint64_t id{};
+    std::optional<QDBusMessage> request;
+    QString devicePath;
+};
+
 // What the D-Bus objects share with the service. The objects run on the service's thread; the phones are handed over
 // to whichever thread waits in WaitForPhone.
 struct Shared {
     Logger* logger{};
-    std::function<void(const std::string&)> onEvent;
+    BluetoothEvents events;
+    std::shared_ptr<PendingPairing> pairing{std::make_shared<PendingPairing>()};
+    std::set<QString> connectedBefore;   // phones connected before the service existed (service thread only)
     std::mutex mutex;
     std::condition_variable hasPhone;
     std::deque<int> phones;   // connected RFCOMM sockets of phones that opened the Android Auto service
     void Log(const std::string& level, const std::string& message) const { if (logger) logger->Write(level, "BT", message); }
-    void Tell(const std::string& text) const { if (onEvent) onEvent(text); }
+    void Tell(const std::string& text) const { if (events.onStatus) events.onStatus(text); }
     void AddPhone(int fd)
     {
         { std::lock_guard lock(mutex); phones.push_back(fd); }
         hasPhone.notify_all();
+    }
+    // Drops a waiting pairing request, refusing it when BlueZ still waits for the answer, and takes the question away.
+    void EndPairing(bool isRefusing)
+    {
+        bool hadRequest = false;
+        {
+            std::lock_guard lock(pairing->mutex);
+            if (pairing->request && isRefusing)
+                QDBusConnection::systemBus().send(pairing->request->createErrorReply(QStringLiteral("org.bluez.Error.Canceled"), QStringLiteral("Pairing ended")));
+            hadRequest = pairing->request.has_value();
+            pairing->request.reset();
+            ++pairing->id;
+        }
+        if (hadRequest && events.onPairingEnd) events.onPairingEnd();
     }
 };
 
@@ -81,11 +109,30 @@ static void Trust(const QString& devicePath)
     QDBusConnection::systemBus().send(message);   // the answer is not needed
 }
 
+// The answer to pairing request `id`, for the head unit's question. It replies to BlueZ's waiting call from whatever
+// thread it runs on (QDBusConnection::send is thread-safe); the logger lives as long as the program.
+static std::function<void(bool)> MakeAnswer(const std::shared_ptr<PendingPairing>& pending, std::uint64_t id, Logger* logger)
+{
+    return [weak = std::weak_ptr<PendingPairing>(pending), id, logger](bool isAccepted) {
+        const auto pairing = weak.lock();
+        if (!pairing) return;
+        std::lock_guard lock(pairing->mutex);
+        if (pairing->id != id || !pairing->request) return;
+        const auto& request = *pairing->request;
+        QDBusConnection::systemBus().send(isAccepted ? request.createReply()
+            : request.createErrorReply(QStringLiteral("org.bluez.Error.Rejected"), QStringLiteral("Refused at the head unit")));
+        if (isAccepted) Trust(pairing->devicePath);
+        if (logger) logger->Write("INFO", "BT", std::string("Pairing ") + (isAccepted ? "confirmed" : "refused") + " at the head unit");
+        pairing->request.reset();
+    };
+}
+
 // Pairing as in a car: BlueZ is told that this side has a display and a yes/no button ("DisplayYesNo"), so the phone
-// and the head unit compare a six-digit code (numeric comparison). The head unit confirms by itself and shows the code;
-// the person confirms on the phone. Just Works pairing (no code, "NoInputNoOutput") is not used: BlueZ refuses it for a
-// phone it has paired before (JustWorksRepairing = never, its default), so a phone that forgot the pairing and pairs
-// again got "pairing not done". A code comparison is not affected by that rule.
+// and the head unit show the same six-digit code (numeric comparison) and both are confirmed: on the phone, and on the
+// head unit's screen (BluetoothEvents::onPairingRequest; without a screen the head unit confirms by itself). Just Works
+// pairing (no code, "NoInputNoOutput") is not used: BlueZ refuses it for a phone it has paired before
+// (JustWorksRepairing = never, its default), so a phone that forgot the pairing and pairs again got "pairing not done".
+// A code comparison is not affected by that rule.
 class AgentAdaptor : public QDBusAbstractAdaptor {
     Q_OBJECT
     Q_CLASSINFO("D-Bus Interface", "org.bluez.Agent1")
@@ -102,12 +149,28 @@ public slots:
         m_shared->Log("INFO", "Passkey for " + Text(device.path()) + ": " + Code(passkey));
         m_shared->Tell("Bluetooth-Kopplung: am Handy den Code " + Code(passkey) + " eingeben.");
     }
-    void RequestConfirmation(const QDBusObjectPath& device, quint32 passkey)
+    // The reply waits for the person's answer on the head unit's screen (a delayed D-Bus reply, see MakeAnswer).
+    void RequestConfirmation(const QDBusObjectPath& device, quint32 passkey, const QDBusMessage& message)
     {
         const auto name = DeviceName(device.path());
-        m_shared->Log("INFO", "Pairing with '" + name + "' (" + Text(device.path()) + ") confirmed, code " + Code(passkey));
-        m_shared->Tell("Bluetooth-Kopplung mit " + name + ": am Handy den Code " + Code(passkey) + " bestaetigen.");
-        Trust(device.path());
+        m_shared->Log("INFO", "Pairing request from '" + name + "' (" + Text(device.path()) + "), code " + Code(passkey));
+        if (!m_shared->events.onPairingRequest) {
+            m_shared->Log("INFO", "Pairing with '" + name + "' confirmed by itself");
+            m_shared->Tell("Bluetooth-Kopplung mit " + name + ": am Handy den Code " + Code(passkey) + " bestaetigen.");
+            Trust(device.path());
+            return;
+        }
+        m_shared->EndPairing(true);   // an older question that was never answered
+        message.setDelayedReply(true);
+        std::uint64_t id = 0;
+        {
+            std::lock_guard lock(m_shared->pairing->mutex);
+            id = ++m_shared->pairing->id;
+            m_shared->pairing->request = message;
+            m_shared->pairing->devicePath = device.path();
+        }
+        m_shared->Tell("Bluetooth-Kopplung mit " + name + ": Code " + Code(passkey) + " am Handy und hier bestaetigen.");
+        m_shared->events.onPairingRequest({name, Code(passkey), MakeAnswer(m_shared->pairing, id, m_shared->logger)});
     }
     void RequestAuthorization(const QDBusObjectPath& device) { m_shared->Log("INFO", "Pairing authorized for " + Text(device.path())); Trust(device.path()); }
     void AuthorizeService(const QDBusObjectPath& device, const QString& uuid)
@@ -115,7 +178,12 @@ public slots:
         m_shared->Log("INFO", "Service " + Text(uuid) + " authorized for " + Text(device.path()));
         Trust(device.path());
     }
-    void Cancel() { m_shared->Log("INFO", "Pairing request cancelled"); }
+    // The phone gave up, or BlueZ stopped waiting for the answer.
+    void Cancel()
+    {
+        m_shared->Log("INFO", "Pairing request cancelled");
+        m_shared->EndPairing(false);
+    }
 private:
     static std::string Code(quint32 passkey)
     {
@@ -165,7 +233,14 @@ public slots:
                 m_shared->Log("INFO", "Device " + Text(message.path()) + ": " + key + " = " + Text(changed.value(QLatin1String(key)).toString()));
         if (changed.value(QStringLiteral("Paired")).toBool()) {
             Trust(message.path());
+            m_shared->EndPairing(false);
             m_shared->Tell("Bluetooth: " + DeviceName(message.path()) + " ist gekoppelt. Android Auto meldet sich jetzt am Handy.");
+        }
+        if (changed.contains(QStringLiteral("Connected"))) {
+            // A phone that connects from now on finds the Android Auto service; it needs no reconnecting.
+            m_shared->connectedBefore.erase(message.path());
+            if (changed.value(QStringLiteral("Connected")).toBool())
+                m_shared->Tell("Bluetooth: " + DeviceName(message.path()) + " ist verbunden. Warte, bis Android Auto am Handy den Dienst oeffnet ...");
         }
     }
 private:
@@ -322,10 +397,10 @@ std::string PowerOn(QDBusConnection& bus, const QString& adapter, const Shared& 
 }
 
 struct BluetoothService::Impl {
-    Impl(Logger& logger, std::function<void(const std::string&)> onEvent)
+    Impl(Logger& logger, BluetoothEvents events)
     {
         shared.logger = &logger;
-        shared.onEvent = std::move(onEvent);
+        shared.events = std::move(events);
     }
     Shared shared;
     // The thread that answers BlueZ, and an object living on it that carries the work handed to it.
@@ -343,7 +418,7 @@ struct BluetoothService::Impl {
     }
     std::string StartHere(const std::string& name);
     void StopHere();
-    void ConnectPairedHere();
+    void ConnectPairedHere(bool isReconnectingAll);
     void ConnectPhones(const std::vector<PairedDevice>& phones);
 };
 
@@ -366,7 +441,11 @@ std::string BluetoothService::Impl::StartHere(const std::string& name)
     if (bluez.adapterPath.isEmpty()) return "Kein Bluetooth-Adapter gefunden. Pruefen mit: bluetoothctl list und rfkill list";
     const QString adapter = adapterPath = bluez.adapterPath;
     std::string paired;
-    for (const auto& device : bluez.paired) paired += (paired.empty() ? "" : ", ") + device.name + (device.isConnected ? " (connected)" : "");
+    shared.connectedBefore.clear();
+    for (const auto& device : bluez.paired) {
+        paired += (paired.empty() ? "" : ", ") + device.name + (device.isConnected ? " (connected)" : "");
+        if (device.isPhone && device.isConnected) shared.connectedBefore.insert(device.path);
+    }
     shared.Log("INFO", "Adapter " + Text(adapter) + "; paired devices: " + (paired.empty() ? "none" : paired));
 
     if (const auto error = PowerOn(bus, adapter, shared); !error.empty()) return error;
@@ -414,6 +493,7 @@ std::string BluetoothService::Impl::StartHere(const std::string& name)
 
 void BluetoothService::Impl::StopHere()
 {
+    shared.EndPairing(true);
     auto bus = QDBusConnection::systemBus();
     if ((agent || profile) && bus.isConnected()) {
         const QString root = QStringLiteral("/org/bluez");
@@ -432,7 +512,7 @@ void BluetoothService::Impl::StopHere()
     isRunning = false;
 }
 
-void BluetoothService::Impl::ConnectPairedHere()
+void BluetoothService::Impl::ConnectPairedHere(bool isReconnectingAll)
 {
     if (!isRunning) return;
     auto bus = QDBusConnection::systemBus();
@@ -441,12 +521,16 @@ void BluetoothService::Impl::ConnectPairedHere()
     for (const auto& device : ReadBluez(bus).paired) {
         if (!device.isPhone) continue;
         phones.push_back(device);
-        if (!device.isConnected) continue;
-        shared.Log("INFO", "Phone '" + device.name + "' was connected before the Android Auto service existed; reconnecting it");
+        // A phone that connected while the service existed has seen it; taking its connection down would only break an
+        // Android Auto start that may be under way.
+        if (!device.isConnected || !(isReconnectingAll || shared.connectedBefore.contains(device.path))) continue;
+        shared.Log("INFO", "Phone '" + device.name + (isReconnectingAll ? "' is connected; reconnecting it, so that Android Auto starts again"
+                                                                        : "' was connected before the Android Auto service existed; reconnecting it"));
         if (const auto error = Call(bus, device.path, "org.bluez.Device1", "Disconnect", {}); !error.empty())
             shared.Log("WARN", "Disconnecting '" + device.name + "' failed: " + error);
         isAnyDisconnected = true;
     }
+    shared.connectedBefore.clear();
     // The old link needs a moment to go down before a new one can start; BlueZ is answered meanwhile.
     if (isAnyDisconnected) QTimer::singleShot(2000, context.get(), [this, phones] { ConnectPhones(phones); });
     else ConnectPhones(phones);
@@ -471,8 +555,8 @@ void BluetoothService::Impl::ConnectPhones(const std::vector<PairedDevice>& phon
     }
 }
 
-BluetoothService::BluetoothService(Logger& logger, std::function<void(const std::string&)> onEvent)
-    : m_impl(std::make_unique<Impl>(logger, std::move(onEvent))) {}
+BluetoothService::BluetoothService(Logger& logger, BluetoothEvents events)
+    : m_impl(std::make_unique<Impl>(logger, std::move(events))) {}
 BluetoothService::~BluetoothService() { Stop(); }
 
 std::string BluetoothService::Start(const std::string& name)
@@ -511,11 +595,11 @@ void BluetoothService::Stop()
 
 bool BluetoothService::IsRunning() const { return m_impl->isRunning; }
 
-void BluetoothService::ConnectPairedPhones()
+void BluetoothService::ConnectPairedPhones(bool isReconnectingAll)
 {
     auto& impl = *m_impl;
     if (!impl.isRunning) return;
-    QMetaObject::invokeMethod(impl.context.get(), [&impl] { impl.ConnectPairedHere(); }, Qt::QueuedConnection);
+    QMetaObject::invokeMethod(impl.context.get(), [&impl, isReconnectingAll] { impl.ConnectPairedHere(isReconnectingAll); }, Qt::QueuedConnection);
 }
 
 int BluetoothService::WaitForPhone(std::chrono::milliseconds timeout)

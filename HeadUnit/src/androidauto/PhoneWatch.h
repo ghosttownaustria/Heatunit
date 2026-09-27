@@ -20,6 +20,9 @@ struct PhoneWatchDeps {
     std::function<int(std::chrono::milliseconds)> waitForWirelessPhone;
     // The whole wireless flow for that socket (Wi-Fi details, session); it takes the socket over and closes it.
     std::function<AutoConnectResult(int)> connectWireless;
+    // "Android Auto verbinden" without a phone on the cable: asks the paired phones to connect wirelessly (a connected one
+    // is reconnected, which starts Android Auto on it again). False when wireless is not ready. May stay empty.
+    std::function<bool()> requestWireless;
     // Paces the watch where there is no wireless wait.
     std::function<void(std::chrono::milliseconds)> wait;
     // A connection attempt starts and ends (the window shows the phone's picture or the radio's pages).
