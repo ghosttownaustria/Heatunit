@@ -16,6 +16,7 @@
 #include <QMetaObject>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 #include <QThread>
 #include <QTimer>
 #include <QVariant>
@@ -277,6 +278,21 @@ std::string SetAdapterProperty(QDBusConnection& bus, const QString& adapter, con
         {QString::fromLatin1(kAdapterInterface), QString::fromLatin1(name), QVariant::fromValue(QDBusVariant(value))});
 }
 
+// Whether the adapter publishes a service with this UUID (Adapter1.UUIDs, the local service records). BlueZ adds a
+// registered profile's record there only once its RFCOMM server listens.
+bool IsServiceListed(QDBusConnection& bus, const QString& adapter, const char* uuid)
+{
+    for (int attempt = 0; attempt < 3; ++attempt) {
+        if (attempt > 0) std::this_thread::sleep_for(150ms);
+        const auto reply = CallRaw(bus, adapter, "org.freedesktop.DBus.Properties", "Get", {QString::fromLatin1(kAdapterInterface), QStringLiteral("UUIDs")});
+        if (reply.type() == QDBusMessage::ErrorMessage || reply.arguments().isEmpty()) continue;
+        const QVariant value = reply.arguments().at(0);
+        const QStringList uuids = value.userType() == qMetaTypeId<QDBusVariant>() ? qvariant_cast<QDBusVariant>(value).variant().toStringList() : value.toStringList();
+        if (uuids.contains(QString::fromLatin1(uuid), Qt::CaseInsensitive)) return true;
+    }
+    return false;
+}
+
 bool IsPowered(QDBusConnection& bus, const QString& adapter)
 {
     const auto reply = CallRaw(bus, adapter, "org.freedesktop.DBus.Properties", "Get", {QString::fromLatin1(kAdapterInterface), QStringLiteral("Powered")});
@@ -472,12 +488,31 @@ std::string BluetoothService::Impl::StartHere(const std::string& name)
     QVariantMap options;
     options.insert(QStringLiteral("Name"), QStringLiteral("Android Auto Wireless"));
     options.insert(QStringLiteral("Role"), QStringLiteral("server"));
-    options.insert(QStringLiteral("Channel"), QVariant::fromValue<quint16>(kAndroidAutoWirelessChannel));   // D-Bus uint16, as BlueZ requires
     options.insert(QStringLiteral("RequireAuthentication"), false);
     options.insert(QStringLiteral("RequireAuthorization"), false);
-    if (const auto error = Call(bus, root, "org.bluez.ProfileManager1", "RegisterProfile",
-            {QVariant::fromValue(QDBusObjectPath(kProfilePath)), QString::fromLatin1(kAndroidAutoWirelessUuid), options}); !error.empty())
-        return "Der Bluetooth-Dienst fuer Android Auto laesst sich nicht anmelden: " + error;
+    // BlueZ accepts the registration also when the channel is taken, and then publishes no service: the phone connects
+    // over Bluetooth, shows "connecting to Android Auto" and never finds the service. So every channel is checked in the
+    // adapter's list of services before it is kept.
+    const auto registerOn = [&](quint16 candidate) {
+        options.insert(QStringLiteral("Channel"), QVariant::fromValue<quint16>(candidate));   // D-Bus uint16, as BlueZ requires
+        return Call(bus, root, "org.bluez.ProfileManager1", "RegisterProfile",
+            {QVariant::fromValue(QDBusObjectPath(kProfilePath)), QString::fromLatin1(kAndroidAutoWirelessUuid), options});
+    };
+    quint16 channel = 0;
+    std::string listing = " (listed in the adapter's services)";
+    for (const quint16 candidate : kAndroidAutoWirelessChannels) {
+        if (const auto error = registerOn(candidate); !error.empty()) return "Der Bluetooth-Dienst fuer Android Auto laesst sich nicht anmelden: " + error;
+        if (IsServiceListed(bus, adapter, kAndroidAutoWirelessUuid)) { channel = candidate; break; }
+        shared.Log("WARN", "RFCOMM channel " + std::to_string(candidate) + " is taken (BlueZ published no Android Auto service on it); trying the next one");
+        Call(bus, root, "org.bluez.ProfileManager1", "UnregisterProfile", {QVariant::fromValue(QDBusObjectPath(kProfilePath))});
+    }
+    if (channel == 0) {
+        // Seen on none: kept on the first channel anyway, in case this BlueZ does not list the service at all.
+        channel = kAndroidAutoWirelessChannels[0];
+        if (const auto error = registerOn(channel); !error.empty()) return "Der Bluetooth-Dienst fuer Android Auto laesst sich nicht anmelden: " + error;
+        listing = " (NOT listed in the adapter's services: phones may not find it; see journalctl -u bluetooth)";
+        shared.Log("WARN", "The Android Auto service is listed on no RFCOMM channel");
+    }
 
     // Visible only now, with the agent and the service in place: a phone that pairs at once already finds the Android Auto
     // service (and then offers Android Auto by itself), and its pairing request reaches this agent.
@@ -487,7 +522,7 @@ std::string BluetoothService::Impl::StartHere(const std::string& name)
         if (const auto error = SetAdapterProperty(bus, adapter, property, value); !error.empty()) shared.Log("WARN", std::string("Adapter property ") + property + ": " + error);
     isRunning = true;
     shared.Log("INFO", "Bluetooth visible as '" + name + "', pairing with code comparison, Android Auto Wireless service registered on RFCOMM channel " +
-        std::to_string(kAndroidAutoWirelessChannel));
+        std::to_string(channel) + listing);
     return {};
 }
 

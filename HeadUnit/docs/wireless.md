@@ -22,7 +22,7 @@ der Ablauf der Automatik.
 ```text
 Handy                                      HeadUnit (Raspberry Pi), ab Programmstart
                                             Bluetooth an (rfkill entsperren), Dienst "Android Auto Wireless"
-                                            auf RFCOMM-Kanal 8, sichtbar als HEATUNIT (1 bis 2 Sekunden)
+                                            auf einem freien RFCOMM-Kanal (22 ...), sichtbar als HEATUNIT (1 bis 2 Sekunden)
                                             gleichzeitig im Hintergrund: WLAN HEATUNIT-AA (einige Sekunden)
   |  1. Bluetooth: HEATUNIT koppeln (einmal) ---> Handy und HeadUnit zeigen denselben 6-stelligen Code;
   |                                              am Handy "Koppeln", im Menue von HeadUnit "Pair"
@@ -74,7 +74,13 @@ Handy                                      HeadUnit (Raspberry Pi), ab Programms
   durchgefuehrt". Beim Codevergleich gilt diese Regel nicht.
 - **RFCOMM-Kanal:** BlueZ oeffnet fuer einen angemeldeten Dienst nur dann einen RFCOMM-Server, wenn es einen Kanal
   bekommt oder die UUID aus seiner eigenen Liste kennt. Die Android-Auto-UUID kennt es nicht; HeadUnit gibt deshalb
-  Kanal 8 an (`kAndroidAutoWirelessChannel`). Das Log sagt es: "service registered on RFCOMM channel 8".
+  einen Kanal an. **Nicht Kanal 8**, den die kabellosen Adapter nehmen: den belegt auf Raspberry Pi OS BlueZ' eigener
+  Dienst "SIM Access" (`bluetoothctl show` listet ihn). Mit einem belegten Kanal meldet BlueZ die Anmeldung trotzdem
+  als gelungen, veroeffentlicht den Dienst aber nicht: das Handy verbindet sich per Bluetooth, zeigt "Wird mit Android
+  Auto verbunden" und findet den Dienst nie (so am Pi gesehen, bis 2026-09-27). HeadUnit probiert darum die Kanaele
+  22 bis 30 (`kAndroidAutoWirelessChannels`) und behaelt den ersten, auf dem die UUID `4de17a00-...` in der
+  Dienstliste des Adapters auftaucht. Das Log sagt es: "service registered on RFCOMM channel 22 (listed in the
+  adapter's services)". Das Handy findet den Kanal im Diensteintrag, die Nummer ist ihm gleich.
 - **Schon verbundenes Handy:** PipeWire verbindet ein gekoppeltes Handy "fuer Anrufe und Audio" von selbst, schon bevor
   HeadUnit laeuft. Android Auto sucht seinen Dienst beim Verbinden; gibt es ihn da noch nicht, bleibt "Wird mit Android
   Auto verbunden" stehen. Darum trennt HeadUnit, sobald alles bereit ist, jedes Handy, das schon vor dem Start verbunden
@@ -184,7 +190,7 @@ Hotspot ist mit WPA2 geschuetzt; er hat keinen Internetzugang und ist nur fuer d
 | "Der Bluetooth-Dienst fuer Android Auto laesst sich nicht anmelden" | Keine Rechte am System-D-Bus | Nutzer in die Gruppe `bluetooth`: `sudo usermod -aG bluetooth $USER`, neu anmelden |
 | HEATUNIT erscheint am Handy nicht | Nicht sichtbar | `bluetoothctl show` (Discoverable: yes), Log `[BT]` |
 | Am Handy "Keine Kopplung durchgefuehrt" | Kopplung abgelehnt, am Pi nicht bestaetigt oder zu spaet | Im Menue von HeadUnit **Pair** waehlen. Log `[BT]`: steht "pairing with code comparison" da, kommen "Pairing request from ..." und "Pairing confirmed at the head unit"? Wenn nicht: am Pi `bluetoothctl remove <Adresse>` und neu koppeln |
-| "Wird mit Android Auto verbunden" bleibt, im Log kein "opened the Android Auto Wireless service" | Das Handy erreicht den Dienst nicht | Log: steht "RFCOMM channel 8" da? `bluetoothctl show` listet die UUID `4de17a00-...`; **Android Auto verbinden** druecken (verbindet das Handy neu); am Handy HEATUNIT entkoppeln und neu koppeln |
+| "Wird mit Android Auto verbunden" bleibt, im Log kein "opened the Android Auto Wireless service" | Das Handy erreicht den Dienst nicht | Log: steht "service registered on RFCOMM channel ... (listed in the adapter's services)" da? `bluetoothctl show` muss die UUID `4de17a00-...` listen, sonst `journalctl -u bluetooth`; **Android Auto verbinden** druecken (verbindet das Handy neu); am Handy HEATUNIT entkoppeln und neu koppeln |
 | Am Handy steht beim WLAN HEATUNIT-AA "Falsches Passwort" | WPA2-Anmeldung scheitert (PMF, siehe oben), oder das Handy hat ein altes Passwort gespeichert | Neue Version (PMF aus); am Handy HEATUNIT-AA "Vergessen", dann **Android Auto verbinden**. Zur Gegenprobe: `./HeadUnit --test-hotspot` gibt das Passwort aus, von Hand damit beitreten |
 | "Wird mit Android Auto verbunden" bleibt, im Log "Wi-Fi details sent", aber kein "opened the wireless connection" | Das Handy findet oder betritt das WLAN nicht: verborgen, falsches WLAN-Land, Handy ohne 5 GHz, WLAN am Handy aus | `HEADUNIT_WIFI_HIDDEN` nicht setzen; `HEADUNIT_WIFI_BAND=bg`; Log `[WLAN]` zeigt den Status des Handys |
 | Handy ist im WLAN, Android Auto startet nicht | Port 5288 blockiert | `sudo ss -ltnp \| grep 5288`; Firewall pruefen |
@@ -197,7 +203,8 @@ unter `[WATCH]`, Bluetooth unter `[BT]`, der Dialog und das WLAN unter `[WLAN]`,
 grep -E '\[(WATCH|BT|WLAN|AA)\]' headunit.log | tail -n 80
 ```
 
-Die wichtigen Zeilen, in dieser Reihenfolge: "service registered on RFCOMM channel 8", "Hotspot ready after ... ms",
+Die wichtigen Zeilen, in dieser Reihenfolge: "service registered on RFCOMM channel ... (listed ...)", "Hotspot ready
+after ... ms",
 beim ersten Mal "Pairing request from ..., code ...", "Pairing confirmed at the head unit" und "Paired = true", "Asking
 the paired phone ... to connect", "Connected = true", "opened the Android Auto Wireless service" (Handy hat den Dienst
 geoeffnet), "Sent the start request", "The phone asked for the Wi-Fi details", "Wi-Fi details sent", "The phone

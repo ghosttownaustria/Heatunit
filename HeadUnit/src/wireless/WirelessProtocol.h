@@ -19,10 +19,12 @@ namespace headunit {
 constexpr std::uint16_t kWirelessPort = 5288;
 // The Bluetooth service the phone looks for on a car.
 constexpr const char* kAndroidAutoWirelessUuid = "4de17a00-52cb-11e6-bdf4-0800200c9a66";
-// Its RFCOMM channel. BlueZ opens an RFCOMM server for a service only when it is given a channel (or knows the UUID,
-// which it does not for this one): without one the phone finds the service but can never connect to it. 8 is the
-// channel of the wireless dongles that work with real phones; BlueZ's own services use others.
-constexpr std::uint16_t kAndroidAutoWirelessChannel = 8;
+// Its RFCOMM channel, the first of these that is free. BlueZ opens an RFCOMM server for a service only when it is given a
+// channel (or knows the UUID, which it does not for this one). The phone finds the channel in the service record, so any
+// free one does. Not 8, which the wireless dongles use: BlueZ's SIM Access plugin (on in Raspberry Pi OS) holds it, and
+// BlueZ's own profiles, PipeWire and OBEX use 1 to 17. A taken channel does not make the registration fail; BlueZ then
+// just publishes nothing (see BluetoothService, which checks).
+constexpr std::uint16_t kAndroidAutoWirelessChannels[] = {22, 23, 24, 25, 26, 27, 28, 29, 30};
 
 // The security mode as the phone reads it in the Wi-Fi details. Android numbers the modes as bit flags (WPA 4, WPA2 8,
 // both 12, enterprise +16); the imported enum WifiSecurityMode numbers them 0 to 9 instead, so its WPA2_PERSONAL (5) is
