@@ -111,12 +111,16 @@ std::string Hotspot::Start(const HotspotConfig& config, HotspotInfo& info)
     // A leftover from an earlier run (or a crash) would keep the old settings.
     RunCommand({"nmcli", "connection", "delete", "id", kConnectionName}, 15s);
 
+    // WPA2-PSK with CCMP, what the phone is told (kWifiSecurityWpa2Personal). Protected management frames (PMF, 802.11w)
+    // are switched off: NetworkManager offers them by default, the Raspberry Pi's Wi-Fi chip (brcmfmac) does not handle
+    // them as an access point, and a phone that uses them (current Android phones do) then fails the WPA2 handshake and
+    // reports "wrong password" although the password is right.
     const auto added = RunCommand({"nmcli", "connection", "add", "type", "wifi", "ifname", interfaceName, "con-name", kConnectionName,
         "autoconnect", "no", "ssid", config.ssid, "mode", "ap", "802-11-wireless.hidden", config.isHidden ? "yes" : "no",
         "802-11-wireless.band", config.band, "802-11-wireless.channel", std::to_string(config.channel),
         "ipv4.method", "shared", "ipv6.method", "ignore",
         "wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.proto", "rsn", "wifi-sec.pairwise", "ccmp", "wifi-sec.group", "ccmp",
-        "wifi-sec.psk", config.password}, 20s);
+        "wifi-sec.pmf", "disable", "wifi-sec.psk", config.password}, 20s);
     if (added.exitCode != 0) return "Der WLAN-Hotspot konnte nicht angelegt werden: " + Brief(added);
     m_isStarted = true;
 

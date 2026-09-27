@@ -84,6 +84,7 @@ WirelessHandshakeStep WirelessHandshake::OnMessage(const WirelessMessage& messag
         if (!response.ParseFromString(message.payload)) return {{}, "The phone's start response could not be read"};
         if (response.status() < 0) {
             m_isFailed = true;
+            m_failureStatus = static_cast<int>(response.status());
             m_failure = "The phone could not start the wireless connection (status " + StatusText(response.status()) + ")";
             return {{}, m_failure};
         }
@@ -95,6 +96,7 @@ WirelessHandshakeStep WirelessHandshake::OnMessage(const WirelessMessage& messag
         if (!status.ParseFromString(message.payload)) return {{}, "The phone's connection status could not be read"};
         if (status.status() < 0) {
             m_isFailed = true;
+            m_failureStatus = static_cast<int>(status.status());
             m_failure = "The phone could not join the Wi-Fi (status " + StatusText(status.status()) +
                 (status.has_error_message() ? ": " + status.error_message() : std::string()) + ")";
             return {{}, m_failure};
@@ -103,6 +105,27 @@ WirelessHandshakeStep WirelessHandshake::OnMessage(const WirelessMessage& messag
     }
     default:
         return {{}, "Ignored a message from the phone: id " + std::to_string(message.id) + ", " + std::to_string(message.payload.size()) + " bytes"};
+    }
+}
+
+std::string WifiFailureAdvice(int status)
+{
+    switch (static_cast<aaw::Status>(status)) {
+    case aaw::STATUS_WIFI_INCORRECT_CREDENTIALS:
+        return "Das Handy meldet ein falsches WLAN-Passwort. Am Handy in den WLAN-Einstellungen HEATUNIT-AA 'Vergessen' "
+               "und Android Auto neu verbinden (Taste Android Auto verbinden).";
+    case aaw::STATUS_WIFI_DISABLED:
+    case aaw::STATUS_PHONE_WIFI_DISABLED:
+        return "Das WLAN am Handy ist aus: einschalten.";
+    case aaw::STATUS_WIFI_INACCESSIBLE_CHANNEL:
+    case aaw::STATUS_NO_SUPPORTED_WIFI_CHANNELS:
+        return "Das Handy kann den WLAN-Kanal nicht nutzen: WLAN-Land pruefen, oder 2,4 GHz mit HEADUNIT_WIFI_BAND=bg.";
+    case aaw::STATUS_WIFI_NETWORK_UNAVAILABLE:
+        return "Das Handy findet das WLAN nicht: Ist es verborgen (HEADUNIT_WIFI_HIDDEN), oder zu weit weg?";
+    case aaw::STATUS_INSTRUCT_USER_TO_CHECK_THE_PHONE:
+        return "Das Handy verlangt eine Bestaetigung: aufs Handy schauen.";
+    default:
+        return "Ist das WLAN am Handy an?";
     }
 }
 }

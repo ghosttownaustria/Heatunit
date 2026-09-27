@@ -73,11 +73,17 @@ public:
     // The phone reported that it cannot use the network (wrong password, Wi-Fi off, no suitable channel, ...).
     bool IsFailed() const { return m_isFailed; }
     const std::string& Failure() const { return m_failure; }
+    // The phone's status code of that failure (aap_protobuf.aaw.Status, negative), 0 without one.
+    int FailureStatus() const { return m_failureStatus; }
     bool HasSentInfo() const { return m_hasSentInfo; }
 private:
     WifiCredentials m_credentials;
     bool m_isFailed{};
     bool m_hasSentInfo{};
     std::string m_failure;
+    int m_failureStatus{};
 };
+
+// What a failure status of the phone means and what to do about it (German, for the window).
+std::string WifiFailureAdvice(int status);
 }

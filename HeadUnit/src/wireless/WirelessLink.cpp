@@ -59,7 +59,7 @@ WirelessLink EstablishWirelessLink(int rfcommFd, int listenFd, const WifiCredent
                     if (!step(handshake.OnMessage(message))) { link.message = "Die Bluetooth-Verbindung zum Handy brach beim Senden ab."; return link; }
                     if (handshake.IsFailed()) {
                         link.hasSentInfo = handshake.HasSentInfo();   // then the phone had the details and could not join
-                        link.message = handshake.Failure() + ". Ist das WLAN am Handy an?";
+                        link.message = handshake.Failure() + ". " + WifiFailureAdvice(handshake.FailureStatus());
                         return link;
                     }
                 }

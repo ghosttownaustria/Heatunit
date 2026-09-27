@@ -50,6 +50,10 @@ Handy                                      HeadUnit (Raspberry Pi), ab Programms
   man das WLAN nie. Es startet gleichzeitig mit Bluetooth im Hintergrund (`nmcli` braucht einige Sekunden), damit
   HEATUNIT sofort sichtbar ist; oeffnet ein Handy den Android-Auto-Dienst, bevor es laeuft, wartet HeadUnit darauf (bis
   60 Sekunden). Ein Hotspot, den ein abgebrochener Lauf hinterlassen hat, wird beim naechsten Start entfernt.
+- **WPA2 ohne PMF:** Der Hotspot ist WPA2-PSK mit CCMP, und die "Protected Management Frames" (PMF, 802.11w) sind aus
+  (`wifi-sec.pmf disable`). NetworkManager bietet sie sonst an, der WLAN-Chip des Pi (brcmfmac) beherrscht sie als
+  Access Point aber nicht; ein Handy, das sie nutzt (aktuelle Android-Handys), scheitert dann an der Anmeldung und
+  zeigt beim WLAN **"Falsches Passwort"**, obwohl das Passwort stimmt (so am Samsung gesehen).
 - **Sichtbar, nicht verborgen:** Der Netzname wird gesendet; HEATUNIT-AA taucht also in WLAN-Listen auf (wie bei den
   kabellosen Adaptern und Autos, die mit echten Handys funktionieren). Verborgen (`HEADUNIT_WIFI_HIDDEN=1`) findet
   Android Auto das Netz in seiner WLAN-Suche vermutlich nicht und bleibt bei "Wird mit Android Auto verbunden" stehen.
@@ -181,6 +185,7 @@ Hotspot ist mit WPA2 geschuetzt; er hat keinen Internetzugang und ist nur fuer d
 | HEATUNIT erscheint am Handy nicht | Nicht sichtbar | `bluetoothctl show` (Discoverable: yes), Log `[BT]` |
 | Am Handy "Keine Kopplung durchgefuehrt" | Kopplung abgelehnt, am Pi nicht bestaetigt oder zu spaet | Im Menue von HeadUnit **Pair** waehlen. Log `[BT]`: steht "pairing with code comparison" da, kommen "Pairing request from ..." und "Pairing confirmed at the head unit"? Wenn nicht: am Pi `bluetoothctl remove <Adresse>` und neu koppeln |
 | "Wird mit Android Auto verbunden" bleibt, im Log kein "opened the Android Auto Wireless service" | Das Handy erreicht den Dienst nicht | Log: steht "RFCOMM channel 8" da? `bluetoothctl show` listet die UUID `4de17a00-...`; **Android Auto verbinden** druecken (verbindet das Handy neu); am Handy HEATUNIT entkoppeln und neu koppeln |
+| Am Handy steht beim WLAN HEATUNIT-AA "Falsches Passwort" | WPA2-Anmeldung scheitert (PMF, siehe oben), oder das Handy hat ein altes Passwort gespeichert | Neue Version (PMF aus); am Handy HEATUNIT-AA "Vergessen", dann **Android Auto verbinden**. Zur Gegenprobe: `./HeadUnit --test-hotspot` gibt das Passwort aus, von Hand damit beitreten |
 | "Wird mit Android Auto verbunden" bleibt, im Log "Wi-Fi details sent", aber kein "opened the wireless connection" | Das Handy findet oder betritt das WLAN nicht: verborgen, falsches WLAN-Land, Handy ohne 5 GHz, WLAN am Handy aus | `HEADUNIT_WIFI_HIDDEN` nicht setzen; `HEADUNIT_WIFI_BAND=bg`; Log `[WLAN]` zeigt den Status des Handys |
 | Handy ist im WLAN, Android Auto startet nicht | Port 5288 blockiert | `sudo ss -ltnp \| grep 5288`; Firewall pruefen |
 | Handy am USB-Kabel startet nicht erneut | Absicht: ein Handy bekommt einen Versuch pro Anstecken | Kabel neu anstecken oder **Android Auto verbinden** |

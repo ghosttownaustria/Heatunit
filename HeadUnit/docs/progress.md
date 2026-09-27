@@ -1,5 +1,23 @@
 # Progress
 
+## 2026-09-27 (night): "wrong password" at the hotspot, protected management frames off
+
+Reported on the Pi with the Samsung SM-F776B after the previous entry: the pairing page works; the phone still stays at
+"Wird mit Android Auto verbunden", and its Wi-Fi list shows HEATUNIT-AA (5 GHz, now visible) with "Falsches Passwort".
+So the phone got the Wi-Fi details over Bluetooth and tried to join, but the WPA2 handshake failed. The password sent is
+the hotspot's own (same string from `LoadWirelessSettings`, field 2 of `WifiInfoResponse` as in the working dongle).
+
+- **Cause (known for Raspberry Pi hotspots made by NetworkManager):** NetworkManager offers protected management frames
+  (PMF, 802.11w) by default; the Pi's brcmfmac chip does not handle them as an access point, and phones that use them
+  fail the handshake with "incorrect password". The documented fix is `wifi-sec.pmf disable`
+  ([Pi My Life Up](https://pimylifeup.com/raspberry-pi-wireless-access-point/),
+  [Raspberry Pi forum](https://forums.raspberrypi.com/viewtopic.php?t=358481)). `Hotspot::Start` now adds it.
+- **Readable failures:** a negative status from the phone now gets advice in the window (`WifiFailureAdvice`): wrong
+  password (forget HEATUNIT-AA on the phone, connect again), Wi-Fi off, channel not usable, network not found.
+  `WirelessHandshake::FailureStatus` keeps the code. WirelessTests checks the wrong-password advice.
+- **Verified:** nothing here compiles on Windows (`src/wireless/` only); CI or the Pi build will show errors.
+  **Not verified:** that PMF is the cause (inferred from the symptom and the known Pi issue, no log); the phone joining.
+
 ## 2026-09-27 (later): pairing question in the menu, visible Wi-Fi, Android Auto key goes wireless
 
 Reported on the Pi with the Samsung SM-F776B after the previous entry: pairing now works (the phone asks with the

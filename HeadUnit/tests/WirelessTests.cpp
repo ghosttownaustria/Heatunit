@@ -330,6 +330,7 @@ void TestLinkPhoneCannotJoin()
     // The station takes this as a phone that could not find the network (and then broadcasts a hidden one's name).
     Require(run.link.hasSentInfo, "A phone that got the Wi-Fi details and could not join must be reported as having them");
     Require(run.link.message.find("-3") != std::string::npos, ("The failure must name the phone's status: " + run.link.message).c_str());
+    Require(run.link.message.find("Passwort") != std::string::npos, ("A wrong password must be named as such: " + run.link.message).c_str());
     Require(run.duration < std::chrono::seconds(3), "A reported failure must end the wait at once");
 }
 

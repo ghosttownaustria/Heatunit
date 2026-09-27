@@ -127,7 +127,8 @@ delayed D-Bus reply: `BluetoothEvents::onPairingRequest` hands the window the ph
 function (callable from any thread; it holds only a `weak_ptr` to the pending request), and the window's `PairingPage`
 asks in front of everything else (`MainWindow::FrontPage`); BlueZ's `Cancel`, a finished pairing or the service's
 stop take the question away (`onPairingEnd`). Without that event (`--test-bluetooth`) the agent confirms by itself.
-The NetworkManager hotspot (`Hotspot`, `nmcli` without a shell; its name is broadcast, as Android Auto does not find a
+The NetworkManager hotspot (`Hotspot`, `nmcli` without a shell; WPA2-PSK/CCMP with protected management frames off,
+which the Pi's brcmfmac chip cannot do as an access point; its name is broadcast, as Android Auto does not find a
 hidden network) starts at the same time in the background (`std::async`). Once it is up, the phones paired before are
 (re)connected (`ConnectPairedPhones`: a phone that was connected before the service existed is disconnected first; with
 "Android Auto verbinden" and no phone on the cable, `PhoneWatchDeps::requestWireless` reconnects every connected
