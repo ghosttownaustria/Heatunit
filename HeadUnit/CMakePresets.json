@@ -16,8 +16,7 @@
     },
     {
       "name": "core-only",
-      "displayName": "Windows: portable core and its tests only",
-      "generator": "Visual Studio 17 2022",
+      "displayName": "Windows: portable core and its tests only (newest Visual Studio)",
       "architecture": "x64",
       "binaryDir": "${sourceDir}/out/build/core-only",
       "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" },

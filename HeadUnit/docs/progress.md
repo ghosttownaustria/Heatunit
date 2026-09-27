@@ -1,5 +1,19 @@
 # Progress
 
+## 2026-09-27 (late night): CI `windows-core` failed, the runner has Visual Studio 2026 only
+
+GitHub's `windows-latest` image now ships Visual Studio 2026 without 2022, so `cmake --preset core-only` stopped with
+"Generator Visual Studio 17 2022 could not find any instance of Visual Studio" (the Linux job was green).
+
+- **Fix:** the `core-only` preset names no generator; CMake then takes the newest Visual Studio it knows (VS 2026 with
+  CMake 4.x, VS 2022 with VS 2022's bundled CMake 3.x). `actions/checkout` moved from v4 to v6 (Node 24; removes the
+  Node 20 deprecation warnings). The `windows-vs2022` preset (CMake full app) still names VS 2022; the full app on
+  Windows is built with `HeadUnit.sln` (VS 2026, v145), which this does not touch.
+- **Verified on this Windows machine:** `core-only` configures, builds and passes CoreTests with VS 2026's CMake 4.3
+  (generator Visual Studio 18 2026), and configures with VS 2022's CMake. **Not verified:** the GitHub run itself
+  (needs a push). An existing `out/build/core-only` made by one Visual Studio must be deleted before configuring it with
+  the other one's CMake.
+
 ## 2026-09-27 (late night): the Android Auto service was never published (RFCOMM channel 8 is BlueZ's SIM Access)
 
 Evidence from the Pi (SM-F776B): with the PMF fix the phone joins HEATUNIT-AA by hand with the stored password, so the

@@ -4,3 +4,4 @@ HeadUnit/CMakeUserPresets.json
 *.log
 .vs/
 *.vcxproj.user
+.claude/worktrees/
