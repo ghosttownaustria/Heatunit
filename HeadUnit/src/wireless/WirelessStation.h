@@ -31,6 +31,7 @@ public:
     int WaitForPhone(std::chrono::milliseconds timeout);
     bool ReconnectPhones();
     AutoConnectResult Serve(int rfcommFd, std::atomic_bool& isStopRequested, ProjectionCallbacks callbacks);
+    void SwitchRadiosOff();
 
 private:
     using Clock = std::chrono::steady_clock;

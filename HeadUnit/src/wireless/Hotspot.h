@@ -44,4 +44,5 @@ private:
 };
 
 void RemoveLeftoverHotspot(Logger& logger);
+void SwitchWifiOff(Logger& logger);
 }

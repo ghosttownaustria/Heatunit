@@ -43,9 +43,10 @@ class SettingsPage;
 class VideoWidget;
 
 // Always ready, like a car: from the start the window watches USB and (where built) wireless Android Auto and connects
-// whichever phone comes, with no button to press (RunPhoneWatch). The button ends a running session, and otherwise
-// connects the phone on the USB cable once more (finding the phone, repairing the driver, starting Android Auto,
-// restarting the USB link when needed). The scripted test modes connect once over USB instead. Next to the picture sits
+// whichever phone comes, with no button to press (RunPhoneWatch). The Android Auto tile and the projection key connect
+// the phone on the USB cable once more (finding the phone, repairing the driver, starting Android Auto, restarting the
+// USB link when needed). The button quits: it ends the session, switches Bluetooth and the Wi-Fi off (where wireless is
+// built) and closes the program. The scripted test modes connect once over USB instead. Next to the picture sits
 // the simulated centre console: rotary knob, hard keys and the audio display. The picture itself takes mouse input as
 // touch. In its place the radio's own pages are shown whenever the console is on the radio's side (always while no phone
 // is projected): the home menu, the music player, the tuner and the settings; the knob then works the page instead of
@@ -101,6 +102,7 @@ private:
     std::atomic_bool m_isStopRequested{};             // ends the running connection or session
     std::atomic_bool m_isWatchStopRequested{};        // ends the automatic mode (the window closes)
     std::atomic_bool m_isUsbRequested{};              // the automatic mode connects the phone on the USB cable once more
+    std::atomic_bool m_isRadioOffRequested{};         // the program quits with Bluetooth and the Wi-Fi switched off
     std::mutex m_displayMutex;                        // m_display, as the worker reads it for each connection
     std::mutex m_frameMutex;
     std::optional<VideoFrame> m_latestFrame;
@@ -119,7 +121,7 @@ private:
     void ConnectSignals();
     void StartMode();
     void SetState(State state);
-    void OnButton();
+    void Quit();
     void StartConnect();
     void BeginConnect();
     void BeginWatch();
@@ -127,7 +129,6 @@ private:
     ProjectionCallbacks MakeCallbacks();
     void OnAttemptStart();
     void OnAttemptEnd(const AutoConnectResult& result);
-    void RequestStop();
     void FinishConnect(const AutoConnectResult& result);
     void ClearPicture(const QString& message);
     void ShowStep(const QString& text);

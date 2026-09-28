@@ -75,9 +75,12 @@ skip queued completions. Watchdogs: 30 s without any inbound data after service
 discovery, and a 90 s startup limit whose message names the stage that stalled.
 Undecodable video packets are dropped and still acknowledged.
 
-UI lifecycle: `MainWindow` has a single state (Idle, Connecting,
-Stopping) behind one button that connects (all steps run in `RunAutoConnect`) or ends the session. Closing the window during a
-session requests a stop and closes once the worker has finished.
+UI lifecycle: `MainWindow` has a single state (Idle, Watching, Connecting, Stopping) shown on one button, **Beenden**,
+which quits like switching a car off: it sets `m_isRadioOffRequested` and closes the window. Closing the window during
+a session requests a stop and closes once the worker has finished; with `m_isRadioOffRequested` the watch's worker
+first calls `WirelessStation::SwitchRadiosOff` (station down, `BluetoothService::SwitchOff` powers the adapter off,
+`SwitchWifiOff` runs `nmcli radio wifi off`). Connecting again goes through the Android Auto tile or the projection
+key.
 
 FFmpeg accepts only the advertised H.264 video path. Decoded RGB frames replace
 the previous mailbox frame under a mutex; a 33 ms Qt timer consumes the newest
@@ -127,7 +130,7 @@ The automatic mode: outside the scripted test modes the window starts one worker
 (core, Qt-free, tested with scripted deps) until the window closes. Each round it takes a quiet libusb scan
 (`UsbPhoneIdentities`: serial numbers, so a phone switching into and out of accessory mode stays the same phone) and
 connects a newly plugged-in phone with `ConnectPhoneAutomatically`; in between it waits a second for a wireless phone.
-Two stop flags: `m_isStopRequested` ends the running attempt ("Verbindung beenden"; the watch clears it before each
+Two stop flags: `m_isStopRequested` ends the running attempt (the watch clears it before each
 attempt), `m_isWatchStopRequested` ends the watch (closing, which sets both). Attempt start and end are posted to the
 window, which switches between the phone's picture and the radio's pages.
 
@@ -147,7 +150,7 @@ The NetworkManager hotspot (`Hotspot`, `nmcli` without a shell; WPA2-PSK/CCMP wi
 which the Pi's brcmfmac chip cannot do as an access point; its name is broadcast, as Android Auto does not find a
 hidden network) starts at the same time in the background (`std::async`). Once it is up, the phones paired before are
 (re)connected (`ConnectPairedPhones`: a phone that was connected before the service existed is disconnected first; with
-"Android Auto verbinden" and no phone on the cable, `PhoneWatchDeps::requestWireless` reconnects every connected
+the Android Auto tile and no phone on the cable, `PhoneWatchDeps::requestWireless` reconnects every connected
 phone). When a phone opens the service, `WirelessStation::Serve`
 waits for a hotspot that is still starting, then `EstablishWirelessLink` hands the phone the Wi-Fi details over the
 RFCOMM socket (`WirelessHandshake`: pure message logic; both Qt-free and tested against a simulated phone) and accepts

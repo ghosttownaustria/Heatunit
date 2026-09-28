@@ -39,12 +39,15 @@ Handy                                      HeadUnit (Raspberry Pi), ab Programms
 - **Automatik** (`RunPhoneWatch`): Ein Hintergrund-Ablauf schaut jede Sekunde auf den USB-Bus und wartet dazwischen
   auf Bluetooth. Ein Handy am USB-Kabel bekommt **einmal** Android Auto, wenn es angesteckt wird (auch wenn es beim
   Start schon steckt), und erst nach dem Abziehen wieder. So startet ein Handy, bei dem die Sitzung beendet wurde, nicht
-  sofort neu. Nochmals ohne Abziehen: **Android Auto verbinden** (oder die Kachel Android Auto). Steckt kein Handy am
+  sofort neu. Nochmals ohne Abziehen: die Kachel **Android Auto** (oder die Projektionstaste). Steckt kein Handy am
   Kabel, verbindet dieselbe Taste die gekoppelten Handys kabellos: ein verbundenes wird kurz getrennt und neu
   verbunden, das stoesst Android Auto am Handy neu an. Ein kabelloses Handy kann sich jederzeit selbst neu verbinden. Wird ein Handy waehrend einer kabellosen Sitzung zum Laden angesteckt,
   uebernimmt USB danach nicht.
-- **Verbindung beenden** beendet nur die laufende Sitzung; die Automatik laeuft weiter. Erst das Schliessen des
-  Fensters (oder Ctrl+C, `systemctl stop`) baut WLAN und Bluetooth ab.
+- **Beenden** (Knopf unter dem Bild) schaltet ab wie ein Auto: die Sitzung endet mit Goodbye, der Hotspot und der
+  Bluetooth-Dienst werden abgebaut, dann werden der Bluetooth-Adapter (trennt jedes Handy) und der WLAN-Chip
+  ausgeschaltet (`nmcli radio wifi off`, also auch ein anderes WLAN des Pi; eine SSH-Sitzung ueber WLAN endet) und das
+  Programm schliesst sich. Der naechste Start schaltet beides wieder ein. Das Schliessen des Fensters (oder Ctrl+C,
+  `systemctl stop`) baut nur Hotspot und Bluetooth-Dienst ab; der Pi kehrt dann in sein vorheriges WLAN zurueck.
 - Der **Hotspot kommt vom HeadUnit-Rechner**, nicht vom Handy. Er wird mit NetworkManager (`nmcli`) angelegt, der auch
   die Adressen verteilt (`ipv4.method shared`). Das Handy bekommt Name und Passwort ueber Bluetooth; auswaehlen muss
   man das WLAN nie. Es startet gleichzeitig mit Bluetooth im Hintergrund (`nmcli` braucht einige Sekunden), damit
@@ -194,11 +197,11 @@ Hotspot ist mit WPA2 geschuetzt; er hat keinen Internetzugang und ist nur fuer d
 | "Der Bluetooth-Dienst fuer Android Auto laesst sich nicht anmelden" | Keine Rechte am System-D-Bus | Nutzer in die Gruppe `bluetooth`: `sudo usermod -aG bluetooth $USER`, neu anmelden |
 | HEATUNIT erscheint am Handy nicht | Nicht sichtbar | `bluetoothctl show` (Discoverable: yes), Log `[BT]` |
 | Am Handy "Keine Kopplung durchgefuehrt" | Kopplung abgelehnt, am Pi nicht bestaetigt oder zu spaet | Im Menue von HeadUnit **Pair** waehlen. Log `[BT]`: steht "pairing with code comparison" da, kommen "Pairing request from ..." und "Pairing confirmed at the head unit"? Wenn nicht: am Pi `bluetoothctl remove <Adresse>` und neu koppeln |
-| "Wird mit Android Auto verbunden" bleibt, im Log kein "opened the Android Auto Wireless service" | Das Handy erreicht den Dienst nicht | Log: steht "service registered on RFCOMM channel ... (listed in the adapter's services)" da? `bluetoothctl show` muss die UUID `4de17a00-...` listen, sonst `journalctl -u bluetooth`; **Android Auto verbinden** druecken (verbindet das Handy neu); am Handy HEATUNIT entkoppeln und neu koppeln |
-| Am Handy steht beim WLAN HEATUNIT-AA "Falsches Passwort" | WPA2-Anmeldung scheitert (PMF, siehe oben), oder das Handy hat ein altes Passwort gespeichert | Neue Version (PMF aus); am Handy HEATUNIT-AA "Vergessen", dann **Android Auto verbinden**. Zur Gegenprobe: `./HeadUnit --test-hotspot` gibt das Passwort aus, von Hand damit beitreten |
+| "Wird mit Android Auto verbunden" bleibt, im Log kein "opened the Android Auto Wireless service" | Das Handy erreicht den Dienst nicht | Log: steht "service registered on RFCOMM channel ... (listed in the adapter's services)" da? `bluetoothctl show` muss die UUID `4de17a00-...` listen, sonst `journalctl -u bluetooth`; Kachel **Android Auto** waehlen (verbindet das Handy neu); am Handy HEATUNIT entkoppeln und neu koppeln |
+| Am Handy steht beim WLAN HEATUNIT-AA "Falsches Passwort" | WPA2-Anmeldung scheitert (PMF, siehe oben), oder das Handy hat ein altes Passwort gespeichert | Neue Version (PMF aus); am Handy HEATUNIT-AA "Vergessen", dann Kachel **Android Auto**. Zur Gegenprobe: `./HeadUnit --test-hotspot` gibt das Passwort aus, von Hand damit beitreten |
 | "Wird mit Android Auto verbunden" bleibt, im Log "Wi-Fi details sent", aber kein "opened the wireless connection" | Das Handy findet oder betritt das WLAN nicht: verborgen, falsches WLAN-Land, Handy ohne 5 GHz, WLAN am Handy aus | `HEADUNIT_WIFI_HIDDEN` nicht setzen; `HEADUNIT_WIFI_BAND=bg`; Log `[WLAN]` zeigt den Status des Handys |
 | Handy ist im WLAN, Android Auto startet nicht | Port 5288 blockiert | `sudo ss -ltnp \| grep 5288`; Firewall pruefen |
-| Handy am USB-Kabel startet nicht erneut | Absicht: ein Handy bekommt einen Versuch pro Anstecken | Kabel neu anstecken oder **Android Auto verbinden** |
+| Handy am USB-Kabel startet nicht erneut | Absicht: ein Handy bekommt einen Versuch pro Anstecken | Kabel neu anstecken oder Kachel **Android Auto** |
 
 **Das Log lesen:** Jeder Schritt steht in `headunit.log` (im Ordner, aus dem HeadUnit gestartet wurde), die Automatik
 unter `[WATCH]`, Bluetooth unter `[BT]`, der Dialog und das WLAN unter `[WLAN]`, die Sitzung unter `[AA]`:

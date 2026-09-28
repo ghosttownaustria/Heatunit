@@ -19,12 +19,14 @@ jeden davon im Fenster gemeldet: bei Bedarf den USB-Treiber reparieren (einmal d
 Windows-Abfrage nach Administratorrechten bestaetigen), Android Auto auf dem Handy starten
 und das Video anzeigen. Auf dem Handy nur die Android-Auto-Hinweise bestaetigen. Unter
 Linux kommt kabelloses Android Auto dazu, ebenfalls automatisch ([wireless.md](docs/wireless.md)).
-Waehrend der Sitzung heisst der Knopf **Verbindung beenden**: Das Handy bekommt ein Goodbye,
-dann wird die USB-Schnittstelle freigegeben; die Automatik wartet danach weiter. Ein Handy,
-das stecken bleibt, startet erst nach neuem Anstecken wieder, oder mit **Android Auto verbinden**.
+Der Knopf **Beenden** schaltet das Radio aus: Das Handy bekommt ein Goodbye, die USB-Schnittstelle
+wird freigegeben, unter Linux werden Bluetooth und WLAN des Raspberry Pi ausgeschaltet (beim naechsten
+Start schaltet HeadUnit beides wieder ein), dann schliesst sich das Programm. Ein Handy, das stecken
+bleibt, startet nach einer beendeten Sitzung erst nach neuem Anstecken wieder, oder mit der Kachel
+**Android Auto** bzw. der Projektionstaste.
 
-**Displaygroesse.** Solange keine Sitzung laeuft, laesst sich neben dem Verbinden-Knopf die Displaygroesse
-waehlen: 800 x 480, 1280 x 720 (HD), 1600 x 600 (Ultrawide) oder 1920 x 1080 (Full HD). Das Handy erfaehrt sie
+**Displaygroesse.** Solange keine Sitzung laeuft, laesst sich die Displaygroesse
+waehlen (neben dem Knopf Beenden): 800 x 480, 1280 x 720 (HD), 1600 x 600 (Ultrawide) oder 1920 x 1080 (Full HD). Das Handy erfaehrt sie
 beim Verbinden (Video-Aufloesung, Touchflaeche und passende Bilddichte), darum ist die Auswahl waehrend einer
 Verbindung gesperrt. Die Wahl wird gemerkt (Windows-Benutzer, Registry `HKCU\Software\HeadUnit`); das
 Startmenue im Bildfeld zeigt schon vor dem Verbinden die Form des gewaehlten Displays.

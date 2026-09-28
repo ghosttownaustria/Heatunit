@@ -1,5 +1,18 @@
 # Progress
 
+## 2026-09-28 (night): quit button, hidden Wi-Fi, volume bar, Bluetooth tile, status bar, touch
+
+From the user's list and the new design `docs/design/heatunit.svg` (status bar, Bluetooth tile); one commit per point.
+
+- **Beenden** (the button under the picture, where "Android Auto verbinden" / "Verbindung beenden" was): quits like
+  switching a car off. The session ends with its goodbye, the watch ends, and on Linux `WirelessStation::SwitchRadiosOff`
+  takes the station down and switches the Bluetooth adapter (`Powered` false, drops every phone) and the Wi-Fi chip
+  (`nmcli radio wifi off`) off; then the window closes. The next start switches both on again (as before:
+  `PowerOn`, `nmcli radio wifi on`). Closing the window otherwise still only takes the hotspot and the service down.
+  Connecting again is the Android Auto tile or the projection key; the texts that named the old button say so.
+  - Verified here: `windows-debug` builds without warnings, CoreTests and ProtocolTests pass; the Linux sources passed
+    the syntax check against POSIX stubs. Not verified: the click itself and the radios going off on the Pi.
+
 ## 2026-09-28: C++ coding standard applied to the whole project; `bin/` layout and four build profiles
 
 The user's C++ coding standard (global CLAUDE.md) is now applied throughout, with the exceptions recorded in the

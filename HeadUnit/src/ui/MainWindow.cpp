@@ -234,7 +234,7 @@ QWidget* MainWindow::BuildScreens(QWidget* parent)
     return m_screens;
 }
 
-// The display size next to the button that connects (it is fixed once the connection starts), the current step, the
+// The display size next to the button that quits (the size is fixed once the connection starts), the current step, the
 // status line and the history of steps.
 void MainWindow::BuildControls(QWidget* parent, QVBoxLayout* layout)
 {
@@ -251,6 +251,11 @@ void MainWindow::BuildControls(QWidget* parent, QVBoxLayout* layout)
     m_button = new QPushButton(parent);
     m_button->setMinimumHeight(48);
     m_button->setFocusPolicy(Qt::NoFocus);
+#ifdef HEADUNIT_WIRELESS
+    m_button->setToolTip("Trennt das Handy, schaltet Bluetooth und WLAN aus und beendet HeadUnit.");
+#else
+    m_button->setToolTip("Trennt das Handy und beendet HeadUnit.");
+#endif
     controls->addWidget(displayLabel);
     controls->addWidget(m_displayChoice);
     controls->addWidget(m_button, 1);
@@ -301,7 +306,7 @@ void MainWindow::ConnectSignals()
         m_logger.Write(LogLevel::Info, "UI", message);
         ShowStep(QString::fromStdString(message));
     });
-    connect(m_button, &QPushButton::clicked, this, &MainWindow::OnButton);
+    connect(m_button, &QPushButton::clicked, this, &MainWindow::Quit);
     auto* tickTimer = new QTimer(this);
     connect(tickTimer, &QTimer::timeout, this, &MainWindow::Tick);
     tickTimer->start(kTickIntervalMs);
@@ -344,18 +349,20 @@ void MainWindow::SetState(State state)
 {
     m_state = state;
     m_button->setEnabled(state != State::Stopping);
-    m_button->setText(state == State::Connecting ? "Verbindung beenden" : state == State::Stopping ? "Beende ..." : "Android Auto verbinden");
+    m_button->setText(state == State::Stopping ? "Beende ..." : "Beenden");
     m_displayChoice->setEnabled(state == State::Idle || state == State::Watching);
 }
 
-// The button ends a running connection, otherwise it connects.
-void MainWindow::OnButton()
+// The button quits like switching the car off: the phone gets its goodbye, Bluetooth and the Wi-Fi are switched off
+// (WatchPhones does that once the session is over) and the window closes (see closeEvent).
+void MainWindow::Quit()
 {
-    if (m_state == State::Connecting) RequestStop();
-    else StartConnect();
+    m_logger.Write(LogLevel::Info, "UI", "Quit: ending the connection, switching Bluetooth and the Wi-Fi off, closing");
+    m_isRadioOffRequested = true;
+    close();
 }
 
-// The button, the Android Auto tile and the projection key. Normally the automatic mode runs already; then this connects
+// The Android Auto tile and the projection key. Normally the automatic mode runs already; then this connects
 // the phone on the USB cable once more (after a session, the phone stays plugged in and is not connected again by
 // itself). The scripted test modes connect once over USB and report the result.
 void MainWindow::StartConnect()
@@ -441,8 +448,12 @@ AutoConnectResult MainWindow::WatchPhones()
     deps.waitForWirelessPhone = [&wireless](std::chrono::milliseconds timeout) { return wireless.WaitForPhone(timeout); };
     deps.connectWireless = [this, &wireless](int phone) { return wireless.Serve(phone, m_isStopRequested, MakeCallbacks()); };
     deps.requestWireless = [&wireless] { return wireless.ReconnectPhones(); };
-#endif
+    const AutoConnectResult result = RunPhoneWatch(deps, m_logger, m_isWatchStopRequested, m_isStopRequested, m_isUsbRequested, onStatus);
+    if (m_isRadioOffRequested) wireless.SwitchRadiosOff();
+    return result;
+#else
     return RunPhoneWatch(deps, m_logger, m_isWatchStopRequested, m_isStopRequested, m_isUsbRequested, onStatus);
+#endif
 }
 
 // What a connection needs from the window; called on the worker for every connection. The phone's music is watched, so
@@ -490,15 +501,6 @@ void MainWindow::OnAttemptEnd(const AutoConnectResult& result)
     m_status->setText("Android Auto: nicht verbunden");
     ShowScreen();
     if (!m_isCloseRequested && (m_state == State::Connecting || m_state == State::Stopping)) SetState(State::Watching);
-}
-
-// The button ends the running connection.
-void MainWindow::RequestStop()
-{
-    if (m_state != State::Connecting) return;
-    m_isStopRequested = true;
-    SetState(State::Stopping);
-    ShowStep("Beende Android Auto ...");
 }
 
 // The worker has ended (the automatic mode or a test connection): a test exits with its result, a close request closes.

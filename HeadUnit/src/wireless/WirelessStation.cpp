@@ -90,6 +90,16 @@ AutoConnectResult WirelessStation::Serve(int rfcommFd, std::atomic_bool& isStopR
     return result;
 }
 
+// The person quit HeadUnit with its button, as when a car is switched off: everything is taken down, then the Bluetooth
+// adapter (which drops every phone's Bluetooth link) and the Wi-Fi chip are switched off. The next start switches both
+// on again.
+void WirelessStation::SwitchRadiosOff()
+{
+    StopAll();
+    m_bluetooth.SwitchOff();
+    SwitchWifiOff(m_logger);
+}
+
 // A step for the log and the window.
 void WirelessStation::Report(const std::string& text)
 {

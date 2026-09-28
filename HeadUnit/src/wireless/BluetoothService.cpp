@@ -109,6 +109,21 @@ void BluetoothService::Stop()
     m_context.CloseWaitingPhones();
 }
 
+// Stops the service and switches the Bluetooth adapter off, which ends every phone's Bluetooth link. Start switches it
+// on again.
+void BluetoothService::SwitchOff()
+{
+    Stop();
+    auto bus = QDBusConnection::systemBus();
+    if (!bus.isConnected()) return;
+    const auto state = bluez::ReadBluez(bus);
+    if (state.adapterPath.isEmpty()) return;
+    if (const auto error = bluez::SetAdapterProperty(bus, state.adapterPath, "Powered", false); !error.empty())
+        m_context.Log(LogLevel::Warning, "Switching the Bluetooth adapter off failed: " + error);
+    else
+        m_context.Log(LogLevel::Info, "Bluetooth adapter switched off");
+}
+
 // Whether Bluetooth is visible with the Android Auto service.
 bool BluetoothService::IsRunning() const
 {

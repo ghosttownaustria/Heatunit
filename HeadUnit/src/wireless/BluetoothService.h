@@ -34,6 +34,7 @@ public:
 
     std::string Start(const std::string& name);
     void Stop();
+    void SwitchOff();
     bool IsRunning() const;
     void ConnectPairedPhones(bool isReconnectingAll = false);
     int WaitForPhone(std::chrono::milliseconds timeout);
