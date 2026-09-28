@@ -8,6 +8,7 @@
 #include "audio/MediaActivity.h"
 #include "logging/Logger.h"
 #include "media/AudioPlayer.h"
+#include "ui/BluetoothPhones.h"
 #include "ui/HomeMenuEntry.h"
 #include "ui/HomeTileSetup.h"
 #include "ui/ScriptedPhoneTest.h"
@@ -21,6 +22,7 @@
 #include <mutex>
 #include <optional>
 #include <set>
+#include <string>
 
 class QCloseEvent;
 class QComboBox;
@@ -33,6 +35,7 @@ class QStackedWidget;
 class QVBoxLayout;
 
 namespace headunit {
+class BluetoothPage;
 class CarPanel;
 class HomeMenu;
 class MenuPage;
@@ -50,9 +53,9 @@ class VolumeOverlay;
 // built) and closes the program. The scripted test modes connect once over USB instead. Next to the picture sits
 // the simulated centre console: rotary knob, hard keys and the audio display. The picture itself takes mouse input as
 // touch. In its place the radio's own pages are shown whenever the console is on the radio's side (always while no phone
-// is projected): the home menu, the music player, the tuner and the settings; the knob then works the page instead of
-// the phone. The radio's own player plays through the same audio output as the phone, and only one of them sounds at a
-// time: the one started last. The display size (video resolution) is chosen next to the button and only while no session
+// is projected): the home menu, the music player, the tuner, the Bluetooth phones and the settings; the knob then works
+// the page instead of the phone. The radio's own player plays through the same audio output as the phone, and only one
+// of them sounds at a time: the one started last. The display size (video resolution) is chosen next to the button and only while no session
 // runs: the phone is told the size once, when the connection starts.
 class MainWindow final : public QMainWindow, private ScriptedTestHost {
 public:
@@ -89,6 +92,7 @@ private:
     MultimediaPage* m_music{};
     RadioPage* m_radio{};
     SettingsPage* m_settings{};
+    BluetoothPage* m_bluetoothPage{};
     PairingPage* m_pairing{};                         // a phone's Bluetooth pairing question; in front while it asks
     VolumeOverlay* m_volumeBar{};                     // over the screens for a moment whenever the volume changes
     int m_shownVolume{};                              // the volume and mute state the bar showed last
@@ -108,6 +112,8 @@ private:
     std::atomic_bool m_isUsbRequested{};              // the automatic mode connects the phone on the USB cable once more
     std::atomic_bool m_isRadioOffRequested{};         // the program quits with Bluetooth and the Wi-Fi switched off
     std::mutex m_displayMutex;                        // m_display, as the worker reads it for each connection
+    std::mutex m_phoneSwitchMutex;                    // m_phoneSwitch, handed to the watch's worker
+    std::string m_phoneSwitch;                        // the phone chosen on the Bluetooth page, until the worker takes it
     std::mutex m_frameMutex;
     std::optional<VideoFrame> m_latestFrame;
     unsigned m_displayedFrames{};
@@ -150,6 +156,8 @@ private:
     void OpenMenuEntry(HomeMenuEntry entry);
     void PausePhoneMedia();
     void SetTiles(const HomeTileSetup& setup);
+    void SwitchToPhone(const BluetoothPhone& phone);
+    std::string TakePhoneSwitch();
     void KeepOneSound();
     void TapPhone(int x, int y);
     void ApplyConsoleEffect(const ConsoleEffect& effect);

@@ -10,7 +10,8 @@ DeviceWatcher::DeviceWatcher(BluetoothContext& context) : m_context(context)
 {
 }
 
-// A device's properties changed: logs pairing and connection changes and tells the window about them.
+// A device's properties changed: logs pairing and connection changes and tells the window about them (a step, and the
+// list of phones for the Bluetooth page).
 void DeviceWatcher::OnPropertiesChanged(const QDBusMessage& message)
 {
     const auto arguments = message.arguments();
@@ -30,5 +31,6 @@ void DeviceWatcher::OnPropertiesChanged(const QDBusMessage& message)
         if (changed.value(QStringLiteral("Connected")).toBool())
             m_context.Tell("Bluetooth: " + bluez::DeviceName(message.path()) + " ist verbunden. Warte, bis Android Auto am Handy den Dienst oeffnet ...");
     }
+    if (changed.contains(QStringLiteral("Connected")) || changed.contains(QStringLiteral("Paired"))) m_context.PublishPhones();
 }
 }

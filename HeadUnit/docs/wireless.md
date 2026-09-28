@@ -91,6 +91,12 @@ Handy                                      HeadUnit (Raspberry Pi), ab Programms
   22 bis 30 (`kAndroidAutoWirelessChannels`) und behaelt den ersten, auf dem die UUID `4de17a00-...` in der
   Dienstliste des Adapters auftaucht. Das Log sagt es: "service registered on RFCOMM channel 22 (listed in the
   adapter's services)". Das Handy findet den Kanal im Diensteintrag, die Nummer ist ihm gleich.
+- **Bluetooth-Seite, Handy wechseln:** Die Kachel **Bluetooth** listet die gekoppelten Handys (nur Geraete, die BlueZ
+  als Handy fuehrt), ob sie verbunden sind und auf welchem Android Auto laeuft; die Liste kommt bei jeder Kopplung,
+  Verbindung und Trennung und bei Beginn und Ende einer kabellosen Sitzung neu. Waehlt man ein anderes Handy, endet die
+  laufende Sitzung (mit Goodbye), und HeadUnit verbindet das gewaehlte Handy neu (ein verbundenes wird kurz getrennt);
+  Android Auto startet dann dort. Das bisherige Handy bleibt per Bluetooth verbunden, startet Android Auto nach dem
+  Goodbye aber nicht von selbst neu. Log `[BT]`: "Android Auto switches to ...".
 - **Schon verbundenes Handy:** PipeWire verbindet ein gekoppeltes Handy "fuer Anrufe und Audio" von selbst, schon bevor
   HeadUnit laeuft. Android Auto sucht seinen Dienst beim Verbinden; gibt es ihn da noch nicht, bleibt "Wird mit Android
   Auto verbunden" stehen. Darum trennt HeadUnit, sobald alles bereit ist, jedes Handy, das schon vor dem Start verbunden
@@ -229,6 +235,8 @@ zeigt, wo es haengt.
 
 - **Kopplungsseite im Menue:** unter Windows im Bild geprueft (`HEADUNIT_TEST_PAIRING=1 HeadUnit --smoke-test`), mit
   einem Handy noch nicht.
+- **Handy wechseln:** Mit zwei gekoppelten Handys noch nicht geprueft (nur ein Handy vorhanden); ob das alte Handy nach
+  dem Goodbye wirklich ruhig bleibt, zeigt erst der Versuch.
 - **Verborgenes WLAN:** Ob Android Auto dem verborgenen WLAN beitritt, ist am Handy noch nicht bestaetigt. Wenn nicht,
   greift der Rueckfall auf sichtbar; im Fenster steht dann "Das Handy ist dem verborgenen WLAN nicht beigetreten".
 - **Neu verbinden:** Ob das Trennen und Neuverbinden eines schon verbundenen Handys Android Auto zuverlaessig neu

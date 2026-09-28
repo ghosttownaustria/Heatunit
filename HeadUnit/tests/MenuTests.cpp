@@ -2,6 +2,7 @@
 #include "TestSupport.h"
 #include "androidauto/ConsoleController.h"
 #include "androidauto/ProjectionKeys.h"
+#include "ui/BluetoothPhones.h"
 #include "ui/HomeMenuEntry.h"
 #include "ui/HomeMenuLayout.h"
 #include "ui/HomeTileSetup.h"
@@ -48,15 +49,17 @@ void TestKnobZones() {
     Check(KnobZoneKey(KnobZone::Centre) == 0 && KnobZoneKey(KnobZone::None) == 0, "The middle or nothing sends an arrow key");
 }
 
-// The radio's home menu: the tiles of the design plus Android Auto, laid out as in the 1600x600 design, the focused tile
+// The radio's home menu: the tiles of the designs plus Android Auto, laid out as in the 1600x600 design, the focused tile
 // in the middle as far as the row allows, arrows at the edges where more tiles follow and the bar at the bottom.
 void TestHomeMenuLayout() {
     using E = HomeMenuEntry;
-    Check(kHomeMenuCount == 7 && std::string(HomeMenuTitle(kHomeMenuEntries[0])) == "Android Auto" &&
-        std::string(HomeMenuTitle(kHomeMenuEntries[6])) == "Settings" && std::string(HomeMenuId(E::AndroidAuto)) == "AndroidAuto" &&
-        std::string(HomeMenuId(E::Vehicle)) == "Vehicle", "The home menu does not have the tiles of the design");
+    Check(kHomeMenuCount == 8 && std::string(HomeMenuTitle(kHomeMenuEntries[0])) == "Android Auto" &&
+        std::string(HomeMenuTitle(kHomeMenuEntries[6])) == "Bluetooth" && std::string(HomeMenuTitle(kHomeMenuEntries[7])) == "Settings" &&
+        std::string(HomeMenuId(E::AndroidAuto)) == "AndroidAuto" && std::string(HomeMenuId(E::Vehicle)) == "Vehicle" &&
+        std::string(HomeMenuId(E::Bluetooth)) == "Bluetooth", "The home menu does not have the tiles of the design");
     // What a tile opens: a page of the radio or what a controller key does; Vehicle has nothing behind it yet.
     Check(HomeMenuPage(E::Multimedia) == Screen::Multimedia && HomeMenuPage(E::Radio) == Screen::Radio && HomeMenuPage(E::Settings) == Screen::Settings &&
+        HomeMenuPage(E::Bluetooth) == Screen::Bluetooth && !HomeMenuKey(E::Bluetooth) &&
         HomeMenuKey(E::AndroidAuto) == ConsoleKey::Projection && HomeMenuKey(E::Telephone) == ConsoleKey::Tel &&
         HomeMenuKey(E::Navigation) == ConsoleKey::Nav && !HomeMenuPage(E::AndroidAuto) && !HomeMenuKey(E::Multimedia) &&
         !HomeMenuKey(E::Radio) && !HomeMenuKey(E::Settings) && !HomeMenuPage(E::Telephone) && !HomeMenuKey(E::Vehicle) &&
@@ -116,24 +119,33 @@ void TestTileSetup() {
     Check(ShownTiles(setup) == Tiles(std::begin(kHomeMenuEntries), std::end(kHomeMenuEntries)), "A new radio does not show every tile");
     Check(SetTileShown(setup, E::Vehicle, false) && !SetTileShown(setup, E::Vehicle, false) && !SetTileShown(setup, E::Settings, false) &&
         !SetTileShown(setup, E::Radio, true), "Showing or hiding a tile is wrong");
-    Check(ShownTiles(setup) == Tiles{E::AndroidAuto, E::Multimedia, E::Radio, E::Telephone, E::Navigation, E::Settings}, "A hidden tile is shown");
+    Check(ShownTiles(setup) == Tiles{E::AndroidAuto, E::Multimedia, E::Radio, E::Telephone, E::Navigation, E::Bluetooth, E::Settings},
+        "A hidden tile is shown");
     // On the home menu a tile passes the next shown one (and the hidden ones between).
-    Check(MoveTile(setup, E::Navigation, +1, true) && ShownTiles(setup) == Tiles{E::AndroidAuto, E::Multimedia, E::Radio, E::Telephone, E::Settings, E::Navigation},
+    Check(MoveTile(setup, E::Navigation, +1, true) &&
+        ShownTiles(setup) == Tiles{E::AndroidAuto, E::Multimedia, E::Radio, E::Telephone, E::Bluetooth, E::Navigation, E::Settings},
+        "Moving right past a hidden tile on the home menu is wrong");
+    Check(MoveTile(setup, E::Navigation, +1, true) &&
+        ShownTiles(setup) == Tiles{E::AndroidAuto, E::Multimedia, E::Radio, E::Telephone, E::Bluetooth, E::Settings, E::Navigation},
         "Moving right on the home menu is wrong");
     Check(!MoveTile(setup, E::Navigation, +1, true), "A tile moved beyond the end of the row");
-    Check(MoveTile(setup, E::Navigation, -1, true) && ShownTiles(setup) == Tiles{E::AndroidAuto, E::Multimedia, E::Radio, E::Telephone, E::Navigation, E::Settings},
+    Check(MoveTile(setup, E::Navigation, -1, true) &&
+        ShownTiles(setup) == Tiles{E::AndroidAuto, E::Multimedia, E::Radio, E::Telephone, E::Bluetooth, E::Navigation, E::Settings},
         "Moving left on the home menu is wrong");
     // In the settings list a tile passes its direct neighbour, hidden or not.
+    Check(MoveTile(setup, E::Navigation, -1, false) && setup.tiles[5].entry == E::Navigation && setup.tiles[6].entry == E::Bluetooth,
+        "Moving up in the settings did not pass the neighbour");
     Check(MoveTile(setup, E::Navigation, -1, false) && setup.tiles[4].entry == E::Navigation && setup.tiles[5].entry == E::Vehicle,
         "Moving up in the settings did not pass the hidden neighbour");
-    Check(MoveTile(setup, E::Settings, -1, false) && setup.tiles[5].entry == E::Settings && !setup.tiles[6].isShown, "Moving past a hidden tile is wrong");
+    Check(MoveTile(setup, E::Settings, -1, false) && MoveTile(setup, E::Settings, -1, false) && setup.tiles[5].entry == E::Settings &&
+        !setup.tiles[6].isShown, "Moving past a hidden tile is wrong");
     Check(!MoveTile(setup, E::AndroidAuto, -1, false) && !MoveTile(setup, E::AndroidAuto, 0, false), "A tile moved before the start");
     // Stored as text and read back.
-    Check(TileSetupText(setup) == "AndroidAuto,Multimedia,Radio,Telephone,Navigation,Settings,-Vehicle", "The tiles are stored wrongly");
+    Check(TileSetupText(setup) == "AndroidAuto,Multimedia,Radio,Telephone,Navigation,Settings,-Vehicle,Bluetooth", "The tiles are stored wrongly");
     Check(ParseTileSetup(TileSetupText(setup)) == setup, "The stored tiles do not read back");
     // A damaged or older text: unknown and repeated names are skipped, Settings is shown, missing tiles follow at the end.
-    Check(TileSetupText(ParseTileSetup(" Radio , -Settings,Bogus,Radio,-AndroidAuto,-")) == "Radio,Settings,-AndroidAuto,Multimedia,Telephone,Navigation,Vehicle",
-        "A damaged setting was read wrongly");
+    Check(TileSetupText(ParseTileSetup(" Radio , -Settings,Bogus,Radio,-AndroidAuto,-")) ==
+        "Radio,Settings,-AndroidAuto,Multimedia,Telephone,Navigation,Vehicle,Bluetooth", "A damaged setting was read wrongly");
     Check(ParseTileSetup("") == DefaultTileSetup(), "An empty setting is not the default");
 }
 
@@ -176,6 +188,23 @@ void TestPlayerPageFocus() {
     Check(NudgeFocus(PageFocus{Part::Controls, 1, 0}, {1, 3, 0}, keys::DpadDown).part == Part::Controls, "Down went into an empty list");
 }
 
+// The Bluetooth page's list: the Android Auto phone first, then the connected ones, each group by name; every phone but
+// the Android Auto one can be chosen.
+void TestBluetoothPhones() {
+    const std::vector<BluetoothPhone> phones{{"/p/1", "zeta", false, false}, {"/p/2", "Beta", true, false}, {"/p/3", "alpha", false, false},
+        {"/p/4", "Jakob's Flip 8", true, true}, {"/p/5", "Alpha", true, false}};
+    const auto sorted = SortedPhones(phones);
+    std::vector<std::string> names;
+    for (const auto& phone : sorted) names.push_back(phone.name);
+    Check(names == std::vector<std::string>{"Jakob's Flip 8", "Alpha", "Beta", "alpha", "zeta"},
+        "The phones are listed in the wrong order");
+    Check(PhoneStateText(sorted[0]) == "Android Auto" && PhoneStateText(sorted[1]) == "Connected" && PhoneStateText(sorted[3]) == "Not connected",
+        "A phone's state reads wrongly");
+    Check(!CanSwitchTo(sorted[0]) && CanSwitchTo(sorted[1]) && CanSwitchTo(sorted[4]) && !CanSwitchTo(BluetoothPhone{}),
+        "The wrong phones can be chosen for Android Auto");
+    Check(SortedPhones({}).empty(), "An empty list got phones");
+}
+
 // The volume bar: centred, never wider than 1000 units nor closer than 50 to the edges, and a touch lights the segment
 // under it with all before it.
 void TestVolumeBar() {
@@ -194,7 +223,8 @@ void TestVolumeBar() {
 }
 }
 
-// The radio's menu pages: the knob, the home menu's layout and tiles, the focus on the player pages and the volume bar.
+// The radio's menu pages: the knob, the home menu's layout and tiles, the focus on the player pages, the volume bar and the
+// Bluetooth page's list.
 void RunMenuTests()
 {
     TestKnobZones();
@@ -202,4 +232,5 @@ void RunMenuTests()
     TestTileSetup();
     TestPlayerPageFocus();
     TestVolumeBar();
+    TestBluetoothPhones();
 }

@@ -4,6 +4,7 @@
 #include "audio/AudioClock.h"
 #include "audio/WatchedOutput.h"
 #include "platform/Environment.h"
+#include "ui/BluetoothPage.h"
 #include "ui/CarPanel.h"
 #include "ui/HomeMenu.h"
 #include "ui/MultimediaPage.h"
@@ -34,6 +35,7 @@
 #include <array>
 #include <exception>
 #include <iterator>
+#include <utility>
 
 namespace headunit {
 namespace {
@@ -167,7 +169,7 @@ void MainWindow::SetDisplay(const DisplayConfig& display)
     m_console.SetDisplay(display);
     m_video->SetDisplay(display);
     for (MenuPage* page : {static_cast<MenuPage*>(m_homeMenu), static_cast<MenuPage*>(m_music), static_cast<MenuPage*>(m_radio),
-             static_cast<MenuPage*>(m_settings), static_cast<MenuPage*>(m_pairing)})
+             static_cast<MenuPage*>(m_settings), static_cast<MenuPage*>(m_bluetoothPage), static_cast<MenuPage*>(m_pairing)})
         page->SetDisplay(display);
     m_volumeBar->SetDisplay(display);
     for (int index = 0; index < static_cast<int>(std::size(kDisplays)); ++index) {
@@ -226,13 +228,19 @@ QWidget* MainWindow::BuildScreens(QWidget* parent)
     });
     m_settings = new SettingsPage(m_screens);
     m_settings->SetChangeHandler([this](const HomeTileSetup& setup) { SetTiles(setup); });
+    m_bluetoothPage = new BluetoothPage(m_screens);
+#ifdef HEADUNIT_WIRELESS
+    m_bluetoothPage->SetAvailable(true);
+#endif
+    m_bluetoothPage->SetSwitchHandler([this](const BluetoothPhone& phone) { SwitchToPhone(phone); });
     m_pairing = new PairingPage(m_screens);
     m_pairing->SetChangeHandler([this] { ShowScreen(); });
     m_music = new MultimediaPage(m_player, MusicFolder(), m_screens);
     m_radio = new RadioPage(m_player, m_screens);
     for (PlayerPage* page : {static_cast<PlayerPage*>(m_music), static_cast<PlayerPage*>(m_radio)}) page->SetWillPlayHandler([this] { PausePhoneMedia(); });
     for (QWidget* screen : {static_cast<QWidget*>(m_video), static_cast<QWidget*>(m_homeMenu), static_cast<QWidget*>(m_music),
-             static_cast<QWidget*>(m_radio), static_cast<QWidget*>(m_settings), static_cast<QWidget*>(m_pairing)})
+             static_cast<QWidget*>(m_radio), static_cast<QWidget*>(m_settings), static_cast<QWidget*>(m_bluetoothPage),
+             static_cast<QWidget*>(m_pairing)})
         m_screens->addWidget(screen);
     m_volumeBar = new VolumeOverlay(m_screens);
     m_volumeBar->SetVolumeHandler([this](int volume) {
@@ -329,7 +337,8 @@ void MainWindow::ConnectSignals()
 }
 
 // The smoke test is the real window plus one real USB scan, then exit (for the window picture, HEADUNIT_TEST_PAIRING
-// shows the pairing question of a made-up phone and HEADUNIT_TEST_VOLUME the volume bar). Everything else starts connecting at once, after --display has been
+// shows the pairing question of a made-up phone, HEADUNIT_TEST_VOLUME the volume bar, and HEADUNIT_TEST_PAGE=<tile>
+// opens that tile's page, the Bluetooth page with made-up phones). Everything else starts connecting at once, after --display has been
 // applied; nobody has to press anything.
 void MainWindow::StartMode()
 {
@@ -340,6 +349,14 @@ void MainWindow::StartMode()
             });
         }
         if (qEnvironmentVariableIsSet("HEADUNIT_TEST_VOLUME")) m_volumeBar->ShowVolume(m_audioState->Volume(), m_audioState->IsMuted());
+        const std::string testPage = qEnvironmentVariable("HEADUNIT_TEST_PAGE").toStdString();
+        for (const HomeMenuEntry entry : kHomeMenuEntries) {
+            if (const auto page = HomeMenuPage(entry); page && testPage == HomeMenuId(entry)) ApplyConsoleEffect(m_console.Open(*page));
+        }
+        if (testPage == HomeMenuId(HomeMenuEntry::Bluetooth)) {
+            m_bluetoothPage->SetAvailable(true);
+            m_bluetoothPage->SetPhones({{"/test/1", "Galaxy S24", true, false}, {"/test/2", "Jakob's Flip 8", true, true}, {"/test/3", "Pixel 8", false, false}});
+        }
         m_scanWatcher.setFuture(QtConcurrent::run([this] {
             try {
                 return m_backend.EnumerateDevices();
@@ -431,6 +448,8 @@ void MainWindow::BeginWatch()
 // The worker of the automatic mode. It looks at the bus every second, so it keeps quiet in the log; the connection
 // itself uses the platform's backend. Where wireless Android Auto is built, Wi-Fi and Bluetooth stay up for as long as
 // the watch runs; a pairing phone's question goes to the pairing page, and its answer goes back from the GUI thread.
+// The paired phones go to the Bluetooth page; a phone chosen there is handed to the station between two waits, on this
+// thread, which owns the station.
 AutoConnectResult MainWindow::WatchPhones()
 {
     const auto onStatus = [this](const std::string& status) {
@@ -454,9 +473,15 @@ AutoConnectResult MainWindow::WatchPhones()
         }, Qt::QueuedConnection);
     };
     events.onPairingEnd = [this] { QMetaObject::invokeMethod(this, [this] { m_pairing->End(); }, Qt::QueuedConnection); };
+    events.onPhonesChanged = [this](const std::vector<BluetoothPhone>& phones) {
+        QMetaObject::invokeMethod(this, [this, phones] { m_bluetoothPage->SetPhones(phones); }, Qt::QueuedConnection);
+    };
     WirelessStation wireless(m_logger, events);
     wireless.Start();
-    deps.waitForWirelessPhone = [&wireless](std::chrono::milliseconds timeout) { return wireless.WaitForPhone(timeout); };
+    deps.waitForWirelessPhone = [this, &wireless](std::chrono::milliseconds timeout) {
+        if (const std::string phone = TakePhoneSwitch(); !phone.empty()) wireless.SwitchToPhone(phone);
+        return wireless.WaitForPhone(timeout);
+    };
     deps.connectWireless = [this, &wireless](int phone) { return wireless.Serve(phone, m_isStopRequested, MakeCallbacks()); };
     deps.requestWireless = [&wireless] { return wireless.ReconnectPhones(); };
     const AutoConnectResult result = RunPhoneWatch(deps, m_logger, m_isWatchStopRequested, m_isStopRequested, m_isUsbRequested, onStatus);
@@ -656,6 +681,7 @@ MenuPage* MainWindow::FrontPage() const
     case ConsoleController::Screen::Multimedia: return m_music;
     case ConsoleController::Screen::Radio: return m_radio;
     case ConsoleController::Screen::Settings: return m_settings;
+    case ConsoleController::Screen::Bluetooth: return m_bluetoothPage;
     default: return nullptr;
     }
 }
@@ -734,6 +760,27 @@ void MainWindow::SetTiles(const HomeTileSetup& setup)
     m_homeMenu->SetTiles(ShownTiles(m_tiles));
     m_settings->SetSetup(m_tiles);
     QSettings().setValue(kTilesSetting, QString::fromStdString(TileSetupText(m_tiles)));
+}
+
+// A phone chosen on the Bluetooth page becomes the Android Auto phone: the running session ends (its phone gets the
+// goodbye), and the watch's worker has the chosen phone connect anew over Bluetooth, which starts Android Auto on it.
+void MainWindow::SwitchToPhone(const BluetoothPhone& phone)
+{
+    {
+        std::lock_guard lock(m_phoneSwitchMutex);
+        m_phoneSwitch = phone.id;
+    }
+    if (m_state == State::Connecting) m_isStopRequested = true;
+    const std::string message = "Bluetooth: Android Auto wechselt zu " + phone.name + " ...";
+    m_logger.Write(LogLevel::Info, "BT", message);
+    ShowStep(QString::fromStdString(message));
+}
+
+// The phone chosen on the Bluetooth page, once (watch's worker); empty when none was chosen since.
+std::string MainWindow::TakePhoneSwitch()
+{
+    std::lock_guard lock(m_phoneSwitchMutex);
+    return std::exchange(m_phoneSwitch, std::string());
 }
 
 // Only one source sounds: when the phone starts its music after the radio's player (connecting Android Auto often

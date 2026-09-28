@@ -19,7 +19,8 @@ add_library(headunit_core src/CommandLine.cpp src/logging/LogLevel.cpp src/loggi
   src/androidauto/ConsoleController.cpp src/androidauto/DisplayConfig.cpp src/androidauto/PhoneScreenDetector.cpp src/androidauto/ProjectionInput.cpp
   src/androidauto/TouchMapping.cpp src/androidauto/TransportReceiveBuffer.cpp
   src/audio/AudioClock.cpp src/audio/PcmFormat.cpp src/audio/Pcm16.cpp src/audio/PcmRingBuffer.cpp src/audio/AudioState.cpp src/audio/MediaActivity.cpp
-  src/audio/WatchedOutput.cpp src/media/MusicLibrary.cpp src/media/StreamText.cpp src/ui/KnobZones.cpp src/ui/HomeTileSetup.cpp src/ui/HomeMenuLayout.cpp)
+  src/audio/WatchedOutput.cpp src/media/MusicLibrary.cpp src/media/StreamText.cpp src/ui/KnobZones.cpp src/ui/HomeTileSetup.cpp src/ui/HomeMenuLayout.cpp
+  src/ui/BluetoothPhones.cpp)
 target_include_directories(headunit_core PUBLIC src)
 target_compile_definitions(headunit_core PRIVATE $<$<CONFIG:DebugLevelLog,ReleaseLevelLog>:HEADUNIT_VERBOSE_LOGGING>)
 if(MSVC)
@@ -113,7 +114,7 @@ if(HEADUNIT_BUILD_APP)
   add_executable(HeadUnit src/main.cpp src/platform/ShutdownSignal.cpp src/radio/RadioBrowser.cpp
     src/ui/MainWindow.cpp src/ui/ScriptedPhoneTest.cpp src/ui/VideoWidget.cpp src/ui/RotaryKnob.cpp src/ui/AudioDisplay.cpp src/ui/CarPanel.cpp
     src/ui/MenuStyle.cpp src/ui/MenuPage.cpp src/ui/HomeMenu.cpp src/ui/SettingsPage.cpp src/ui/PairingPage.cpp src/ui/PlayerPage.cpp
-    src/ui/MultimediaPage.cpp src/ui/RadioPage.cpp src/ui/VolumeOverlay.cpp)
+    src/ui/MultimediaPage.cpp src/ui/RadioPage.cpp src/ui/BluetoothPage.cpp src/ui/VolumeOverlay.cpp)
   target_link_libraries(HeadUnit PRIVATE headunit_usb headunit_media Qt6::Widgets Qt6::Concurrent Qt6::Network)
   if(HEADUNIT_WIRELESS_ENABLED)
     target_link_libraries(HeadUnit PRIVATE headunit_wireless)

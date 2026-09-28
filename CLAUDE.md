@@ -65,7 +65,8 @@ App diagnostics (no window needed for most): `--scan`, `--probe-usb`, `--start-a
 `--smoke-test`, `--display WxH` (parsed in `src/CommandLine.cpp`). Useful env vars: `HEADUNIT_LOG_LEVEL=trace|debug|info|warning|error`,
 `HEADUNIT_PROTOCOL_TRACE=1`, `HEADUNIT_TEST_SHOTS=<dir>`, `HEADUNIT_TEST_KEYS`, `HEADUNIT_TEST_PAIRING=1` (with
 `--smoke-test`: shows the Bluetooth pairing page), `HEADUNIT_TEST_VOLUME=1` (with `--smoke-test`: shows the volume
-bar), `HEADUNIT_MUSIC_DIR`, `HEADUNIT_USB_BACKEND=libusb`, `HEADUNIT_WIFI_*`, `HEADUNIT_BT_NAME`.
+bar), `HEADUNIT_TEST_PAGE=<tile id>` (with `--smoke-test`: opens that tile's page, e.g. `Bluetooth` with made-up phones,
+`Settings`), `HEADUNIT_MUSIC_DIR`, `HEADUNIT_USB_BACKEND=libusb`, `HEADUNIT_WIFI_*`, `HEADUNIT_BT_NAME`.
 `headunit.log` is appended in the working directory; lines carry a level and a `[TAG]` such as
 `WATCH`, `BT`, `WLAN`, `AA`, `USB`, `REPAIR`, `AUDIO` (`logger.Write(LogLevel::Info, "WATCH", ...)`). Without a phone
 attached, the default (automatic) mode will connect any plugged-in Android phone on its own — check `--scan` first when

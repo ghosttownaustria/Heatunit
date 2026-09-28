@@ -56,6 +56,8 @@
     <ClCompile Include="src\platform\WindowsSupport.cpp"><Filter>src\platform</Filter></ClCompile>
     <ClCompile Include="src\radio\RadioBrowser.cpp"><Filter>src\radio</Filter></ClCompile>
     <ClCompile Include="src\ui\AudioDisplay.cpp"><Filter>src\ui</Filter></ClCompile>
+    <ClCompile Include="src\ui\BluetoothPage.cpp"><Filter>src\ui</Filter></ClCompile>
+    <ClCompile Include="src\ui\BluetoothPhones.cpp"><Filter>src\ui</Filter></ClCompile>
     <ClCompile Include="src\ui\CarPanel.cpp"><Filter>src\ui</Filter></ClCompile>
     <ClCompile Include="src\ui\HomeMenu.cpp"><Filter>src\ui</Filter></ClCompile>
     <ClCompile Include="src\ui\HomeMenuLayout.cpp"><Filter>src\ui</Filter></ClCompile>
@@ -133,6 +135,8 @@
     <ClInclude Include="src\platform\WindowsSupport.h"><Filter>src\platform</Filter></ClInclude>
     <ClInclude Include="src\radio\RadioBrowser.h"><Filter>src\radio</Filter></ClInclude>
     <ClInclude Include="src\ui\AudioDisplay.h"><Filter>src\ui</Filter></ClInclude>
+    <ClInclude Include="src\ui\BluetoothPage.h"><Filter>src\ui</Filter></ClInclude>
+    <ClInclude Include="src\ui\BluetoothPhones.h"><Filter>src\ui</Filter></ClInclude>
     <ClInclude Include="src\ui\CarPanel.h"><Filter>src\ui</Filter></ClInclude>
     <ClInclude Include="src\ui\HomeMenu.h"><Filter>src\ui</Filter></ClInclude>
     <ClInclude Include="src\ui\HomeMenuEntry.h"><Filter>src\ui</Filter></ClInclude>

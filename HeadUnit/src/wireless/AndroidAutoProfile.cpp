@@ -26,7 +26,7 @@ void AndroidAutoProfile::NewConnection(const QDBusObjectPath& device, const QDBu
     }
     m_context.Log(LogLevel::Info, "Phone " + bluez::Text(device.path()) + " opened the Android Auto Wireless service");
     bluez::Trust(device.path());
-    m_context.AddPhone(ownFd);
+    m_context.AddPhone(ownFd, device.path());
 }
 
 // The phone closes its connection to the service.

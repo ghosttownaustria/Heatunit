@@ -15,6 +15,26 @@ constexpr auto kRetryDelay = 60s;
 constexpr auto kWifiWait = 60s;
 // How long the phone may take from the Bluetooth handshake to its TCP connection.
 constexpr auto kLinkTimeout = 60s;
+
+// Marks a phone as the one Android Auto runs on, for as long as the mark lives (the Bluetooth page shows it).
+class AndroidAutoMark {
+public:
+    // Marks the phone at `devicePath`.
+    AndroidAutoMark(BluetoothService& bluetooth, const std::string& devicePath) : m_bluetooth(bluetooth)
+    {
+        m_bluetooth.SetAndroidAutoPhone(devicePath);
+    }
+    // Takes the mark away: no phone runs Android Auto.
+    ~AndroidAutoMark()
+    {
+        m_bluetooth.SetAndroidAutoPhone({});
+    }
+    AndroidAutoMark(const AndroidAutoMark&) = delete;
+    AndroidAutoMark& operator=(const AndroidAutoMark&) = delete;
+
+private:
+    BluetoothService& m_bluetooth;
+};
 }
 
 // A station that is not started yet. `events.onStatus` receives the steps for the window, the pairing events the
@@ -85,11 +105,19 @@ AutoConnectResult WirelessStation::Serve(int rfcommFd, std::atomic_bool& isStopR
         return result;
     }
     Report("Handy im WLAN verbunden (" + link.peer + "); starte Android Auto.");
+    const AndroidAutoMark mark(m_bluetooth, m_bluetooth.PhoneOf(phone.Get()));
     const auto session = RunAndroidAutoSession(std::make_shared<SocketTransport>(link.tcpFd), m_logger, isStopRequested, std::move(callbacks));
     result.hasVideo = session.hasVideo;
     result.isStoppedByUser = session.isStoppedByUser;
     result.message = session.message;
     return result;
+}
+
+// The person chose this phone on the Bluetooth page (the window has ended the running session): it is connected anew,
+// which starts Android Auto on it.
+void WirelessStation::SwitchToPhone(const std::string& devicePath)
+{
+    m_bluetooth.SwitchToPhone(devicePath);
 }
 
 // The person quit HeadUnit with its button, as when a car is switched off: everything is taken down, then the Bluetooth

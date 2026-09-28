@@ -55,7 +55,8 @@ einer Groesse, ohne sie zu merken (auch fuer die `--test-...`-Laeufe, die sonst 
   Zurueck-Taste des Handys, Option sendet dessen Menue-Taste. Menu holt das Startmenue des Radios nach vorn,
   Radio den Radioempfang (siehe unten). Ohne verbundenes Handy oeffnet Media den Musikordner des Radios.
 - **Startmenue des Radios:** Die Uhr und eine Reihe Kacheln (Android Auto, Multimedia, Radio, Telephone,
-  Navigation, Vehicle, Settings) nach der Vorlage [docs/design/home-menu.svg](docs/design/home-menu.svg), an der
+  Navigation, Vehicle, Bluetooth, Settings) nach den Vorlagen [docs/design/home-menu.svg](docs/design/home-menu.svg)
+  und [docs/design/heatunit.svg](docs/design/heatunit.svg), an der
   Stelle des Handybilds und in der Form des gewaehlten Displays. Ohne verbundenes Handy ist es immer zu sehen,
   waehrend des Verbindens auch; das Handybild kommt nach vorn, sobald es da ist.
   - **Drehen** am Regler waehlt eine Kachel (sie leuchtet orange). Die gewaehlte Kachel steht in der Mitte, nur
@@ -63,9 +64,14 @@ einer Groesse, ohne sie zu merken (auch fuer die `--test-...`-Laeufe, die sonst 
     zeigt, welcher Teil der Reihe gerade zu sehen ist.
   - **Pfeil links/rechts** verschiebt die gewaehlte Kachel in der Reihenfolge um einen Platz (wird gemerkt).
   - **Druecken** oder ein Klick oeffnet die Kachel: Android Auto verbindet bzw. holt das Handy nach vorn (wie
-    das Handy-Symbol), Multimedia, Radio und Settings oeffnen die Seiten des Radios, Telephone und Navigation
+    das Handy-Symbol), Multimedia, Radio, Bluetooth und Settings oeffnen die Seiten des Radios, Telephone und Navigation
     wirken wie die Tasten Tel und Nav; Vehicle hat noch keine Funktion. Ein Klick auf einen Randpfeil geht eine
     Kachel weiter, das Mausrad ueber dem Menue dreht.
+- **Bluetooth:** Die gekoppelten Handys mit ihrem Zustand ("Android Auto", "Connected", "Not connected"); das
+  Handy, auf dem Android Auto laeuft, steht oben in Orange. Drehen (oder Pfeil hoch/runter) waehlt, Druecken oder
+  Tippen macht das gewaehlte Handy zum Android-Auto-Handy: die laufende Sitzung endet, das Handy wird ueber Bluetooth
+  neu verbunden und startet Android Auto. Nur unter Linux (kabelloses Android Auto); unter Windows sagt die Seite das.
+  Wer schon eine gemerkte Kachelreihe hat, findet Bluetooth am Ende der Reihe (hinter Settings).
 - **Settings:** Alle Kacheln in ihrer Reihenfolge mit Haekchen. Drehen waehlt, Druecken blendet die Kachel ein
   oder aus (Settings bleibt immer), Pfeil hoch/runter verschiebt sie in der Reihenfolge. Wird gemerkt.
 - **Multimedia (Musikordner):** Spielt Musik aus dem Ordner `HeadUnit` im Musikordner des Benutzers (Windows:

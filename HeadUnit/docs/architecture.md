@@ -225,7 +225,7 @@ give the home menu, Radio the tuner, Media without a phone the music player; Hom
 home menu (Back first goes to the page, which may close something it opened, the tuner's country list).
 
 - `HomeMenu`: the row of tiles the user chose (Android Auto, Multimedia, Radio, Telephone, Navigation, Vehicle,
-  Settings; the focused one orange), sliding with a short `QVariantAnimation`; an edge beyond which more tiles follow
+  Bluetooth, Settings; the focused one orange; the Bluetooth symbol comes from `docs/design/heatunit.svg`), sliding with a short `QVariantAnimation`; an edge beyond which more tiles follow
   is a black strip with a fade, a line and an orange arrow; the bar at the bottom shows which part of the row is in
   view. Turning moves the focus, left/right move the focused tile along the row (`onShift`, the window stores the
   order), the wheel turns, a click on an edge arrow moves the focus. The portable `ui/HomeMenuLayout.h` (CoreTests) has
@@ -241,6 +241,17 @@ home menu (Back first goes to the page, which may close something it opened, the
   While it asks, `FrontPage` returns it before anything else, also over the phone's picture; turning or left/right
   choose, pushing answers, Back cancels, a minute without an answer refuses. `HEADUNIT_TEST_PAIRING` shows it with a
   made-up phone in `--smoke-test` (for the window picture).
+- `BluetoothPage`: the paired phones (`ui/BluetoothPhones.h`, portable and tested: `BluetoothPhone`, `SortedPhones`
+  with the Android Auto phone first, then the connected ones, each group by name; the state texts; `CanSwitchTo`).
+  On Linux `BluetoothContext::PublishPhones` (service thread, reading BlueZ) sends the list through
+  `BluetoothEvents::onPhonesChanged` whenever `DeviceWatcher` sees a phone pair, connect or disconnect, when the service
+  starts or stops, and when a wireless session starts or ends (`WirelessStation::Serve` marks its phone with
+  `BluetoothService::SetAndroidAutoPhone`; the context knows each Android Auto socket's device from
+  `AndroidAutoProfile::NewConnection`). Choosing another phone (`MainWindow::SwitchToPhone`) ends the running attempt
+  and leaves the phone in `m_phoneSwitch`; the watch's worker takes it before its next wait for a wireless phone
+  (`TakePhoneSwitch`, on the thread that owns the station) and calls `WirelessStation::SwitchToPhone`, which
+  disconnects and reconnects that phone on the service thread. The Windows build shows that there is no Bluetooth.
+  `HEADUNIT_TEST_PAGE=<tile>` opens a tile's page in `--smoke-test`, Bluetooth with made-up phones.
 - `PlayerPage` (`ui/PlayerPage`, base of `MultimediaPage` and `RadioPage`): the page's tile at the left (orange while
   its source sounds), what plays now, the controls previous/play/next, a list of five rows and buttons at the top right.
   The focus moves through them by the portable `PageFocus` rules in `ui/PageFocus.h` (tested): turning moves within a part (list rows, a row of buttons),

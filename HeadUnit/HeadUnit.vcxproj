@@ -68,6 +68,8 @@
     <ClCompile Include="src\platform\WindowsSupport.cpp" />
     <ClCompile Include="src\radio\RadioBrowser.cpp" />
     <ClCompile Include="src\ui\AudioDisplay.cpp" />
+    <ClCompile Include="src\ui\BluetoothPage.cpp" />
+    <ClCompile Include="src\ui\BluetoothPhones.cpp" />
     <ClCompile Include="src\ui\CarPanel.cpp" />
     <ClCompile Include="src\ui\HomeMenu.cpp" />
     <ClCompile Include="src\ui\HomeMenuLayout.cpp" />
@@ -145,6 +147,8 @@
     <ClInclude Include="src\platform\WindowsSupport.h" />
     <ClInclude Include="src\radio\RadioBrowser.h" />
     <ClInclude Include="src\ui\AudioDisplay.h" />
+    <ClInclude Include="src\ui\BluetoothPage.h" />
+    <ClInclude Include="src\ui\BluetoothPhones.h" />
     <ClInclude Include="src\ui\CarPanel.h" />
     <ClInclude Include="src\ui\HomeMenu.h" />
     <ClInclude Include="src\ui\HomeMenuEntry.h" />

@@ -48,6 +48,7 @@
     <ClCompile Include="..\src\audio\WatchedOutput.cpp" />
     <ClCompile Include="..\src\media\MusicLibrary.cpp" />
     <ClCompile Include="..\src\media\StreamText.cpp" />
+    <ClCompile Include="..\src\ui\BluetoothPhones.cpp" />
     <ClCompile Include="..\src\ui\KnobZones.cpp" />
     <ClCompile Include="..\src\ui\HomeTileSetup.cpp" />
     <ClCompile Include="..\src\ui\HomeMenuLayout.cpp" />

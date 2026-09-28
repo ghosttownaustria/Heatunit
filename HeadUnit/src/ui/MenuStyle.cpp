@@ -115,6 +115,12 @@ const char* const kVehicleIcon =
     "C163.319,202.333 165.203,202.177 167.087,202.093L170.821,211.98L170.955,212.711L171.089,211.98L174.823,202.093"
     "C176.707,202.177 178.591,202.333 180.486,202.56L181.11,220.501C179.762,220.261 178.379,220.058 177.053,219.926"
     "L176.651,207.822L176.718,206.983L176.484,207.786L172.694,216.834Z";
+// The Bluetooth symbol comes from the newer design, docs/design/heatunit.svg (same artboard).
+const char* const kBluetoothIcon =
+    "M160.859,239.967L160.859,192.925L213.49,237.626L184.648,266.027L213.49,295.224L160.407,340.19L160.9,290.586"
+    "L138.55,314.085L128.442,303.749L160.859,271.195L160.859,259.578L128.648,227.29L138.755,216.203L160.859,239.967Z"
+    "M174.993,224.374L189.907,237.846L174.993,250.744L174.993,224.374ZM174.993,281.973L189.907,295.445L174.993,308.343"
+    "L174.993,281.973Z";
 const char* const kSettingsIcon =
     "M215.723,210.543L225.553,221.113C228.14,223.894 228.14,228.445 225.553,231.226L217.637,239.737"
     "C219.821,244.12 221.487,248.846 222.548,253.821L232.802,253.821C236.462,253.821 239.456,257.04 239.456,260.973"
@@ -240,7 +246,7 @@ const TileLook& SharedTileLook()
         // order of HomeMenuEntry.
         result.iconShapes = {ParsePath(kAndroidAutoIcon, Qt::WindingFill), ParsePath(kMultimediaIcon, Qt::OddEvenFill),
             ParsePath(kRadioIcon, Qt::WindingFill), ParsePath(kTelephoneIcon, Qt::OddEvenFill), ParsePath(kNavigationIcon, Qt::OddEvenFill),
-            ParsePath(kVehicleIcon, Qt::OddEvenFill), ParsePath(kSettingsIcon, Qt::OddEvenFill)};
+            ParsePath(kVehicleIcon, Qt::OddEvenFill), ParsePath(kBluetoothIcon, Qt::OddEvenFill), ParsePath(kSettingsIcon, Qt::OddEvenFill)};
         // Stripes: vertical, brightest in the middle of the tile; grey at half opacity, orange opaque.
         const QTransform vertical(0, 392.557, -392.557, 0, 158.23, 70.6259);
         const auto grey = [](int value) { return QColor(value, value, value, 128); };

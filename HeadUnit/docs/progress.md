@@ -28,6 +28,14 @@ From the user's list and the new design `docs/design/heatunit.svg` (status bar, 
   `MenuPage::ScreenRect` uses the shared `ScreenRectIn`.
   - Verified here: builds without warnings, CoreTests (`TestVolumeBar`) pass, smoke picture at 1600x600 shows the bar
     centred over the home menu. Not verified: touch dragging on a real touch screen, the bar over a running projection.
+- **Bluetooth tile** (symbol from the new design): `BluetoothPage` lists the paired phones with their state, the
+  Android Auto phone first in orange; choosing another one ends the running session and has the station reconnect the
+  chosen phone, which starts Android Auto on it (the handover goes through the watch's worker, which owns the station).
+  The phone list comes from BlueZ on every pair/connect/disconnect and session start/end. New `Screen::Bluetooth`; a
+  saved tile order gets the tile appended at its end. The new design is kept as `docs/design/heatunit.svg`.
+  - Verified here: builds without warnings, CoreTests pass (`TestBluetoothPhones`, the tile and console tests for 8
+    tiles), `HEADUNIT_TEST_PAGE=Bluetooth --smoke-test` picture with made-up phones; the Linux sources passed the
+    syntax check. Not verified: the list with real phones and the switch between two phones (needs a second phone).
 
 ## 2026-09-28: C++ coding standard applied to the whole project; `bin/` layout and four build profiles
 

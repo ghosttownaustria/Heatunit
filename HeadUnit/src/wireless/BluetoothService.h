@@ -38,6 +38,9 @@ public:
     bool IsRunning() const;
     void ConnectPairedPhones(bool isReconnectingAll = false);
     int WaitForPhone(std::chrono::milliseconds timeout);
+    std::string PhoneOf(int fd);
+    void SetAndroidAutoPhone(const std::string& devicePath);
+    void SwitchToPhone(const std::string& devicePath);
 
 private:
     BluetoothContext m_context;
@@ -58,6 +61,7 @@ private:
     void MakeVisible(QDBusConnection& bus);
     void StopOnServiceThread();
     void ConnectPairedOnServiceThread(bool isReconnectingAll);
+    void SwitchToPhoneOnServiceThread(const QString& devicePath);
     void ConnectPhones(const std::vector<bluez::PairedDevice>& phones);
 };
 }
