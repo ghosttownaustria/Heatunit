@@ -1,68 +1,90 @@
 {
   "version": 5,
   "configurePresets": [
+    { "name": "base", "hidden": true, "cacheVariables": { "BUILD_TESTING": "ON" } },
     {
-      "name": "windows-vs2022",
-      "displayName": "Windows x64 / VS 2022 / Qt 6",
-      "generator": "Visual Studio 17 2022",
-      "architecture": "x64",
-      "binaryDir": "${sourceDir}/out/build/windows-vs2022",
-      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" },
-      "cacheVariables": {
-        "CMAKE_PREFIX_PATH": "$env{QT_ROOT}",
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install",
-        "BUILD_TESTING": "ON"
-      }
-    },
-    {
-      "name": "core-only",
-      "displayName": "Windows: portable core and its tests only (newest Visual Studio)",
-      "architecture": "x64",
-      "binaryDir": "${sourceDir}/out/build/core-only",
-      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" },
-      "cacheVariables": { "HEADUNIT_BUILD_APP": "OFF", "BUILD_TESTING": "ON" }
-    },
-    {
-      "name": "linux-base",
-      "hidden": true,
-      "generator": "Ninja",
+      "name": "linux", "hidden": true, "inherits": "base", "generator": "Ninja",
       "condition": { "type": "notEquals", "lhs": "${hostSystemName}", "rhs": "Windows" },
-      "cacheVariables": { "BUILD_TESTING": "ON", "CMAKE_EXPORT_COMPILE_COMMANDS": "ON" }
+      "cacheVariables": { "CMAKE_EXPORT_COMPILE_COMMANDS": "ON" }
     },
     {
-      "name": "linux-debug",
-      "displayName": "Linux / Ninja / system Qt 6 (Debug)",
-      "inherits": "linux-base",
-      "binaryDir": "${sourceDir}/out/build/linux-debug",
-      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+      "name": "windows", "hidden": true, "inherits": "base", "architecture": "x64",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" },
+      "cacheVariables": { "CMAKE_PREFIX_PATH": "$env{QT_ROOT}", "CMAKE_INSTALL_PREFIX": "${sourceDir}/bin/windowsx64/install" }
     },
-    {
-      "name": "linux-release",
-      "displayName": "Linux / Ninja / system Qt 6 (Release)",
-      "inherits": "linux-base",
-      "binaryDir": "${sourceDir}/out/build/linux-release",
-      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
-    },
-    {
-      "name": "linux-core-only",
-      "displayName": "Linux: portable core and its tests only (no Qt, no libraries)",
-      "inherits": "linux-base",
-      "binaryDir": "${sourceDir}/out/build/linux-core-only",
-      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "HEADUNIT_BUILD_APP": "OFF" }
-    }
+    { "name": "debug", "hidden": true, "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" } },
+    { "name": "release", "hidden": true, "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" } },
+    { "name": "debug-level-log", "hidden": true, "cacheVariables": { "CMAKE_BUILD_TYPE": "DebugLevelLog" } },
+    { "name": "release-level-log", "hidden": true, "cacheVariables": { "CMAKE_BUILD_TYPE": "ReleaseLevelLog" } },
+    { "name": "core-only", "hidden": true, "inherits": "debug", "cacheVariables": { "HEADUNIT_BUILD_APP": "OFF" } },
+
+    { "name": "linux-debug", "displayName": "Linux x64 debug", "inherits": ["linux", "debug"], "binaryDir": "${sourceDir}/bin/linuxx64/debug/obj" },
+    { "name": "linux-release", "displayName": "Linux x64 release", "inherits": ["linux", "release"], "binaryDir": "${sourceDir}/bin/linuxx64/release/obj" },
+    { "name": "linux-debug-level-log", "displayName": "Linux x64 debug, full logging", "inherits": ["linux", "debug-level-log"], "binaryDir": "${sourceDir}/bin/linuxx64/debug_level_log/obj" },
+    { "name": "linux-release-level-log", "displayName": "Linux x64 release, full logging", "inherits": ["linux", "release-level-log"], "binaryDir": "${sourceDir}/bin/linuxx64/release_level_log/obj" },
+    { "name": "linux-core-only", "displayName": "Linux x64 portable core and its tests only", "inherits": ["linux", "core-only"], "binaryDir": "${sourceDir}/bin/linuxx64/debug/obj-core" },
+
+    { "name": "linux-arm64-debug", "displayName": "Linux ARM64 debug", "inherits": ["linux", "debug"], "binaryDir": "${sourceDir}/bin/linuxarm64/debug/obj" },
+    { "name": "linux-arm64-release", "displayName": "Linux ARM64 release", "inherits": ["linux", "release"], "binaryDir": "${sourceDir}/bin/linuxarm64/release/obj" },
+    { "name": "linux-arm64-debug-level-log", "displayName": "Linux ARM64 debug, full logging", "inherits": ["linux", "debug-level-log"], "binaryDir": "${sourceDir}/bin/linuxarm64/debug_level_log/obj" },
+    { "name": "linux-arm64-release-level-log", "displayName": "Linux ARM64 release, full logging", "inherits": ["linux", "release-level-log"], "binaryDir": "${sourceDir}/bin/linuxarm64/release_level_log/obj" },
+    { "name": "linux-arm64-core-only", "displayName": "Linux ARM64 portable core and its tests only", "inherits": ["linux", "core-only"], "binaryDir": "${sourceDir}/bin/linuxarm64/debug/obj-core" },
+
+    { "name": "linux-arm-debug", "displayName": "Linux ARM (32 bit) debug", "inherits": ["linux", "debug"], "binaryDir": "${sourceDir}/bin/linuxarm/debug/obj" },
+    { "name": "linux-arm-release", "displayName": "Linux ARM (32 bit) release", "inherits": ["linux", "release"], "binaryDir": "${sourceDir}/bin/linuxarm/release/obj" },
+    { "name": "linux-arm-debug-level-log", "displayName": "Linux ARM (32 bit) debug, full logging", "inherits": ["linux", "debug-level-log"], "binaryDir": "${sourceDir}/bin/linuxarm/debug_level_log/obj" },
+    { "name": "linux-arm-release-level-log", "displayName": "Linux ARM (32 bit) release, full logging", "inherits": ["linux", "release-level-log"], "binaryDir": "${sourceDir}/bin/linuxarm/release_level_log/obj" },
+    { "name": "linux-arm-core-only", "displayName": "Linux ARM (32 bit) portable core and its tests only", "inherits": ["linux", "core-only"], "binaryDir": "${sourceDir}/bin/linuxarm/debug/obj-core" },
+
+    { "name": "windows-debug", "displayName": "Windows x64 debug (Qt from QT_ROOT)", "inherits": ["windows", "debug"], "binaryDir": "${sourceDir}/bin/windowsx64/debug/obj" },
+    { "name": "windows-release", "displayName": "Windows x64 release (Qt from QT_ROOT)", "inherits": ["windows", "release"], "binaryDir": "${sourceDir}/bin/windowsx64/release/obj" },
+    { "name": "windows-debug-level-log", "displayName": "Windows x64 debug, full logging (Qt from QT_ROOT)", "inherits": ["windows", "debug-level-log"], "binaryDir": "${sourceDir}/bin/windowsx64/debug_level_log/obj" },
+    { "name": "windows-release-level-log", "displayName": "Windows x64 release, full logging (Qt from QT_ROOT)", "inherits": ["windows", "release-level-log"], "binaryDir": "${sourceDir}/bin/windowsx64/release_level_log/obj" },
+    { "name": "windows-core-only", "displayName": "Windows x64 portable core and its tests only (newest Visual Studio)", "inherits": ["windows", "core-only"], "binaryDir": "${sourceDir}/bin/windowsx64/debug/obj-core" }
   ],
   "buildPresets": [
-    { "name": "windows-debug", "configurePreset": "windows-vs2022", "configuration": "Debug" },
-    { "name": "core-debug", "configurePreset": "core-only", "configuration": "Debug" },
     { "name": "linux-debug", "configurePreset": "linux-debug" },
     { "name": "linux-release", "configurePreset": "linux-release" },
-    { "name": "linux-core-only", "configurePreset": "linux-core-only" }
+    { "name": "linux-debug-level-log", "configurePreset": "linux-debug-level-log" },
+    { "name": "linux-release-level-log", "configurePreset": "linux-release-level-log" },
+    { "name": "linux-core-only", "configurePreset": "linux-core-only" },
+    { "name": "linux-arm64-debug", "configurePreset": "linux-arm64-debug" },
+    { "name": "linux-arm64-release", "configurePreset": "linux-arm64-release" },
+    { "name": "linux-arm64-debug-level-log", "configurePreset": "linux-arm64-debug-level-log" },
+    { "name": "linux-arm64-release-level-log", "configurePreset": "linux-arm64-release-level-log" },
+    { "name": "linux-arm64-core-only", "configurePreset": "linux-arm64-core-only" },
+    { "name": "linux-arm-debug", "configurePreset": "linux-arm-debug" },
+    { "name": "linux-arm-release", "configurePreset": "linux-arm-release" },
+    { "name": "linux-arm-debug-level-log", "configurePreset": "linux-arm-debug-level-log" },
+    { "name": "linux-arm-release-level-log", "configurePreset": "linux-arm-release-level-log" },
+    { "name": "linux-arm-core-only", "configurePreset": "linux-arm-core-only" },
+    { "name": "windows-debug", "configurePreset": "windows-debug", "configuration": "Debug" },
+    { "name": "windows-release", "configurePreset": "windows-release", "configuration": "Release" },
+    { "name": "windows-debug-level-log", "configurePreset": "windows-debug-level-log", "configuration": "DebugLevelLog" },
+    { "name": "windows-release-level-log", "configurePreset": "windows-release-level-log", "configuration": "ReleaseLevelLog" },
+    { "name": "windows-core-only", "configurePreset": "windows-core-only", "configuration": "Debug" }
   ],
   "testPresets": [
-    { "name": "windows-debug", "configurePreset": "windows-vs2022", "configuration": "Debug", "output": { "outputOnFailure": true } },
-    { "name": "core-debug", "configurePreset": "core-only", "configuration": "Debug", "output": { "outputOnFailure": true } },
-    { "name": "linux-debug", "configurePreset": "linux-debug", "output": { "outputOnFailure": true } },
-    { "name": "linux-release", "configurePreset": "linux-release", "output": { "outputOnFailure": true } },
-    { "name": "linux-core-only", "configurePreset": "linux-core-only", "output": { "outputOnFailure": true } }
+    { "name": "test", "hidden": true, "output": { "outputOnFailure": true } },
+    { "name": "linux-debug", "inherits": "test", "configurePreset": "linux-debug" },
+    { "name": "linux-release", "inherits": "test", "configurePreset": "linux-release" },
+    { "name": "linux-debug-level-log", "inherits": "test", "configurePreset": "linux-debug-level-log" },
+    { "name": "linux-release-level-log", "inherits": "test", "configurePreset": "linux-release-level-log" },
+    { "name": "linux-core-only", "inherits": "test", "configurePreset": "linux-core-only" },
+    { "name": "linux-arm64-debug", "inherits": "test", "configurePreset": "linux-arm64-debug" },
+    { "name": "linux-arm64-release", "inherits": "test", "configurePreset": "linux-arm64-release" },
+    { "name": "linux-arm64-debug-level-log", "inherits": "test", "configurePreset": "linux-arm64-debug-level-log" },
+    { "name": "linux-arm64-release-level-log", "inherits": "test", "configurePreset": "linux-arm64-release-level-log" },
+    { "name": "linux-arm64-core-only", "inherits": "test", "configurePreset": "linux-arm64-core-only" },
+    { "name": "linux-arm-debug", "inherits": "test", "configurePreset": "linux-arm-debug" },
+    { "name": "linux-arm-release", "inherits": "test", "configurePreset": "linux-arm-release" },
+    { "name": "linux-arm-debug-level-log", "inherits": "test", "configurePreset": "linux-arm-debug-level-log" },
+    { "name": "linux-arm-release-level-log", "inherits": "test", "configurePreset": "linux-arm-release-level-log" },
+    { "name": "linux-arm-core-only", "inherits": "test", "configurePreset": "linux-arm-core-only" },
+    { "name": "windows-debug", "inherits": "test", "configurePreset": "windows-debug", "configuration": "Debug" },
+    { "name": "windows-release", "inherits": "test", "configurePreset": "windows-release", "configuration": "Release" },
+    { "name": "windows-debug-level-log", "inherits": "test", "configurePreset": "windows-debug-level-log", "configuration": "DebugLevelLog" },
+    { "name": "windows-release-level-log", "inherits": "test", "configurePreset": "windows-release-level-log", "configuration": "ReleaseLevelLog" },
+    { "name": "windows-core-only", "inherits": "test", "configurePreset": "windows-core-only", "configuration": "Debug" }
   ]
 }

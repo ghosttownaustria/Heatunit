@@ -1,4 +1,5 @@
 #include "androidauto/InputReports.h"
+#include "androidauto/ProjectionKeys.h"
 #include <aap_protobuf/service/inputsource/message/KeyEvent.pb.h>
 #include <aap_protobuf/service/inputsource/message/PointerAction.pb.h>
 #include <aap_protobuf/service/inputsource/message/RelativeEvent.pb.h>
@@ -7,6 +8,8 @@
 namespace headunit {
 namespace input = aap_protobuf::service::inputsource::message;
 
+// The protocol message for one simulated input: a touch point, a key press or release, or a turn of the rotary
+// controller. `timestampNs` is a monotonic clock in nanoseconds.
 input::InputReport BuildInputReport(const InputEvent& event, std::uint64_t timestampNs)
 {
     input::InputReport report;
@@ -19,7 +22,8 @@ input::InputReport BuildInputReport(const InputEvent& event, std::uint64_t times
         pointer->set_pointer_id(touch->pointerId);
         touchEvent->set_action_index(0);
         touchEvent->set_action(touch->action == TouchAction::Down ? input::ACTION_DOWN
-            : touch->action == TouchAction::Up ? input::ACTION_UP : input::ACTION_MOVED);
+            : touch->action == TouchAction::Up                    ? input::ACTION_UP
+                                                                  : input::ACTION_MOVED);
     } else if (const auto* key = std::get_if<KeyInput>(&event)) {
         auto* pressed = report.mutable_key_event()->add_keys();
         pressed->set_keycode(key->keycode);

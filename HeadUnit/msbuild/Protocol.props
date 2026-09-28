@@ -2,13 +2,16 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <ProtocolDepsRoot>$(HeadUnitRoot)..\.tools\vcpkg\installed\x64-windows\</ProtocolDepsRoot>
-    <ProtocolGeneratedRoot>$(HeadUnitRoot)out\generated\</ProtocolGeneratedRoot>
-    <ProtocolLibRoot Condition="'$(Configuration)'=='Debug'">$(ProtocolDepsRoot)debug\lib\</ProtocolLibRoot>
-    <ProtocolLibRoot Condition="'$(Configuration)'!='Debug'">$(ProtocolDepsRoot)lib\</ProtocolLibRoot>
-    <ProtocolBinRoot Condition="'$(Configuration)'=='Debug'">$(ProtocolDepsRoot)debug\bin\</ProtocolBinRoot>
-    <ProtocolBinRoot Condition="'$(Configuration)'!='Debug'">$(ProtocolDepsRoot)bin\</ProtocolBinRoot>
-    <ProtocolProtobufLib Condition="'$(Configuration)'=='Debug'">libprotobufd.lib</ProtocolProtobufLib>
-    <ProtocolProtobufLib Condition="'$(Configuration)'!='Debug'">libprotobuf.lib</ProtocolProtobufLib>
+    <!-- Relative to the HeadUnit folder as well: Aasdk.vcxproj names the generated sources relatively, because their object
+         files are placed by relative directory. -->
+    <ProtocolGeneratedDir>bin\windows$(Platform)\$(HeadUnitProfile)\obj\GeneratedProtocol\</ProtocolGeneratedDir>
+    <ProtocolGeneratedRoot>$(HeadUnitRoot)$(ProtocolGeneratedDir)</ProtocolGeneratedRoot>
+    <ProtocolLibRoot Condition="'$(HeadUnitIsDebug)'=='true'">$(ProtocolDepsRoot)debug\lib\</ProtocolLibRoot>
+    <ProtocolLibRoot Condition="'$(HeadUnitIsDebug)'!='true'">$(ProtocolDepsRoot)lib\</ProtocolLibRoot>
+    <ProtocolBinRoot Condition="'$(HeadUnitIsDebug)'=='true'">$(ProtocolDepsRoot)debug\bin\</ProtocolBinRoot>
+    <ProtocolBinRoot Condition="'$(HeadUnitIsDebug)'!='true'">$(ProtocolDepsRoot)bin\</ProtocolBinRoot>
+    <ProtocolProtobufLib Condition="'$(HeadUnitIsDebug)'=='true'">libprotobufd.lib</ProtocolProtobufLib>
+    <ProtocolProtobufLib Condition="'$(HeadUnitIsDebug)'!='true'">libprotobuf.lib</ProtocolProtobufLib>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>

@@ -1,23 +1,19 @@
 #include "usb/AutoConnectSystem.h"
-#include <thread>
+#include "usb/AndroidUsbProbe.h"
+#include "usb/DriverRepair.h"
 
 namespace headunit {
-AutoConnectResult ConnectPhoneAutomatically(IUsbBackend& backend, Logger& logger, std::atomic_bool& isStopRequested,
-    ProjectionCallbacks callbacks)
+// RunAutoConnect wired to the real USB backend, the libusb session and this platform's driver repair (elevated on
+// Windows). Runs on a worker; `callbacks.onStatus` receives both the flow's steps and the session's progress.
+AutoConnectResult ConnectPhoneAutomatically(IUsbBackend& backend, Logger& logger, std::atomic_bool& isStopRequested, ProjectionCallbacks callbacks)
 {
     AutoConnectDeps deps;
     deps.scan = [&] { return backend.EnumerateDevices(); };
     deps.connect = [&](const UsbDevice& phone) { return ConnectAndroidAuto(phone, logger, isStopRequested, callbacks); };
     deps.repair = [&] { return RepairPhoneDriverElevated(logger); };
     deps.recover = [&] { return RecoverPhoneElevated(logger); };
-#ifdef _WIN32
-    deps.needsAdminPrompt = true;
-#endif
-    // Sleeps in small slices so the Stop button takes effect within 100 ms.
-    deps.wait = [&](std::chrono::milliseconds time) {
-        for (auto left = time; left.count() > 0 && !isStopRequested; left -= std::chrono::milliseconds(100))
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    };
+    deps.needsAdminPrompt = NeedsAdminPromptForRepair();
+    deps.wait = [&](std::chrono::milliseconds duration) { SleepUnlessStopped(duration, isStopRequested); };
     return RunAutoConnect(deps, logger, isStopRequested, callbacks.onStatus);
 }
 }

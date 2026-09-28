@@ -1,4 +1,5 @@
 #include "ui/MenuStyle.h"
+#include "ui/HomeMenuLayout.h"
 #include <QByteArray>
 #include <QFontMetricsF>
 #include <QLinearGradient>
@@ -140,37 +141,41 @@ QPainterPath ParsePath(std::string_view data, Qt::FillRule rule)
 {
     QPainterPath path;
     path.setFillRule(rule);
-    std::size_t at = 0;
-    const auto skipSeparators = [&] { while (at < data.size() && (data[at] == ' ' || data[at] == ',')) ++at; };
-    const auto number = [&](double& value) {
+    std::size_t position = 0;
+    const auto skipSeparators = [&] {
+        while (position < data.size() && (data[position] == ' ' || data[position] == ',')) ++position;
+    };
+    const auto readNumber = [&](double& value) {
         skipSeparators();
-        const std::size_t start = at;
-        if (at < data.size() && data[at] == '-') ++at;
+        const std::size_t start = position;
+        if (position < data.size() && data[position] == '-') ++position;
         bool hasPoint = false;
-        while (at < data.size() && (std::isdigit(static_cast<unsigned char>(data[at])) || (data[at] == '.' && !hasPoint))) {
-            hasPoint = hasPoint || data[at] == '.';
-            ++at;
+        while (position < data.size() && (std::isdigit(static_cast<unsigned char>(data[position])) || (data[position] == '.' && !hasPoint))) {
+            hasPoint = hasPoint || data[position] == '.';
+            ++position;
         }
         bool isValid = false;
-        value = QByteArray(data.data() + start, static_cast<qsizetype>(at - start)).toDouble(&isValid);   // "C" locale
+        value = QByteArray(data.data() + start, static_cast<qsizetype>(position - start)).toDouble(&isValid);   // "C" locale
         return isValid;
     };
     char command = 0;
-    for (skipSeparators(); at < data.size(); skipSeparators()) {
-        if (std::isalpha(static_cast<unsigned char>(data[at]))) command = data[at++];
+    for (skipSeparators(); position < data.size(); skipSeparators()) {
+        if (std::isalpha(static_cast<unsigned char>(data[position]))) command = data[position++];
         else if (command == 'M') command = 'L';
         else if (command == 'Z') break;   // numbers after Z: not path data
-        double v[6]{};
+        double values[6]{};
         switch (command) {
         case 'M':
         case 'L':
-            if (!number(v[0]) || !number(v[1])) return path;
-            if (command == 'M') path.moveTo(v[0], v[1]);
-            else path.lineTo(v[0], v[1]);
+            if (!readNumber(values[0]) || !readNumber(values[1])) return path;
+            if (command == 'M') path.moveTo(values[0], values[1]);
+            else path.lineTo(values[0], values[1]);
             break;
         case 'C':
-            for (double& value : v) if (!number(value)) return path;
-            path.cubicTo(v[0], v[1], v[2], v[3], v[4], v[5]);
+            for (double& value : values) {
+                if (!readNumber(value)) return path;
+            }
+            path.cubicTo(values[0], values[1], values[2], values[3], values[4], values[5]);
             break;
         case 'Z':
             path.closeSubpath();
@@ -191,27 +196,31 @@ QBrush DesignGradient(const QGradientStops& stops, const QTransform& placement)
     brush.setTransform(placement);
     return brush;
 }
+
+// The stripes' gradient stops: nine colours at the design's offsets.
 QGradientStops StripeStops(const std::array<QColor, 9>& colours)
 {
-    static constexpr double offsets[] = {0, 0.06, 0.13, 0.29, 0.5, 0.7, 0.85, 0.93, 1};
+    static constexpr double kOffsets[] = {0, 0.06, 0.13, 0.29, 0.5, 0.7, 0.85, 0.93, 1};
     QGradientStops stops;
-    for (std::size_t i = 0; i < colours.size(); ++i) stops.append({offsets[i], colours[i]});
+    for (std::size_t index = 0; index < colours.size(); ++index) stops.append({kOffsets[index], colours[index]});
     return stops;
 }
 
-// Parsed once; a tile lit by the focus draws its stripes and symbol in orange, the others in grey.
-struct Look {
+// The shapes and brushes of the tiles. A tile lit by the focus draws its stripes and symbol in orange, the others in grey.
+struct TileLook {
     QPainterPath stripeShape;
     std::array<QPainterPath, kHomeMenuCount> iconShapes;
     QBrush stripes, litStripes, icon, litIcon;
 };
-const Look& TheLook()
+
+// The tiles' look, parsed once.
+const TileLook& SharedTileLook()
 {
-    static const Look look = [] {
-        Look result;
+    static const TileLook look = [] {
+        TileLook result;
         result.stripeShape = ParsePath(kStripes, Qt::OddEvenFill);
-        // The design fills with the even-odd rule; only the Android Auto symbol and the microphone use nonzero.
-        // In the order of HomeMenuEntry.
+        // The design fills with the even-odd rule; only the Android Auto symbol and the microphone use nonzero. In the
+        // order of HomeMenuEntry.
         result.iconShapes = {ParsePath(kAndroidAutoIcon, Qt::WindingFill), ParsePath(kMultimediaIcon, Qt::OddEvenFill),
             ParsePath(kRadioIcon, Qt::WindingFill), ParsePath(kTelephoneIcon, Qt::OddEvenFill), ParsePath(kNavigationIcon, Qt::OddEvenFill),
             ParsePath(kVehicleIcon, Qt::OddEvenFill), ParsePath(kSettingsIcon, Qt::OddEvenFill)};
@@ -222,10 +231,8 @@ const Look& TheLook()
         result.litStripes = DesignGradient(StripeStops({QColor(0, 0, 0), QColor(74, 13, 0), QColor(255, 45, 0), QColor(255, 143, 0), QColor(255, 168, 0),
             QColor(255, 83, 0), QColor(255, 45, 0), QColor(68, 12, 0), QColor(0, 0, 0)}), vertical);
         // Symbols: diagonal, darker at the bottom left.
-        result.icon = DesignGradient({{0, QColor(23, 23, 23)}, {1, QColor(142, 142, 142)}},
-            QTransform(203.561, -359.923, 334.786, 218.845, 66.5128, 448.32));
-        result.litIcon = DesignGradient({{0, QColor(255, 45, 0)}, {1, QColor(255, 168, 0)}},
-            QTransform(123.562, -225.494, 209.745, 132.839, 110.546, 365.205));
+        result.icon = DesignGradient({{0, QColor(23, 23, 23)}, {1, QColor(142, 142, 142)}}, QTransform(203.561, -359.923, 334.786, 218.845, 66.5128, 448.32));
+        result.litIcon = DesignGradient({{0, QColor(255, 45, 0)}, {1, QColor(255, 168, 0)}}, QTransform(123.562, -225.494, 209.745, 132.839, 110.546, 365.205));
         return result;
     }();
     return look;
@@ -239,29 +246,55 @@ QBrush LitCorner(const QRectF& box)
     gradient.setColorAt(1, QColor(255, 168, 0));
     return gradient;
 }
+
+// The outline of a player symbol, drawn in a square around the box's centre.
 QPainterPath SymbolPath(Symbol symbol, const QRectF& box)
 {
-    // Drawn in a square of side `s` around the box's centre.
-    const double s = std::min(box.width(), box.height()) * 0.4;
-    const QPointF c = box.center();
-    const double l = c.x() - s / 2, t = c.y() - s / 2, r = c.x() + s / 2, b = c.y() + s / 2;
+    const double size = std::min(box.width(), box.height()) * 0.4;
+    const QPointF centre = box.center();
+    const double left = centre.x() - size / 2;
+    const double top = centre.y() - size / 2;
+    const double right = centre.x() + size / 2;
+    const double bottom = centre.y() + size / 2;
     QPainterPath path;
     const auto triangle = [&](double from, double to) {   // pointing from `from` towards `to` (x), full height
-        path.addPolygon(QPolygonF({QPointF(from, t), QPointF(to, c.y()), QPointF(from, b)}));
+        path.addPolygon(QPolygonF({QPointF(from, top), QPointF(to, centre.y()), QPointF(from, bottom)}));
         path.closeSubpath();
     };
-    const double bar = s * 0.18;
+    const double bar = size * 0.18;
     switch (symbol) {
-    case Symbol::Play: triangle(l + s * 0.1, r); break;
-    case Symbol::Pause: path.addRect(QRectF(l + s * 0.12, t, s * 0.28, s)); path.addRect(QRectF(r - s * 0.4, t, s * 0.28, s)); break;
-    case Symbol::Stop: path.addRect(QRectF(l + s * 0.08, t + s * 0.08, s * 0.84, s * 0.84)); break;
-    case Symbol::Previous: path.addRect(QRectF(l, t, bar, s)); triangle(r, l + bar); break;
-    case Symbol::Next: triangle(l, r - bar); path.addRect(QRectF(r - bar, t, bar, s)); break;
+    case Symbol::Play: triangle(left + size * 0.1, right); break;
+    case Symbol::Pause:
+        path.addRect(QRectF(left + size * 0.12, top, size * 0.28, size));
+        path.addRect(QRectF(right - size * 0.4, top, size * 0.28, size));
+        break;
+    case Symbol::Stop: path.addRect(QRectF(left + size * 0.08, top + size * 0.08, size * 0.84, size * 0.84)); break;
+    case Symbol::Previous:
+        path.addRect(QRectF(left, top, bar, size));
+        triangle(right, left + bar);
+        break;
+    case Symbol::Next:
+        triangle(left, right - bar);
+        path.addRect(QRectF(right - bar, top, bar, size));
+        break;
     }
     return path;
 }
+
+// The frame of a button: the focus, or a faint frame.
+void DrawButtonFrame(QPainter& painter, const QRectF& box, bool isFocused)
+{
+    if (isFocused) {
+        DrawFocus(painter, box);
+        return;
+    }
+    painter.setPen(QPen(kFaintFrame, 2.5));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawRect(box);
+}
 }
 
+// The design's font (Roboto, else the system's sans serif), `pixels` design units high.
 QFont Font(int pixels)
 {
     QFont font;
@@ -269,13 +302,17 @@ QFont Font(int pixels)
     font.setPixelSize(pixels);
     return font;
 }
+
+// `text` shortened with "..." to fit `width` in `font`.
 QString Elided(const QString& text, const QFont& font, double width)
 {
     return QFontMetricsF(font).elidedText(text, Qt::ElideRight, std::max(0.0, width));
 }
+
+// A tile as on the home menu: stripes, symbol, frame and title. Lit: stripes and symbol in orange.
 void DrawTile(QPainter& painter, const QRectF& tile, HomeMenuEntry entry, bool isLit)
 {
-    const Look& look = TheLook();
+    const TileLook& look = SharedTileLook();
     painter.save();
     QTransform artboard;
     artboard.translate(tile.left(), tile.top());
@@ -292,6 +329,8 @@ void DrawTile(QPainter& painter, const QRectF& tile, HomeMenuEntry entry, bool i
     painter.setPen(kText);
     painter.drawText(tile.topLeft() + kTitleOffset, QString::fromLatin1(HomeMenuTitle(entry)));
 }
+
+// Marks what the controller is on: the tiles' frame with small orange stripes in two corners.
 void DrawFocus(QPainter& painter, const QRectF& box)
 {
     const QRectF inside = box.adjusted(kFrameWidth / 2, kFrameWidth / 2, -kFrameWidth / 2, -kFrameWidth / 2);
@@ -306,29 +345,25 @@ void DrawFocus(QPainter& painter, const QRectF& box)
     painter.setBrush(Qt::NoBrush);
     painter.drawRect(box);
 }
+
+// A framed button like a small tile. `isOn` draws the symbol in orange (the player is playing).
 void DrawButton(QPainter& painter, const QRectF& box, Symbol symbol, bool isFocused, bool isOn)
 {
-    if (isFocused) DrawFocus(painter, box);
-    else {
-        painter.setPen(QPen(kFaintFrame, 2.5));
-        painter.setBrush(Qt::NoBrush);
-        painter.drawRect(box);
-    }
+    DrawButtonFrame(painter, box, isFocused);
     painter.fillPath(SymbolPath(symbol, box), isOn ? LitCorner(box) : QBrush(kText));
 }
+
+// A framed button with a text.
 void DrawTextButton(QPainter& painter, const QRectF& box, const QString& text, bool isFocused)
 {
-    if (isFocused) DrawFocus(painter, box);
-    else {
-        painter.setPen(QPen(kFaintFrame, 2.5));
-        painter.setBrush(Qt::NoBrush);
-        painter.drawRect(box);
-    }
+    DrawButtonFrame(painter, box, isFocused);
     const QFont font = Font(24);
     painter.setFont(font);
     painter.setPen(kText);
     painter.drawText(box, Qt::AlignCenter, Elided(text, font, box.width() - 20));
 }
+
+// A tick box; on: filled with the lit orange and ticked.
 void DrawCheck(QPainter& painter, const QRectF& box, bool isOn)
 {
     painter.setPen(QPen(isOn ? kText : kFaintFrame, 2.5));
@@ -337,14 +372,18 @@ void DrawCheck(QPainter& painter, const QRectF& box, bool isOn)
     if (!isOn) return;
     painter.fillRect(box.adjusted(5, 5, -5, -5), LitCorner(box));
     painter.setPen(QPen(Qt::black, 4, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-    const QPointF c = box.center();
-    const double s = box.width() * 0.22;
-    painter.drawPolyline(QPolygonF({QPointF(c.x() - s, c.y()), QPointF(c.x() - s * 0.25, c.y() + s * 0.8), QPointF(c.x() + s * 1.1, c.y() - s * 0.8)}));
+    const QPointF centre = box.center();
+    const double size = box.width() * 0.22;
+    painter.drawPolyline(QPolygonF({QPointF(centre.x() - size, centre.y()), QPointF(centre.x() - size * 0.25, centre.y() + size * 0.8),
+        QPointF(centre.x() + size * 1.1, centre.y() - size * 0.8)}));
 }
+
+// One row of a list: text at the left, a dim note at the right. The current row (what plays) has its text in orange.
 void DrawRow(QPainter& painter, const QRectF& row, const QString& text, const QString& note, bool isFocused, bool isCurrent)
 {
-    if (isFocused) DrawFocus(painter, row);
-    else {
+    if (isFocused) {
+        DrawFocus(painter, row);
+    } else {
         painter.setPen(QPen(kLine, 1.5));
         painter.drawLine(QPointF(row.left(), row.bottom()), QPointF(row.right(), row.bottom()));
     }

@@ -82,7 +82,7 @@ redistribution package.
 
 ## Core-only tests
 
-On Windows use the `core-only` configure and `core-debug` build/test presets; on Linux `linux-core-only`
+On Windows use the `windows-core-only` configure, build and test presets; on Linux `linux-core-only`
 (a C++20 compiler and CMake are enough):
 
 ```sh
@@ -92,4 +92,5 @@ cmake --build --preset linux-core-only
 ctest --preset linux-core-only
 ```
 
-The same works without presets: `cmake -S HeadUnit -B HeadUnit/out/core -DHEADUNIT_BUILD_APP=OFF -DBUILD_TESTING=ON`.
+The same works without presets: `cmake -S HeadUnit -B HeadUnit/bin/linuxx64/debug/obj-core -DHEADUNIT_BUILD_APP=OFF -DBUILD_TESTING=ON`
+(the executables land in `HeadUnit/bin/<system><arch>/<profile>/` in any case).

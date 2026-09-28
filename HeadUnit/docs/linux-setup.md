@@ -92,13 +92,15 @@ zusammen mit dem Bauen: `bash BuildAndRun.sh --udev`.)
 bash BuildAndRun.sh
 ```
 
-Das konfiguriert mit CMake (Preset `linux-debug`), baut mit Ninja, fuehrt `ctest` aus und startet `HeadUnit`.
-Das fertige Programm liegt in `HeadUnit/out/build/linux-debug/HeadUnit`, das Log `headunit.log` daneben.
+Das konfiguriert mit CMake (auf dem Pi mit 64-Bit-System Preset `linux-arm64-debug`), baut mit Ninja, fuehrt `ctest` aus
+und startet `HeadUnit`. Das fertige Programm liegt in `HeadUnit/bin/linuxarm64/debug/HeadUnit` (allgemein
+`HeadUnit/bin/linux<Architektur>/<Profil>/`), das Log `headunit.log` und das Build-Log `build.log` daneben.
 
 Haeufige Varianten:
 
 ```sh
-bash BuildAndRun.sh release                  # optimiert bauen (linux-release)
+bash BuildAndRun.sh release                  # optimiert bauen
+bash BuildAndRun.sh release_level_log        # optimiert, mit ausfuehrlichem Log
 bash BuildAndRun.sh --pull                   # vorher git pull
 bash BuildAndRun.sh --no-run                 # nur bauen und testen
 bash BuildAndRun.sh --clean                  # Build-Ordner neu anlegen

@@ -1,9 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- The four build profiles and the output layout shared with CMake: bin\windows<platform>\<profile>\, intermediate files
+       in its obj\ folder. DebugLevelLog and ReleaseLevelLog compile like Debug and Release and only add full logging. -->
   <PropertyGroup>
     <HeadUnitRoot>$(MSBuildThisFileDirectory)..\</HeadUnitRoot>
-    <OutDir>$(HeadUnitRoot)out\vs2026\$(Platform)\$(Configuration)\</OutDir>
-    <IntDir>$(HeadUnitRoot)out\vs2026\obj\$(ProjectName)\$(Platform)\$(Configuration)\</IntDir>
+    <HeadUnitIsDebug>false</HeadUnitIsDebug>
+    <HeadUnitIsDebug Condition="'$(Configuration)'=='Debug' Or '$(Configuration)'=='DebugLevelLog'">true</HeadUnitIsDebug>
+    <HeadUnitIsVerboseLogging>false</HeadUnitIsVerboseLogging>
+    <HeadUnitIsVerboseLogging Condition="'$(Configuration)'=='DebugLevelLog' Or '$(Configuration)'=='ReleaseLevelLog'">true</HeadUnitIsVerboseLogging>
+    <HeadUnitProfile Condition="'$(Configuration)'=='Debug'">debug</HeadUnitProfile>
+    <HeadUnitProfile Condition="'$(Configuration)'=='Release'">release</HeadUnitProfile>
+    <HeadUnitProfile Condition="'$(Configuration)'=='DebugLevelLog'">debug_level_log</HeadUnitProfile>
+    <HeadUnitProfile Condition="'$(Configuration)'=='ReleaseLevelLog'">release_level_log</HeadUnitProfile>
+    <HeadUnitOutputRoot>$(HeadUnitRoot)bin\windows$(Platform)\$(HeadUnitProfile)\</HeadUnitOutputRoot>
+    <OutDir>$(HeadUnitOutputRoot)</OutDir>
+    <IntDir>$(HeadUnitOutputRoot)obj\$(ProjectName)\</IntDir>
     <LocalDebuggerWorkingDirectory>$(OutDir)</LocalDebuggerWorkingDirectory>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
     <VcpkgEnabled>false</VcpkgEnabled>
@@ -18,24 +29,33 @@
       <AdditionalOptions>/utf-8 /Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
       <AdditionalIncludeDirectories>$(HeadUnitRoot)src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>UNICODE;_UNICODE;WIN32_LEAN_AND_MEAN;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <!-- Headers included with <...> (Qt, Boost, protobuf, FFmpeg, the standard library) are external: their warnings
+           are not ours to fix, as in the CMake build, which includes imported targets as system headers. -->
+      <TreatAngleIncludeAsExternal>true</TreatAngleIncludeAsExternal>
+      <ExternalWarningLevel>TurnOffAllWarnings</ExternalWarningLevel>
       <ExceptionHandling>Sync</ExceptionHandling>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
     </ClCompile>
     <Link><SubSystem>Console</SubSystem><GenerateDebugInformation>true</GenerateDebugInformation></Link>
   </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
+  <ItemDefinitionGroup Condition="'$(HeadUnitIsDebug)'=='true'">
     <ClCompile>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
+  <ItemDefinitionGroup Condition="'$(HeadUnitIsDebug)'!='true'">
     <ClCompile>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <Optimization>MaxSpeed</Optimization>
       <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(HeadUnitIsVerboseLogging)'=='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>HEADUNIT_VERBOSE_LOGGING;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
 </Project>

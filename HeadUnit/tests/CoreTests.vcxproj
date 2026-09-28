@@ -3,6 +3,8 @@
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|x64"><Configuration>Debug</Configuration><Platform>x64</Platform></ProjectConfiguration>
     <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="DebugLevelLog|x64"><Configuration>DebugLevelLog</Configuration><Platform>x64</Platform></ProjectConfiguration>
+    <ProjectConfiguration Include="ReleaseLevelLog|x64"><Configuration>ReleaseLevelLog</Configuration><Platform>x64</Platform></ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{C4CAFA45-FD36-47C9-8F87-D8401DC611C9}</ProjectGuid>
@@ -15,23 +17,57 @@
     <ConfigurationType>Application</ConfigurationType>
     <PlatformToolset>v145</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
-    <UseDebugLibraries Condition="'$(Configuration)'=='Debug'">true</UseDebugLibraries>
-    <UseDebugLibraries Condition="'$(Configuration)'!='Debug'">false</UseDebugLibraries>
+    <UseDebugLibraries Condition="'$(Configuration)'=='Debug' Or '$(Configuration)'=='DebugLevelLog'">true</UseDebugLibraries>
+    <UseDebugLibraries Condition="'$(Configuration)'=='Release' Or '$(Configuration)'=='ReleaseLevelLog'">false</UseDebugLibraries>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="PropertySheets"><Import Project="..\msbuild\Common.props" /></ImportGroup>
   <ItemGroup>
     <ClCompile Include="CoreTests.cpp" />
+    <ClCompile Include="TestSupport.cpp" />
+    <ClCompile Include="UsbDescriptorTests.cpp" />
     <ClCompile Include="AoaTests.cpp" />
     <ClCompile Include="AutoConnectTests.cpp" />
-    <ClCompile Include="CarControlTests.cpp" />
     <ClCompile Include="PhoneWatchTests.cpp" />
+    <ClCompile Include="DisplayTests.cpp" />
+    <ClCompile Include="ConsoleTests.cpp" />
+    <ClCompile Include="AudioTests.cpp" />
+    <ClCompile Include="MenuTests.cpp" />
+    <ClCompile Include="MediaTests.cpp" />
+    <ClCompile Include="LoggingTests.cpp" />
+    <ClCompile Include="CommandLineTests.cpp" />
+    <ClCompile Include="TransportBufferTests.cpp" />
+    <ClCompile Include="..\src\CommandLine.cpp" />
+    <ClCompile Include="..\src\logging\LogLevel.cpp" />
+    <ClCompile Include="..\src\logging\Logger.cpp" />
+    <ClCompile Include="..\src\platform\Environment.cpp" />
+    <ClCompile Include="..\src\usb\UsbTypes.cpp" />
+    <ClCompile Include="..\src\usb\UsbDescriptors.cpp" />
+    <ClCompile Include="..\src\usb\UsbLogging.cpp" />
+    <ClCompile Include="..\src\usb\UsbProbeResult.cpp" />
+    <ClCompile Include="..\src\usb\RepairResult.cpp" />
+    <ClCompile Include="..\src\androidauto\AndroidDeviceDetector.cpp" />
+    <ClCompile Include="..\src\androidauto\AoaNegotiator.cpp" />
     <ClCompile Include="..\src\androidauto\AutoConnect.cpp" />
     <ClCompile Include="..\src\androidauto\PhoneWatch.cpp" />
-    <ClCompile Include="..\src\androidauto\AoaNegotiator.cpp" />
-    <ClCompile Include="..\src\androidauto\AndroidDeviceDetector.cpp" />
-    <ClCompile Include="..\src\usb\UsbDescriptors.cpp" />
-    <ClCompile Include="..\src\logging\Logger.cpp" />
+    <ClCompile Include="..\src\androidauto\ConsoleController.cpp" />
+    <ClCompile Include="..\src\androidauto\DisplayConfig.cpp" />
+    <ClCompile Include="..\src\androidauto\PhoneScreenDetector.cpp" />
+    <ClCompile Include="..\src\androidauto\ProjectionInput.cpp" />
+    <ClCompile Include="..\src\androidauto\TouchMapping.cpp" />
+    <ClCompile Include="..\src\androidauto\TransportReceiveBuffer.cpp" />
+    <ClCompile Include="..\src\audio\AudioClock.cpp" />
+    <ClCompile Include="..\src\audio\PcmFormat.cpp" />
+    <ClCompile Include="..\src\audio\Pcm16.cpp" />
+    <ClCompile Include="..\src\audio\PcmRingBuffer.cpp" />
+    <ClCompile Include="..\src\audio\AudioState.cpp" />
+    <ClCompile Include="..\src\audio\MediaActivity.cpp" />
+    <ClCompile Include="..\src\audio\WatchedOutput.cpp" />
+    <ClCompile Include="..\src\media\MusicLibrary.cpp" />
+    <ClCompile Include="..\src\media\StreamText.cpp" />
+    <ClCompile Include="..\src\ui\KnobZones.cpp" />
+    <ClCompile Include="..\src\ui\HomeTileSetup.cpp" />
+    <ClCompile Include="..\src\ui\HomeMenuLayout.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

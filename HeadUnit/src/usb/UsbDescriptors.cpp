@@ -2,11 +2,25 @@
 #include <stdexcept>
 
 namespace headunit {
+namespace {
+constexpr std::uint8_t kConfigurationDescriptorType = 2;
+constexpr std::uint8_t kInterfaceDescriptorType = 4;
+constexpr std::uint8_t kEndpointDescriptorType = 5;
+
+// A little-endian 16-bit field of a descriptor.
+std::uint16_t ReadWord(std::span<const std::uint8_t> bytes, std::size_t offset)
+{
+    return static_cast<std::uint16_t>(bytes[offset] | (bytes[offset + 1] << 8));
+}
+}
+
+// Parses a complete configuration descriptor (with its interface and endpoint descriptors); throws on anything
+// malformed or truncated.
 UsbConfiguration ParseConfiguration(std::span<const std::uint8_t> bytes)
 {
-    if (bytes.size() < 9 || bytes[0] < 9 || bytes[1] != 2)
+    if (bytes.size() < 9 || bytes[0] < 9 || bytes[1] != kConfigurationDescriptorType)
         throw std::runtime_error("Invalid USB configuration header");
-    const auto total = static_cast<std::size_t>(bytes[2] | (bytes[3] << 8));
+    const std::size_t total = ReadWord(bytes, 2);
     if (total < 9 || total > bytes.size())
         throw std::runtime_error("Truncated USB configuration");
     UsbConfiguration configuration;
@@ -15,14 +29,13 @@ UsbConfiguration ParseConfiguration(std::span<const std::uint8_t> bytes)
         if (total - offset < 2 || bytes[offset] < 2 || bytes[offset] > total - offset)
             throw std::runtime_error("Invalid USB descriptor length");
         const auto descriptor = bytes.subspan(offset, bytes[offset]);
-        if (descriptor[1] == 4) {
+        if (descriptor[1] == kInterfaceDescriptorType) {
             if (descriptor.size() < 9) throw std::runtime_error("Truncated interface descriptor");
             configuration.interfaces.push_back({descriptor[2], descriptor[3], descriptor[5], descriptor[6], descriptor[7], {}});
-        } else if (descriptor[1] == 5) {
+        } else if (descriptor[1] == kEndpointDescriptorType) {
             if (descriptor.size() < 7 || configuration.interfaces.empty())
                 throw std::runtime_error("Invalid endpoint descriptor");
-            configuration.interfaces.back().endpoints.push_back({descriptor[2], descriptor[3],
-                static_cast<std::uint16_t>(descriptor[4] | (descriptor[5] << 8)), descriptor[6]});
+            configuration.interfaces.back().endpoints.push_back({descriptor[2], descriptor[3], ReadWord(descriptor, 4), descriptor[6]});
         }
         offset += descriptor.size();
     }

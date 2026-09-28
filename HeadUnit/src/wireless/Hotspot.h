@@ -3,6 +3,7 @@
 #include <string>
 
 namespace headunit {
+// The Wi-Fi network the head unit makes.
 struct HotspotConfig {
     std::string interfaceName;   // empty: the first Wi-Fi device NetworkManager knows
     std::string ssid{"HEATUNIT-AA"};
@@ -13,6 +14,8 @@ struct HotspotConfig {
     // its Wi-Fi scan, and a hidden network does not show up there by name (the working wireless adapters broadcast theirs).
     bool isHidden{false};
 };
+
+// The running hotspot, as the phone is told about it.
 struct HotspotInfo {
     std::string interfaceName;
     std::string ssid;
@@ -21,26 +24,24 @@ struct HotspotInfo {
     std::string ipAddress;       // the head unit's address in the hotspot network
 };
 
-// A run that was killed (Ctrl+C, crash) cannot take its hotspot down, and NetworkManager keeps it up until the next
-// reboot. Removes it; nothing happens when there is none or NetworkManager is missing.
-void RemoveLeftoverHotspot(Logger& logger);
-
-// The Wi-Fi network the phone joins for wireless Android Auto, made by NetworkManager (nmcli): the head unit's
-// Wi-Fi chip becomes an access point, and NetworkManager hands out addresses (ipv4.method shared).
-// While it runs, the same chip cannot be a Wi-Fi client, so an SSH session over Wi-Fi ends. The previous
-// Wi-Fi connection returns when the hotspot is stopped. Start and Stop may run on another thread than the one that
-// made the object, but not at the same time.
+// The Wi-Fi network the phone joins for wireless Android Auto, made by NetworkManager (nmcli): the head unit's Wi-Fi chip
+// becomes an access point, and NetworkManager hands out addresses (ipv4.method shared). While it runs, the same chip
+// cannot be a Wi-Fi client, so an SSH session over Wi-Fi ends. The previous Wi-Fi connection returns when the hotspot is
+// stopped. Start and Stop may run on another thread than the one that made the object, but not at the same time.
 class Hotspot {
 public:
-    explicit Hotspot(Logger& logger) : m_logger(logger) {}
-    ~Hotspot() { Stop(); }
+    explicit Hotspot(Logger& logger);
+    ~Hotspot();
     Hotspot(const Hotspot&) = delete;
     Hotspot& operator=(const Hotspot&) = delete;
-    // Empty on success, otherwise what went wrong and what to do about it (German, for the window).
+
     std::string Start(const HotspotConfig& config, HotspotInfo& info);
     void Stop();
+
 private:
     Logger& m_logger;
     bool m_isStarted{};
 };
+
+void RemoveLeftoverHotspot(Logger& logger);
 }

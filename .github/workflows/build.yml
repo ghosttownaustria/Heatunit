@@ -28,9 +28,9 @@ jobs:
         run: ctest --preset linux-release
       - name: Start without a display or a phone
         run: |
-          ./out/build/linux-release/HeadUnit --help
+          ./bin/linuxx64/release/HeadUnit --help
           # Searches the USB bus through libusb (the runner has no phone; a scan without errors is the result).
-          ./out/build/linux-release/HeadUnit --scan
+          ./bin/linuxx64/release/HeadUnit --scan
 
   windows-core:
     runs-on: windows-latest
@@ -40,8 +40,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Configure
-        run: cmake --preset core-only
+        run: cmake --preset windows-core-only
       - name: Build
-        run: cmake --build --preset core-debug
+        run: cmake --build --preset windows-core-only
       - name: Test
-        run: ctest --preset core-debug
+        run: ctest --preset windows-core-only

@@ -95,9 +95,12 @@ Handy                                      HeadUnit (Raspberry Pi), ab Programms
 - Ab dem TCP-Anschluss laufen Protokoll, Video, Ton und Eingabe **unveraendert**: nur der Transport ist ein anderer
   (`SocketTransport` statt `ProjectionTransport`).
 
-Code: `src/androidauto/PhoneWatch` (die Automatik, ohne Qt und getestet), `src/wireless/` (`WirelessProtocol`
-Nachrichten, `WirelessLink` der Bluetooth-Dialog bis zur TCP-Verbindung, `BluetoothService` BlueZ, `Hotspot` nmcli,
-`SocketTransport` TCP, `WirelessConnect` die `WirelessStation`, die WLAN und Bluetooth am Laufen haelt).
+Code: `src/androidauto/PhoneWatch` (die Automatik, ohne Qt und getestet), `src/wireless/`: ohne Qt und getestet
+`WirelessProtocol` (Nachrichten), `WirelessFrameParser`, `WirelessHandshake` und `WirelessLink` (der Bluetooth-Dialog bis
+zur TCP-Verbindung), `TcpListener`, `SocketTransport` (TCP); mit QtDBus `BluetoothService` (BlueZ; dazu
+`BluetoothContext`, `BluezCalls`, `PairingAgent`, `AndroidAutoProfile`, `DeviceWatcher`), `Hotspot` (nmcli),
+`WirelessSettings` (Umgebungsvariablen, gemerktes WLAN-Passwort), `WirelessStation` (haelt WLAN und Bluetooth am Laufen)
+und `WirelessDiagnostics` (`--test-bluetooth`, `--test-hotspot`).
 
 ## Voraussetzungen
 
@@ -117,7 +120,8 @@ seinem WLAN.
 
 ## Ausprobieren, Schritt fuer Schritt
 
-Jeweils aus `HeadUnit/out/build/linux-release` (oder `-debug`), nach `bash BuildAndRun.sh --no-run`.
+Jeweils aus `HeadUnit/bin/linuxarm64/release` (oder `debug`; auf anderen Rechnern `bin/linux<Architektur>/<Profil>`),
+nach `bash BuildAndRun.sh release --no-run`.
 
 **1. Hotspot** (ohne Handy-Zusammenspiel):
 

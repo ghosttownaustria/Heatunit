@@ -1,13 +1,17 @@
+#include "CoreTestSuites.h"
+#include "TestSupport.h"
 #include "androidauto/AoaNegotiator.h"
 #include <stdexcept>
 #include <vector>
 
 namespace {
+// A phone's control endpoint that checks the AOA requests it gets and fails at a chosen one.
 class RecordingControl final : public headunit::IUsbControl {
 public:
     int m_callCount{};
     int m_failAt{-1};
     bool m_isShortTransfer{}, m_isDisconnected{}, m_hasStarted{};
+    // Checks the request and answers it as the phone would, failing where the test asks.
     headunit::UsbControlResult Transfer(std::uint8_t requestType, std::uint8_t request,
         std::uint16_t index, std::span<std::uint8_t> bytes) override
     {
@@ -29,14 +33,15 @@ public:
     }
 };
 }
-void TestAoaNegotiation()
+
+// The AOA identity requests go out in order and START only after all of them; a failed or short request stops before START.
+void RunAoaTests()
 {
     std::vector<std::string> stages;
     const auto report = [&](const std::string& stage) { stages.push_back(stage); };
     RecordingControl success;
     headunit::RequestAccessoryMode(success, report);
-    if (!success.m_hasStarted || success.m_callCount != 7 || stages.size() != 7)
-        throw std::runtime_error("Incomplete AOA sequence");
+    Check(success.m_hasStarted && success.m_callCount == 7 && stages.size() == 7, "Incomplete AOA sequence");
     for (int failAt = 0; failAt < 6; ++failAt) {
         for (const bool isShort : {false, true}) {
             RecordingControl failure;
@@ -45,12 +50,11 @@ void TestAoaNegotiation()
             bool hasRejected = false;
             try { headunit::RequestAccessoryMode(failure, report); }
             catch (const std::runtime_error&) { hasRejected = true; }
-            if (!hasRejected || failure.m_hasStarted || failure.m_callCount != failAt + 1)
-                throw std::runtime_error("AOA failure did not stop before START");
+            Check(hasRejected && !failure.m_hasStarted && failure.m_callCount == failAt + 1, "AOA failure did not stop before START");
         }
     }
     RecordingControl disconnect;
     disconnect.m_isDisconnected = true;
     headunit::RequestAccessoryMode(disconnect, report);
-    if (!disconnect.m_hasStarted) throw std::runtime_error("START disconnect handling failed");
+    Check(disconnect.m_hasStarted, "START disconnect handling failed");
 }

@@ -4,6 +4,8 @@
 if(WIN32)
   set(HEADUNIT_DEPS "${CMAKE_CURRENT_SOURCE_DIR}/../.tools/vcpkg/installed/x64-windows" CACHE PATH "Prepared native dependencies")
   list(PREPEND CMAKE_PREFIX_PATH "${HEADUNIT_DEPS}")
+  # The DLLs that are copied next to the programs, Debug or Release builds to match the profile.
+  set(HEADUNIT_DEPS_BIN "${HEADUNIT_DEPS}/$<IF:$<CONFIG:Debug,DebugLevelLog>,debug/bin,bin>")
 endif()
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
@@ -70,10 +72,10 @@ else()
   target_link_libraries(headunit_ffmpeg INTERFACE PkgConfig::FFMPEG)
 endif()
 
-add_library(headunit_video src/video/VideoDecoder.cpp)
+add_library(headunit_video src/video/VideoDecoder.cpp src/video/FfmpegHandles.cpp)
 target_include_directories(headunit_video PUBLIC src)
 target_link_libraries(headunit_video PRIVATE headunit_ffmpeg)
 
 # The radio's own player (music files, internet radio); plays through the audio engines of headunit_usb.
 add_library(headunit_media src/media/AudioPlayer.cpp)
-target_link_libraries(headunit_media PUBLIC headunit_core PRIVATE headunit_ffmpeg)
+target_link_libraries(headunit_media PUBLIC headunit_core PRIVATE headunit_ffmpeg headunit_video)

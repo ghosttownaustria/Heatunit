@@ -9,6 +9,8 @@ namespace headunit {
 namespace {
 const QPointF kClockPosition(12.249, 62.337);   // start of the baseline
 }
+
+// A page with its clock, which updates once a minute (checked every second).
 MenuPage::MenuPage(QWidget* parent) : QWidget(parent)
 {
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
@@ -18,26 +20,51 @@ MenuPage::MenuPage(QWidget* parent) : QWidget(parent)
     clock->start(1000);
     UpdateClock();
 }
+
+// The display whose shape the page takes.
 void MenuPage::SetDisplay(const DisplayConfig& display)
 {
     m_display = display;
     DisplayChanged();
     update();
 }
-double MenuPage::Width() const { return HomeMenuWidth(m_display); }
-void MenuPage::UpdateClock()
+
+// Back while the page is in front; true when the page took it itself (closing a list it opened).
+bool MenuPage::Back()
 {
-    const QString now = QTime::currentTime().toString("HH:mm");
-    if (now == m_clock) return;
-    m_clock = now;
-    update();
+    return false;
 }
-// Where the display is drawn: its shape, as large as the widget allows and centred, like the phone's picture.
-QRectF MenuPage::ScreenRect() const
+
+// The phone's smallest display.
+QSize MenuPage::sizeHint() const
 {
-    const QSizeF shown = QSizeF(m_display.width, m_display.height).scaled(QSizeF(size()), Qt::KeepAspectRatio);
-    return QRectF(QPointF((width() - shown.width()) / 2, (height() - shown.height()) / 2), shown);
+    return {800, 480};
 }
+
+// Half the smallest display.
+QSize MenuPage::minimumSizeHint() const
+{
+    return {400, 240};
+}
+
+// The display changed; a page whose layout depends on its width adjusts here.
+void MenuPage::DisplayChanged()
+{
+}
+
+// The display whose shape the page takes.
+const DisplayConfig& MenuPage::Display() const
+{
+    return m_display;
+}
+
+// Width of the screen in design units.
+double MenuPage::Width() const
+{
+    return HomeMenuWidth(m_display);
+}
+
+// A position in the widget as design units; none outside the screen.
 std::optional<QPointF> MenuPage::ToDesign(const QPointF& position) const
 {
     const QRectF screen = ScreenRect();
@@ -45,6 +72,8 @@ std::optional<QPointF> MenuPage::ToDesign(const QPointF& position) const
     const double scale = screen.height() / kHomeMenuHeight;
     return (position - screen.topLeft()) / scale;
 }
+
+// Draws the black screen with the clock, then the page on it.
 void MenuPage::paintEvent(QPaintEvent*)
 {
     QPainter painter(this);
@@ -62,5 +91,21 @@ void MenuPage::paintEvent(QPaintEvent*)
     painter.setPen(menu::kText);
     painter.drawText(kClockPosition, m_clock);
     Paint(painter);
+}
+
+// Where the display is drawn: its shape, as large as the widget allows and centred, like the phone's picture.
+QRectF MenuPage::ScreenRect() const
+{
+    const QSizeF shown = QSizeF(m_display.width, m_display.height).scaled(QSizeF(size()), Qt::KeepAspectRatio);
+    return QRectF(QPointF((width() - shown.width()) / 2, (height() - shown.height()) / 2), shown);
+}
+
+// Redraws when the minute changed.
+void MenuPage::UpdateClock()
+{
+    const QString now = QTime::currentTime().toString("HH:mm");
+    if (now == m_clock) return;
+    m_clock = now;
+    update();
 }
 }
