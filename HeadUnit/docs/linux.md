@@ -49,9 +49,13 @@ cmake --build --preset linux-debug
 ctest --preset linux-debug
 ```
 
-`linux-release` baut optimiert. Nur der Kern ohne Qt und ohne Bibliotheken (Tests der Ablauf- und Erkennungslogik):
-`cmake --preset linux-core-only`, dann `cmake --build --preset linux-core-only` und `ctest --preset linux-core-only`.
-Das Programm liegt danach in `out/build/linux-debug/HeadUnit`. `HEADUNIT_AUDIO_BACKEND` (`auto`, `miniaudio`) und
+`linux-release` baut optimiert; `linux-debug-level-log` und `linux-release-level-log` bauen wie Debug bzw. Release, aber
+mit ausfuehrlichem Log (Stufe `trace`; sonst waehlbar mit `HEADUNIT_LOG_LEVEL`). Auf dem Raspberry Pi mit 64-Bit-System
+heissen die Presets `linux-arm64-debug` usw., mit 32-Bit-System `linux-arm-debug` usw. (`BuildAndRun.sh` waehlt selbst).
+Nur der Kern ohne Qt und ohne Bibliotheken (Tests der Ablauf- und Erkennungslogik): `cmake --preset linux-core-only`,
+dann `cmake --build --preset linux-core-only` und `ctest --preset linux-core-only`.
+Das Programm liegt danach in `bin/linux<Architektur>/<Profil>/HeadUnit`, zum Beispiel `bin/linuxx64/debug/HeadUnit`
+oder auf dem Pi `bin/linuxarm64/debug/HeadUnit`. `HEADUNIT_AUDIO_BACKEND` (`auto`, `miniaudio`) und
 `HEADUNIT_INSTALL_UDEV_RULES` (fuer Paketbauer) sind CMake-Optionen.
 
 ## Zugriff aufs Handy: die udev-Regel (einmalig)

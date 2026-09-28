@@ -1,4 +1,6 @@
 .tools/
+HeadUnit/bin/
+# Build output of versions before the bin/ layout.
 HeadUnit/out/
 HeadUnit/CMakeUserPresets.json
 *.log

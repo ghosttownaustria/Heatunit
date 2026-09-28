@@ -14,25 +14,41 @@ Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
 		Release|x64 = Release|x64
+		DebugLevelLog|x64 = DebugLevelLog|x64
+		ReleaseLevelLog|x64 = ReleaseLevelLog|x64
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{4C849A91-CC49-47FC-8372-1C916773751A}.Debug|x64.ActiveCfg = Debug|x64
 		{4C849A91-CC49-47FC-8372-1C916773751A}.Debug|x64.Build.0 = Debug|x64
 		{4C849A91-CC49-47FC-8372-1C916773751A}.Release|x64.ActiveCfg = Release|x64
 		{4C849A91-CC49-47FC-8372-1C916773751A}.Release|x64.Build.0 = Release|x64
-
+		{4C849A91-CC49-47FC-8372-1C916773751A}.DebugLevelLog|x64.ActiveCfg = DebugLevelLog|x64
+		{4C849A91-CC49-47FC-8372-1C916773751A}.DebugLevelLog|x64.Build.0 = DebugLevelLog|x64
+		{4C849A91-CC49-47FC-8372-1C916773751A}.ReleaseLevelLog|x64.ActiveCfg = ReleaseLevelLog|x64
+		{4C849A91-CC49-47FC-8372-1C916773751A}.ReleaseLevelLog|x64.Build.0 = ReleaseLevelLog|x64
 		{D37D4DBC-67C4-4572-BDCB-123D4AF98A76}.Debug|x64.ActiveCfg = Debug|x64
 		{D37D4DBC-67C4-4572-BDCB-123D4AF98A76}.Debug|x64.Build.0 = Debug|x64
 		{D37D4DBC-67C4-4572-BDCB-123D4AF98A76}.Release|x64.ActiveCfg = Release|x64
 		{D37D4DBC-67C4-4572-BDCB-123D4AF98A76}.Release|x64.Build.0 = Release|x64
-
+		{D37D4DBC-67C4-4572-BDCB-123D4AF98A76}.DebugLevelLog|x64.ActiveCfg = DebugLevelLog|x64
+		{D37D4DBC-67C4-4572-BDCB-123D4AF98A76}.DebugLevelLog|x64.Build.0 = DebugLevelLog|x64
+		{D37D4DBC-67C4-4572-BDCB-123D4AF98A76}.ReleaseLevelLog|x64.ActiveCfg = ReleaseLevelLog|x64
+		{D37D4DBC-67C4-4572-BDCB-123D4AF98A76}.ReleaseLevelLog|x64.Build.0 = ReleaseLevelLog|x64
 		{51900BEF-B4A4-46AF-A382-F96F5B6FF1B1}.Debug|x64.ActiveCfg = Debug|x64
 		{51900BEF-B4A4-46AF-A382-F96F5B6FF1B1}.Debug|x64.Build.0 = Debug|x64
 		{51900BEF-B4A4-46AF-A382-F96F5B6FF1B1}.Release|x64.ActiveCfg = Release|x64
 		{51900BEF-B4A4-46AF-A382-F96F5B6FF1B1}.Release|x64.Build.0 = Release|x64
+		{51900BEF-B4A4-46AF-A382-F96F5B6FF1B1}.DebugLevelLog|x64.ActiveCfg = DebugLevelLog|x64
+		{51900BEF-B4A4-46AF-A382-F96F5B6FF1B1}.DebugLevelLog|x64.Build.0 = DebugLevelLog|x64
+		{51900BEF-B4A4-46AF-A382-F96F5B6FF1B1}.ReleaseLevelLog|x64.ActiveCfg = ReleaseLevelLog|x64
+		{51900BEF-B4A4-46AF-A382-F96F5B6FF1B1}.ReleaseLevelLog|x64.Build.0 = ReleaseLevelLog|x64
 		{C4CAFA45-FD36-47C9-8F87-D8401DC611C9}.Debug|x64.ActiveCfg = Debug|x64
 		{C4CAFA45-FD36-47C9-8F87-D8401DC611C9}.Debug|x64.Build.0 = Debug|x64
 		{C4CAFA45-FD36-47C9-8F87-D8401DC611C9}.Release|x64.ActiveCfg = Release|x64
 		{C4CAFA45-FD36-47C9-8F87-D8401DC611C9}.Release|x64.Build.0 = Release|x64
+		{C4CAFA45-FD36-47C9-8F87-D8401DC611C9}.DebugLevelLog|x64.ActiveCfg = DebugLevelLog|x64
+		{C4CAFA45-FD36-47C9-8F87-D8401DC611C9}.DebugLevelLog|x64.Build.0 = DebugLevelLog|x64
+		{C4CAFA45-FD36-47C9-8F87-D8401DC611C9}.ReleaseLevelLog|x64.ActiveCfg = ReleaseLevelLog|x64
+		{C4CAFA45-FD36-47C9-8F87-D8401DC611C9}.ReleaseLevelLog|x64.Build.0 = ReleaseLevelLog|x64
 	EndGlobalSection
 EndGlobal

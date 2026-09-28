@@ -3,8 +3,8 @@
   <PropertyGroup>
     <QtRoot Condition="'$(QtRoot)'=='' and '$(QT_ROOT)'!=''">$(QT_ROOT)</QtRoot>
     <QtRoot Condition="'$(QtRoot)'==''">$(HeadUnitRoot)..\.tools\Qt\6.8.3\msvc2022_64</QtRoot>
-    <QtSuffix Condition="'$(Configuration)'=='Debug'">d</QtSuffix>
-    <QtSuffix Condition="'$(Configuration)'!='Debug'"></QtSuffix>
+    <QtSuffix Condition="'$(HeadUnitIsDebug)'=='true'">d</QtSuffix>
+    <QtSuffix Condition="'$(HeadUnitIsDebug)'!='true'"></QtSuffix>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
@@ -16,7 +16,7 @@
       <AdditionalDependencies>Qt6Core$(QtSuffix).lib;Qt6Gui$(QtSuffix).lib;Qt6Widgets$(QtSuffix).lib;Qt6Concurrent$(QtSuffix).lib;Qt6Network$(QtSuffix).lib;setupapi.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
+  <ItemDefinitionGroup Condition="'$(HeadUnitIsDebug)'!='true'">
     <ClCompile><PreprocessorDefinitions>QT_NO_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
   </ItemDefinitionGroup>
 </Project>

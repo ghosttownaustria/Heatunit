@@ -1,3 +1,5 @@
+#include "CoreTestSuites.h"
+#include "TestSupport.h"
 #include "androidauto/PhoneWatch.h"
 #include <algorithm>
 #include <filesystem>
@@ -6,16 +8,14 @@
 #include <vector>
 
 using namespace headunit;
-void Check(bool isValid, const char* message);
 
 namespace {
-Logger& TestLogger() {
-    static Logger logger(std::filesystem::temp_directory_path() / "headunit-phonewatch-tests.log");
-    return logger;
-}
+// A session that showed the phone's picture until the person stopped it.
 AutoConnectResult Video() { AutoConnectResult result; result.hasVideo = true; result.message = "Android Auto stopped by user"; return result; }
 using Bus = std::vector<std::string>;
+// `times` looks that find the same phones.
 std::vector<Bus> Repeat(const Bus& bus, int times) { return std::vector<Bus>(static_cast<std::size_t>(times), bus); }
+// The looks of `first`, then those of `second`.
 std::vector<Bus> Join(std::vector<Bus> first, const std::vector<Bus>& second) { first.insert(first.end(), second.begin(), second.end()); return first; }
 
 // Scripted world: every USB look takes the next entry of `bus` (the last one repeats), every wireless wait the next
@@ -28,10 +28,11 @@ struct World {
     int failingScan{-1};                   // this look throws
     std::function<void(World&)> onWait;    // runs in every wait, before the stop check
     std::function<void(World&)> duringUsb; // runs inside every USB attempt
-    std::atomic_bool stop{false}, attemptStop{false}, usbRequested{false};
+    std::atomic_bool isStopRequested{false}, isAttemptStopRequested{false}, isUsbRequested{false};
     int scanCalls{}, waitCalls{}, usbConnects{}, wirelessConnects{}, wirelessRequests{}, starts{}, ends{};
     std::vector<std::string> steps;
     std::vector<int> servedSockets;
+    // The dependencies of RunPhoneWatch, answered from this world.
     PhoneWatchDeps Deps() {
         PhoneWatchDeps deps;
         deps.usbPhones = [this] {
@@ -40,7 +41,7 @@ struct World {
             return bus.at(std::min<std::size_t>(static_cast<std::size_t>(call), bus.size() - 1));
         };
         deps.connectUsb = [this] { ++usbConnects; if (duringUsb) duringUsb(*this); return Video(); };
-        const auto pace = [this] { if (onWait) onWait(*this); if (++waitCalls >= rounds) stop = true; };
+        const auto pace = [this] { if (onWait) onWait(*this); if (++waitCalls >= rounds) isStopRequested = true; };
         if (hasWireless) {
             deps.waitForWirelessPhone = [this, pace](std::chrono::milliseconds) {
                 const auto index = static_cast<std::size_t>(waitCalls);
@@ -56,14 +57,17 @@ struct World {
         deps.onAttemptEnd = [this](const AutoConnectResult&) { ++ends; };
         return deps;
     }
+    // Runs the watch in this world until it stops.
     AutoConnectResult Run() {
         const auto deps = Deps();
-        return RunPhoneWatch(deps, TestLogger(), stop, attemptStop, usbRequested, [this](const std::string& step) { steps.push_back(step); });
+        return RunPhoneWatch(deps, TestLogger(), isStopRequested, isAttemptStopRequested, isUsbRequested, [this](const std::string& step) { steps.push_back(step); });
     }
+    // Whether one of the steps shown to the person contains `part`.
     bool HasStep(const std::string& part) const {
         return std::any_of(steps.begin(), steps.end(), [&](const std::string& step) { return step.find(part) != std::string::npos; });
     }
 };
+// A USB device as the scan reports it.
 UsbDevice Device(std::uint16_t vendor, std::uint16_t product, std::string serial, std::string location) {
     UsbDevice device;
     device.vendorId = vendor;
@@ -74,7 +78,8 @@ UsbDevice Device(std::uint16_t vendor, std::uint16_t product, std::string serial
 }
 }
 
-void TestPhoneWatch() {
+// The automatic mode: one attempt per plugged-in phone, wireless phones between the USB looks, and a stop ends it.
+void RunPhoneWatchTests() {
     const Bus phone{"serial R5GL65Y1FSY"};
     {   // Plugged in already at the start: one attempt, and no second one while the phone stays.
         World world;
@@ -98,7 +103,7 @@ void TestPhoneWatch() {
     {   // "Android Auto verbinden" connects the phone that stays plugged in once more.
         World world;
         world.bus = {phone};
-        world.onWait = [](World& w) { if (w.waitCalls == 12) w.usbRequested = true; };
+        world.onWait = [](World& w) { if (w.waitCalls == 12) w.isUsbRequested = true; };
         world.Run();
         Check(world.usbConnects == 2, "The button did not start a new USB attempt");
         Check(world.wirelessRequests == 0, "The button reconnected the wireless phones although a phone is on the USB cable");
@@ -106,7 +111,7 @@ void TestPhoneWatch() {
     {   // "Android Auto verbinden" without a phone on the cable asks the paired phones to connect wirelessly.
         World world;
         world.bus = {Bus{}};
-        world.onWait = [](World& w) { if (w.waitCalls == 5) w.usbRequested = true; };
+        world.onWait = [](World& w) { if (w.waitCalls == 5) w.isUsbRequested = true; };
         world.Run();
         Check(world.wirelessRequests == 1 && world.usbConnects == 0, "The button did not reconnect the wireless phones");
         Check(world.HasStep("kabellos") && !world.HasStep("Datenkabel"), "The button's message does not tell about the wireless connection");
@@ -115,7 +120,7 @@ void TestPhoneWatch() {
         World world;
         world.hasWireless = false;
         world.bus = {Bus{}};
-        world.onWait = [](World& w) { if (w.waitCalls == 5) w.usbRequested = true; };
+        world.onWait = [](World& w) { if (w.waitCalls == 5) w.isUsbRequested = true; };
         world.Run();
         Check(world.HasStep("Datenkabel"), "Without wireless the button does not ask for a USB cable");
     }
@@ -137,9 +142,9 @@ void TestPhoneWatch() {
     {   // The stop request of the last attempt does not end the next one before it starts.
         World world;
         world.bus = {phone};
-        world.attemptStop = true;
+        world.isAttemptStopRequested = true;
         bool wasCleared = false;
-        world.duringUsb = [&wasCleared](World& w) { wasCleared = !w.attemptStop; };
+        world.duringUsb = [&wasCleared](World& w) { wasCleared = !w.isAttemptStopRequested; };
         world.Run();
         Check(wasCleared, "The attempt started with the previous stop request still set");
     }

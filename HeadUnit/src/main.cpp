@@ -1,187 +1,199 @@
+#include "CommandLine.h"
+#include "androidauto/AndroidDeviceDetector.h"
+#include "audio/AudioEngine.h"
 #include "logging/Logger.h"
-#include "usb/UsbBackendFactory.h"
+#include "platform/ShutdownSignal.h"
+#include "ui/MainWindow.h"
 #include "usb/AndroidUsbProbe.h"
 #include "usb/DriverRepair.h"
-#include "androidauto/AndroidDeviceDetector.h"
-#include "androidauto/DisplayConfig.h"
-#include "audio/AudioEngine.h"
-#include "ui/MainWindow.h"
+#include "usb/UsbBackendFactory.h"
 #ifdef HEADUNIT_WIRELESS
 #include "platform/Environment.h"
-#include "wireless/WirelessConnect.h"
-#include <QCoreApplication>
+#include "wireless/Hotspot.h"
+#include "wireless/WirelessDiagnostics.h"
 #endif
 #include <QApplication>
-#ifndef _WIN32
+#include <QCoreApplication>
 #include <QTimer>
-#include <atomic>
-#include <csignal>
-#endif
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <exception>
 #include <iostream>
-#include <optional>
+#include <string>
 #include <string_view>
 #include <thread>
 #include <vector>
 
 namespace {
-#ifndef _WIN32
-// Set by Ctrl+C (SIGINT) or a service stop (SIGTERM); the window then closes as if its close button was pressed.
-std::atomic_bool g_isCloseRequested{false};
-void RequestClose(int) { g_isCloseRequested = true; }
+using namespace headunit;
+#ifdef HEADUNIT_WIRELESS
+constexpr bool kHasWireless = true;
+#else
+constexpr bool kHasWireless = false;
 #endif
-// Plays two seconds of a quiet 440 Hz tone through this platform's audio engine, at the pace of a live stream:
-// a check of the sound output that needs no phone. Succeeds when the output device took most of the audio.
-int RunToneTest(headunit::Logger& logger)
+constexpr int kCloseCheckIntervalMs = 200;
+
+// Plays two seconds of a quiet 440 Hz tone through this platform's audio engine, at the pace of a live stream: a check
+// of the sound output that needs no phone. Succeeds when the output device took most of the audio.
+int RunToneTest(Logger& logger)
 {
     using namespace std::chrono_literals;
-    constexpr headunit::PcmFormat format{48000, 2, 16};
-    constexpr int kSliceMilliseconds = 10, kSlices = 200;
+    constexpr PcmFormat kFormat{48000, 2, 16};
+    constexpr int kSliceMilliseconds = 10;
+    constexpr int kSlices = 200;
     constexpr double kPi = 3.14159265358979323846;
-    auto state = std::make_shared<headunit::AudioState>();
-    const auto engine = headunit::CreateAudioEngine(state, logger);
-    const auto output = engine->Opener()(headunit::AudioKind::Media, format);
-    if (!output) { logger.Write("ERROR", "TEST", "Tone test: the audio output could not be opened"); return 4; }
-    const std::size_t sliceFrames = format.sampleRate * kSliceMilliseconds / 1000;
-    std::vector<std::int16_t> samples(sliceFrames * format.channels);
+    auto state = std::make_shared<AudioState>();
+    AudioEngine engine(state, logger);
+    const auto output = engine.Opener()(AudioKind::Media, kFormat);
+    if (!output) {
+        logger.Write(LogLevel::Error, "TEST", "Tone test: the audio output could not be opened");
+        return 4;
+    }
+    const std::size_t sliceFrames = kFormat.sampleRate * kSliceMilliseconds / 1000;
+    std::vector<std::int16_t> samples(sliceFrames * kFormat.channels);
     double phase = 0;
     auto next = std::chrono::steady_clock::now();
     for (int slice = 0; slice < kSlices; ++slice) {
-        for (std::size_t frame = 0; frame < sliceFrames; ++frame, phase += 2 * kPi * 440 / format.sampleRate)
-            for (std::uint32_t channel = 0; channel < format.channels; ++channel)
-                samples[frame * format.channels + channel] = static_cast<std::int16_t>(std::sin(phase) * 10000);
+        for (std::size_t frame = 0; frame < sliceFrames; ++frame, phase += 2 * kPi * 440 / kFormat.sampleRate) {
+            for (std::uint32_t channel = 0; channel < kFormat.channels; ++channel)
+                samples[frame * kFormat.channels + channel] = static_cast<std::int16_t>(std::sin(phase) * 10000);
+        }
         output->Write({reinterpret_cast<const std::uint8_t*>(samples.data()), samples.size() * sizeof(std::int16_t)});
         next += std::chrono::milliseconds(kSliceMilliseconds);
         std::this_thread::sleep_until(next);
     }
     std::this_thread::sleep_for(300ms);   // the last audio is still queued
-    const auto played = state->BytesRendered(headunit::AudioKind::Media);
-    const auto expected = format.BytesPerSecond() * 3 / 2;
-    logger.Write(played >= expected ? "INFO" : "ERROR", "TEST", "Tone test: " + std::to_string(played) + " of " + std::to_string(format.BytesPerSecond() * 2) +
-        " bytes reached the audio output" + (played >= expected ? "" : "; is a sound system running and an output device selected?"));
-    return played >= expected ? 0 : 5;
+    const auto played = state->BytesRendered(AudioKind::Media);
+    const auto expected = kFormat.BytesPerSecond() * 3 / 2;
+    const bool isPlayed = played >= expected;
+    logger.Write(isPlayed ? LogLevel::Info : LogLevel::Error, "TEST", "Tone test: " + std::to_string(played) + " of " + std::to_string(kFormat.BytesPerSecond() * 2) +
+        " bytes reached the audio output" + (isPlayed ? "" : "; is a sound system running and an output device selected?"));
+    return isPlayed ? 0 : 5;
+}
+
+// --repair-driver and --recover-phone. On Windows this runs elevated in its own process, so it keeps a separate log;
+// started from a normal console it asks Windows for administrator rights (UAC) and repeats there. The exit code is the
+// RepairOutcome.
+int RunRepair(bool isRecover)
+{
+    Logger repairLog(DefaultLogPath("headunit-repair.log"));
+    auto result = isRecover ? RecoverPhoneNow(repairLog) : RepairPhoneDriverNow(repairLog);
+    if (result.outcome == RepairOutcome::NotElevated) result = isRecover ? RecoverPhoneElevated(repairLog) : RepairPhoneDriverElevated(repairLog);
+    std::cout << result.message << '\n';
+    return static_cast<int>(result.outcome);
+}
+
+// --probe-usb and --start-accessory: the one Android device on the bus is probed (or switched to accessory mode).
+int RunUsbProbe(IUsbBackend& backend, Logger& logger, bool isStartAccessory)
+{
+    const auto scan = backend.EnumerateDevices();
+    std::vector<UsbDevice> candidates;
+    for (const auto& device : scan.devices) {
+        if (DetectAndroidDevice(device).evidence != AndroidEvidence::None) candidates.push_back(device);
+    }
+    if (!scan.errors.empty() || candidates.size() != 1) {
+        logger.Write(LogLevel::Error, "AA", "Probe requires a complete scan with exactly one Android candidate. Use the UI to select a device.");
+        return 3;
+    }
+    const auto result = isStartAccessory ? StartAndroidAccessory(candidates.front(), logger) : ProbeAndroidUsb(candidates.front(), logger);
+    return IsSuccessfulProbe(result.state) ? 0 : 3;
+}
+
+#ifdef HEADUNIT_WIRELESS
+// --test-bluetooth and --test-hotspot. D-Bus (Bluetooth) delivers BlueZ's calls as Qt events, so the tests need an
+// application object, but no window. HEADUNIT_TEST_SECONDS sets how long they run.
+int RunWirelessTest(int argc, char* argv[], Logger& logger, RunMode mode)
+{
+    QCoreApplication core(argc, argv);
+    const bool isBluetooth = mode == RunMode::TestBluetooth;
+    int seconds = isBluetooth ? 120 : 60;
+    if (const auto text = GetEnv("HEADUNIT_TEST_SECONDS")) {
+        try {
+            seconds = std::max(5, std::stoi(*text));
+        } catch (const std::exception&) {
+        }
+    }
+    return isBluetooth ? RunBluetoothTest(logger, std::chrono::seconds(seconds)) : RunHotspotTest(logger, std::chrono::seconds(seconds));
+}
+#endif
+
+// The window's test mode for a run mode.
+MainWindow::TestMode TestModeOf(RunMode mode)
+{
+    switch (mode) {
+    case RunMode::SmokeTest: return MainWindow::TestMode::Smoke;
+    case RunMode::TestProjection: return MainWindow::TestMode::Projection;
+    case RunMode::TestInput: return MainWindow::TestMode::Input;
+    case RunMode::TestAudio: return MainWindow::TestMode::Audio;
+    case RunMode::TestConsole: return MainWindow::TestMode::Console;
+    case RunMode::TestKeys: return MainWindow::TestMode::Keys;
+    default: return MainWindow::TestMode::None;
+    }
+}
+
+// The window, in the car mode or one of its test modes, until it closes. Closing properly (also on Ctrl+C or a service
+// stop) ends a running session and takes the wireless mode's hotspot down again.
+int RunWindow(int argc, char* argv[], IUsbBackend& backend, Logger& logger, const CommandLine& commandLine)
+{
+#ifdef HEADUNIT_WIRELESS
+    // A run that was killed cannot take its hotspot down; NetworkManager would keep it on the air until the next reboot.
+    RemoveLeftoverHotspot(logger);
+#endif
+    QApplication application(argc, argv);
+    MainWindow window(backend, logger, TestModeOf(commandLine.mode));
+    if (commandLine.display) window.SetDisplay(*commandLine.display);
+    window.show();
+    if (commandLine.isWirelessRequested) logger.Write(LogLevel::Info, "APP", "--wireless: wireless Android Auto runs from the start anyway");
+    InstallShutdownSignalHandlers();
+    QTimer closeWatch;
+    QObject::connect(&closeWatch, &QTimer::timeout, &window, [&window] {
+        if (ConsumeShutdownRequest()) window.close();
+    });
+    closeWatch.start(kCloseCheckIntervalMs);
+    logger.Write(LogLevel::Info, "UI", "Qt " QT_VERSION_STR " window initialized");
+    const auto result = application.exec();
+    logger.Write(LogLevel::Info, "APP", "Event loop stopped");
+    return result;
+}
+
+// Runs the chosen mode with the program's log (the repair modes keep their own).
+int Run(int argc, char* argv[], const CommandLine& commandLine)
+{
+    if (commandLine.mode == RunMode::RepairDriver || commandLine.mode == RunMode::RecoverPhone) return RunRepair(commandLine.mode == RunMode::RecoverPhone);
+    Logger logger(DefaultLogPath("headunit.log"));
+    logger.Write(LogLevel::Info, "APP", std::string("HeadUnit 0.2.0 started; automatic USB") + (kHasWireless ? " and wireless" : "") +
+        " Android Auto projection; log includes serial numbers");
+    if (commandLine.mode == RunMode::TestTone) return RunToneTest(logger);
+#ifdef HEADUNIT_WIRELESS
+    if (commandLine.mode == RunMode::TestBluetooth || commandLine.mode == RunMode::TestHotspot) return RunWirelessTest(argc, argv, logger, commandLine.mode);
+#endif
+    const auto backend = CreateUsbBackend(logger);
+    if (commandLine.mode == RunMode::Scan) return backend->EnumerateDevices().errors.empty() ? 0 : 2;
+    if (commandLine.mode == RunMode::ProbeUsb || commandLine.mode == RunMode::StartAccessory)
+        return RunUsbProbe(*backend, logger, commandLine.mode == RunMode::StartAccessory);
+    return RunWindow(argc, argv, *backend, logger, commandLine);
 }
 }
 
+// Reads the arguments and runs the chosen mode; see CommandLineHelp for the modes.
 int main(int argc, char* argv[])
 {
-    bool isScanOnly = false, isSmokeTest = false, isUsbProbe = false, isStartAccessory = false, isProjectionTest = false, isRepairDriver = false, isRecoverPhone = false, isInputTest = false, isAudioTest = false, isConsoleTest = false, isKeysTest = false, isToneTest = false, isBluetoothTest = false, isHotspotTest = false, isWireless = false;
-    std::optional<headunit::DisplayConfig> display;
-    for (int index = 1; index < argc; ++index) {
-        const std::string_view argument(argv[index]);
-        if (argument == "--display") {
-            display = index + 1 < argc ? headunit::ParseDisplay(argv[index + 1]) : std::nullopt;
-            if (!display) {
-                std::cerr << "--display needs one of these sizes:";
-                for (const auto& known : headunit::kDisplays) std::cerr << ' ' << known.width << 'x' << known.height;
-                std::cerr << '\n';
-                return 1;
-            }
-            ++index;
-        }
-        else if (argument == "--scan") isScanOnly = true;
-        else if (argument == "--repair-driver") isRepairDriver = true;
-        else if (argument == "--recover-phone") isRecoverPhone = true;
-        else if (argument == "--smoke-test") isSmokeTest = true;
-        else if (argument == "--probe-usb") isUsbProbe = true;
-        else if (argument == "--start-accessory") isStartAccessory = true;
-        else if (argument == "--test-projection") isProjectionTest = true;
-        else if (argument == "--test-input") isInputTest = true;
-        else if (argument == "--test-audio") isAudioTest = true;
-        else if (argument == "--test-console") isConsoleTest = true;
-        else if (argument == "--test-keys") isKeysTest = true;
-        else if (argument == "--test-tone") isToneTest = true;
-#ifdef HEADUNIT_WIRELESS
-        else if (argument == "--test-bluetooth") isBluetoothTest = true;
-        else if (argument == "--test-hotspot") isHotspotTest = true;
-        else if (argument == "--wireless") isWireless = true;
-#endif
-        else if (argument == "--help") {
-            std::cout << "HeadUnit [--scan | --smoke-test | --probe-usb | --start-accessory | --test-projection | --test-input | --test-audio | --test-console | --test-keys | --test-tone | --repair-driver | --recover-phone] [--display 800x480|1280x720|1600x600|1920x1080]\n"
-#ifdef HEADUNIT_WIRELESS
-                         "HeadUnit [--test-bluetooth | --test-hotspot]\n"
-                         "Without an option the window watches USB and wireless Android Auto from the start (hidden Wi-Fi hotspot + Bluetooth, docs/wireless.md); --wireless is accepted and changes nothing\n"
-                         "--test-bluetooth makes the computer visible as HEATUNIT and checks that a phone pairs and asks for the Wi-Fi details (HEADUNIT_TEST_SECONDS, default 120)\n"
-                         "--test-hotspot starts the Wi-Fi hotspot for a while and prints how to join it (HEADUNIT_TEST_SECONDS, default 60)\n"
-#endif
-                         "Logs: ./headunit.log (includes USB serial numbers); in the user's state directory when the working directory is not writable\n"
-                         "--display picks the display size for this run (the window's own choice is remembered, this one is not)\n"
-                         "--test-tone plays a short quiet tone through the audio output, which needs no phone\n"
-                         "--repair-driver Windows: rebinds the phone to WinUSB (needs administrator rights; the app starts it itself when needed)\n"
-                         "                Linux: checks that the phone can be opened and says what to install when it cannot (docs/linux.md)\n";
-            return 0;
-        } else { std::cerr << "Unknown option: " << argument << '\n'; return 1; }
+    const std::vector<std::string_view> arguments(argv + 1, argv + argc);
+    const CommandLine commandLine = ParseCommandLine(arguments, kHasWireless);
+    if (commandLine.isHelpRequested) {
+        std::cout << CommandLineHelp(kHasWireless);
+        return 0;
     }
-    if (static_cast<int>(isScanOnly) + static_cast<int>(isSmokeTest) + static_cast<int>(isUsbProbe) + static_cast<int>(isStartAccessory) + static_cast<int>(isProjectionTest) + static_cast<int>(isRepairDriver) + static_cast<int>(isRecoverPhone) + static_cast<int>(isInputTest) + static_cast<int>(isAudioTest) + static_cast<int>(isConsoleTest) + static_cast<int>(isKeysTest) + static_cast<int>(isToneTest) + static_cast<int>(isBluetoothTest) + static_cast<int>(isHotspotTest) + static_cast<int>(isWireless) > 1) { std::cerr << "Choose one run mode\n"; return 1; }
+    if (!commandLine.error.empty()) {
+        std::cerr << commandLine.error << '\n';
+        return 1;
+    }
+    // Every QSettings of the program uses these names.
+    QCoreApplication::setOrganizationName("HeadUnit");
+    QCoreApplication::setApplicationName("HeadUnit");
     try {
-        if (isRepairDriver || isRecoverPhone) {
-            // On Windows this runs elevated in its own process, so it keeps a separate log.
-            headunit::Logger repairLog(headunit::DefaultLogPath("headunit-repair.log"));
-            auto result = isRecoverPhone ? headunit::RecoverPhoneNow(repairLog) : headunit::RepairPhoneDriverNow(repairLog);
-            // Started from a normal console: ask Windows for administrator rights (UAC) and repeat there.
-            if (result.outcome == headunit::RepairOutcome::NotElevated)
-                result = isRecoverPhone ? headunit::RecoverPhoneElevated(repairLog) : headunit::RepairPhoneDriverElevated(repairLog);
-            std::cout << result.message << '\n';
-            return static_cast<int>(result.outcome);
-        }
-        headunit::Logger logger(headunit::DefaultLogPath("headunit.log"));
-#ifdef HEADUNIT_WIRELESS
-        logger.Write("INFO", "APP", "HeadUnit 0.2.0 started; automatic USB and wireless Android Auto projection; log includes serial numbers");
-#else
-        logger.Write("INFO", "APP", "HeadUnit 0.2.0 started; automatic USB Android Auto projection; log includes serial numbers");
-#endif
-        if (isToneTest) return RunToneTest(logger);
-#ifdef HEADUNIT_WIRELESS
-        if (isBluetoothTest || isHotspotTest) {
-            // D-Bus (Bluetooth) delivers BlueZ's calls as Qt events, so the tests need an application object, but no window.
-            QCoreApplication core(argc, argv);
-            int seconds = isBluetoothTest ? 120 : 60;
-            if (const auto text = headunit::GetEnv("HEADUNIT_TEST_SECONDS")) { try { seconds = std::max(5, std::stoi(*text)); } catch (const std::exception&) {} }
-            return isBluetoothTest ? headunit::RunBluetoothTest(logger, std::chrono::seconds(seconds)) : headunit::RunHotspotTest(logger, std::chrono::seconds(seconds));
-        }
-#else
-        (void)isBluetoothTest; (void)isHotspotTest; (void)isWireless;
-#endif
-        const auto backendOwner = headunit::CreateUsbBackend(logger);
-        headunit::IUsbBackend& backend = *backendOwner;
-        if (isScanOnly) return backend.EnumerateDevices().errors.empty() ? 0 : 2;
-        if (isUsbProbe || isStartAccessory) {
-            const auto scan = backend.EnumerateDevices();
-            std::vector<headunit::UsbDevice> candidates;
-            for (const auto& device : scan.devices)
-                if (headunit::DetectAndroidDevice(device).evidence != headunit::AndroidEvidence::None) candidates.push_back(device);
-            if (!scan.errors.empty() || candidates.size() != 1) {
-                logger.Write("ERROR", "AA", "Probe requires a complete scan with exactly one Android candidate. Use the UI to select a device.");
-                return 3;
-            }
-            const auto result = isStartAccessory ? headunit::StartAndroidAccessory(candidates.front(), logger) : headunit::ProbeAndroidUsb(candidates.front(), logger);
-            return result.state == headunit::UsbProbeState::AoaAvailable || result.state == headunit::UsbProbeState::AccessoryAvailable ||
-                result.state == headunit::UsbProbeState::AccessoryTransportReady ? 0 : 3;
-        }
-#ifdef HEADUNIT_WIRELESS
-        // A run that was killed cannot take its hotspot down; NetworkManager would keep it on the air until the next reboot.
-        headunit::RemoveLeftoverHotspot(logger);
-#endif
-        QApplication application(argc, argv);
-        using Mode = headunit::MainWindow::TestMode;
-        headunit::MainWindow window(backend, logger, isSmokeTest ? Mode::Smoke : isProjectionTest ? Mode::Projection : isInputTest ? Mode::Input : isAudioTest ? Mode::Audio : isConsoleTest ? Mode::Console : isKeysTest ? Mode::Keys : Mode::None);
-        if (display) window.SetDisplay(*display);
-        window.show();
-        if (isWireless) logger.Write("INFO", "APP", "--wireless: wireless Android Auto runs from the start anyway");
-#ifndef _WIN32
-        // Closing properly ends a running session and takes the wireless mode's hotspot down again.
-        std::signal(SIGINT, RequestClose);
-        std::signal(SIGTERM, RequestClose);
-        QTimer closeWatch;
-        QObject::connect(&closeWatch, &QTimer::timeout, &window, [&window] { if (g_isCloseRequested.exchange(false)) window.close(); });
-        closeWatch.start(200);
-#endif
-        logger.Write("INFO", "UI", "Qt " QT_VERSION_STR " window initialized");
-        const auto result = application.exec();
-        logger.Write("INFO", "APP", "Event loop stopped");
-        return result;
+        return Run(argc, argv, commandLine);
     } catch (const std::exception& error) {
         std::cerr << "[FATAL][APP] " << error.what() << '\n';
         return 1;

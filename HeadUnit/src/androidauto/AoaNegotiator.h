@@ -1,21 +1,16 @@
 #pragma once
+#include "androidauto/IUsbControl.h"
 #include <cstdint>
 #include <functional>
-#include <span>
 #include <string>
 
 namespace headunit {
-struct UsbControlResult {
-    int transferred{};
-    std::string error;
-    bool isDisconnected{};
-};
-class IUsbControl {
-public:
-    virtual ~IUsbControl() = default;
-    virtual UsbControlResult Transfer(std::uint8_t requestType, std::uint8_t request,
-        std::uint16_t index, std::span<std::uint8_t> bytes) = 0;
-};
-// Sends AOA strings then START. The caller must subsequently verify re-enumeration.
+// The Android Open Accessory control requests.
+inline constexpr std::uint8_t kAoaVendorOut = 0x40;
+inline constexpr std::uint8_t kAoaVendorIn = 0xc0;
+inline constexpr std::uint8_t kAoaGetProtocol = 51;
+inline constexpr std::uint8_t kAoaSendString = 52;
+inline constexpr std::uint8_t kAoaStart = 53;
+
 void RequestAccessoryMode(IUsbControl& control, const std::function<void(const std::string&)>& reportStage);
 }

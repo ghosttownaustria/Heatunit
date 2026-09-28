@@ -8,6 +8,14 @@ sources on Windows (VS generator) and on Linux (Ninja, system libraries, see
 [linux.md](linux.md)); there is one code base, not a Windows and a Linux project. What differs per
 platform is listed under [Platform layer](#platform-layer).
 
+Both build systems know the same four profiles, `debug`, `release`, `debug_level_log` and `release_level_log`
+(`cmake/BuildProfiles.cmake`, `msbuild/Common.props`), and put everything under
+`bin/<system><arch>/<profile>/` (`bin/windowsx64/debug/HeadUnit.exe`, `bin/linuxarm64/release/HeadUnit`), with the
+intermediate files in its `obj/`. The level-log profiles compile like debug and release and only define
+`HEADUNIT_VERBOSE_LOGGING`: the log level is a run-time setting of `Logger` (`logging/LogLevel`), whose default the
+build profile picks (trace for the level-log profiles, debug for debug, info for release) and `HEADUNIT_LOG_LEVEL`
+overrides.
+
 Discovery, AOA control, a persistent protocol session and the video pipeline are
 implemented and hardware-verified with a Samsung phone: projected video, touch,
 rotary/key input and audio playback all work. Microphone capture is not implemented.
@@ -31,7 +39,8 @@ main (composition/lifetime)
               +-- latest-frame mailbox -> Qt timer -> VideoWidget
         +-- QStackedWidget: VideoWidget (phone) or a MenuPage of the radio, chosen by ConsoleController
         |     +-- HomeMenu, MultimediaPage (MusicLibrary), RadioPage (RadioBrowser -> radio-browser.info)
-        +-- AudioPlayer (FFmpeg avformat/avcodec/swresample, own thread) -> IAudioEngine media output
+        +-- AudioPlayer (FFmpeg avformat/avcodec/swresample, own thread) -> AudioEngine media output
+        +-- ScriptedPhoneTest (only in the --test-* window modes, drives the window through ScriptedTestHost)
 ```
 
 `headunit_core` has no Qt or Windows headers. Plain C++ value types carry device
@@ -85,27 +94,32 @@ AASDK, decoder, Qt UI, detector, tests) is shared and contains no platform `#ifd
 | Concern | Interface | Windows | Linux |
 | --- | --- | --- | --- |
 | USB discovery (device list, descriptors, strings) | `IUsbBackend`, `CreateUsbBackend()` | `WindowsUsbBackend`: SetupAPI + hub IOCTLs. Reads the strings of a phone that is bound to another vendor's driver | `LibusbUsbBackend`: descriptors from libusb's cache, strings from sysfs (no device access needed), otherwise from an opened handle |
-| What the OS needs before libusb may open the phone | `RepairPhoneDriverNow/Elevated`, `RecoverPhoneNow/Elevated` (`DriverRepair.h`) | `DriverRepair.cpp`: rebind WinUSB, restart the device node, both elevated through UAC | `DriverRepairLinux.cpp`: nothing to repair; detects a missing udev rule (`RepairOutcome::AccessDenied`) and restarts the USB link by libusb reset or sysfs `authorized` |
-| Sound output | `IAudioEngine`, `CreateAudioEngine()` | `WasapiAudioEngine` (shared mode) | `MiniaudioEngine`: PulseAudio/PipeWire, ALSA, JACK, chosen at run time |
+| What the OS needs before libusb may open the phone | `RepairPhoneDriverNow/Elevated`, `RecoverPhoneNow/Elevated`, `AdviseOnPhoneOpenFailure` (`usb/DriverRepair.h`) | `WindowsDriverRepair.cpp`: rebind WinUSB, restart the device node, both elevated through UAC | `LinuxDriverRepair.cpp`: nothing to repair; detects a missing udev rule (`RepairOutcome::AccessDenied`) and restarts the USB link by libusb reset or sysfs `authorized` |
+| Sound output | `AudioEngine` opens streams through `OpenPlatformPcmStream` (`audio/PlatformPcmStream.h`) | `WasapiPcmStream` (shared mode) | `MiniaudioPcmStream`: PulseAudio/PipeWire, ALSA, JACK, chosen at run time |
 
-`LibusbUsbBackend` compiles everywhere (Windows too, selectable with `HEADUNIT_USB_BACKEND=libusb`), as does
-`MiniaudioEngine` (`-DHEADUNIT_AUDIO_BACKEND=miniaudio`), which keeps the Linux paths testable on the development
-machine. The build selects the rest by file: `CMakeLists.txt` adds `WindowsUsbBackend.cpp`/`DriverRepair.cpp`/
-`WasapiAudioEngine.cpp` on Windows and `DriverRepairLinux.cpp`/`MiniaudioEngine.cpp`/`MiniaudioImpl.cpp` elsewhere;
-`HeadUnit.vcxproj` lists the Windows ones (the Linux ones are `None` items). The choice per call happens in the two
-factories (`UsbBackendFactory.cpp`, `AudioEngineFactory.cpp`).
+Both sound streams derive from `QueuedPcmStream`, which holds what they share (the ring buffer, priming, gain, the
+level report and the open/close log lines); they only add the device and its thread. `LibusbUsbBackend` compiles
+everywhere (Windows too, selectable with `HEADUNIT_USB_BACKEND=libusb`), as does `MiniaudioPcmStream`
+(`-DHEADUNIT_AUDIO_BACKEND=miniaudio`), which keeps the Linux paths testable on the development machine. The build
+selects the rest by file: `CMakeLists.txt` adds `WindowsUsbBackend.cpp`/`WindowsDriverRepair.cpp`/
+`platform/WindowsSupport.cpp`/`WasapiPcmStream.cpp` on Windows and `LinuxDriverRepair.cpp`/`MiniaudioPcmStream.cpp`/
+`MiniaudioImpl.cpp` elsewhere; `HeadUnit.vcxproj` lists the Windows ones (the Linux ones are `None` items). The choice
+of the USB backend per run happens in `CreateUsbBackend` (`UsbBackendFactory.cpp`).
 
 The libusb session is the same everywhere. What it needs from the platform is small: on Linux the open of an
 accessory device is retried until the device node gets its access rights (udev applies them a moment after the
 node appears), and a kernel driver that holds the accessory interface is detached while it is claimed
-(`libusb_set_auto_detach_kernel_driver`, a no-op on Windows). `AndroidUsbProbe.cpp` keeps the platform specific advice in
-`AdviseOnOpenFailure`: on Windows a failed open means a wrong driver and `canRepairDriver` starts the repair; on
+(`libusb_set_auto_detach_kernel_driver`, a no-op on Windows). The platform specific advice after a failed open comes
+from the driver repair files (`AdviseOnPhoneOpenFailure`, `AccessoryOpenAdvice` in `usb/DriverRepair.h`, used by
+`AndroidUsbProbe`): on Windows a failed open means a wrong driver and `canRepairDriver` starts the repair; on
 Linux it means missing access rights, which only an administrator can grant, so it is reported and never repaired.
 `AutoConnectDeps::needsAdminPrompt` tells the flow whether its step messages should mention Windows' administrator
 prompt.
 
-Other platform helpers: `platform/Environment.h` (`GetEnv`, MSVC deprecates `getenv`), `DefaultLogPath` (the working
-directory when writable, otherwise the user's state directory). Raspberry Pi graphics and codec acceleration
+Other platform helpers: `platform/Environment.h` (`GetEnv`, MSVC deprecates `getenv`; `UserStateDirectory`),
+`DefaultLogPath` (the working directory when writable, otherwise the user's state directory),
+`platform/WindowsSupport.h` (RAII deleters for Win32 handles and SetupAPI device sets, `WindowsErrorText`) and
+`platform/ShutdownSignal.h` (SIGINT/SIGTERM close the window properly on Linux; nothing to do on Windows). Raspberry Pi graphics and codec acceleration
 remain separate decoder/renderer decisions; FFmpeg's software H.264 decoder is used everywhere. The core builds
 without Qt or any library using `-DHEADUNIT_BUILD_APP=OFF`.
 
@@ -143,8 +157,17 @@ own event loop, so pairing works at any time, also during a session, and hands t
 a condition variable. Only this target uses moc (`AUTOMOC`), and `HEADUNIT_WIRELESS` is defined only where it is built,
 so the Windows build watches USB alone.
 
+The wireless files: the Qt-free `headunit_wireless_link` library (`WirelessProtocol` constants and message encoding,
+`WirelessFrameParser`, `WirelessHandshake`, `WirelessLink`, `TcpListener`, `FileDescriptor`, `SocketTransport`; linked by
+ProtocolTests too) and `headunit_wireless` on top: `SystemCommand` (runs `nmcli`/`sudo` without a shell), `Hotspot`,
+`BluezCalls` (the D-Bus calls to BlueZ, reading its state, powering the adapter and lifting rfkill),
+`BluetoothContext` (what the D-Bus objects share with the service: log, window events, the waiting pairing request and
+the phones' sockets), the three D-Bus objects `PairingAgent` (`org.bluez.Agent1`), `AndroidAutoProfile`
+(`org.bluez.Profile1`) and `DeviceWatcher` (`PropertiesChanged`), `BluetoothService`, `WirelessSettings` (environment
+and the remembered Wi-Fi password), `WirelessStation` and `WirelessDiagnostics` (`--test-bluetooth`, `--test-hotspot`).
+
 Input and audio: the window owns a `ProjectionInput` (GUI thread -> protocol thread) and an
-`AudioState` plus an `IAudioEngine`. `ProjectionCallbacks` hands them to the session, which attaches
+`AudioState` plus an `AudioEngine`. `ProjectionCallbacks` hands them to the session, which attaches
 to the input bus while it runs and turns `InputEvent`s into `InputReport` messages on its strand
 (dropped until the phone has opened the input channel). The audio sinks write PCM into
 `IPcmOutput`s opened lazily on the first sample; each WASAPI stream has its own render thread and a
@@ -152,8 +175,8 @@ bounded ring buffer, applies the shared volume/mute gain and reports levels back
 (WASAPI polls the device from that thread; miniaudio pulls from the ring in its callback, and its stream opens the
 device on its own thread so a sound server that hangs cannot stall the protocol thread).
 `CarPanel` (rotary knob, keys, audio display) and `VideoWidget` (picture and touch mapping) are plain
-Qt widgets without moc; the portable parts (touch mapping, input bus, PCM helpers) are header-only
-and unit-tested in CoreTests.
+Qt widgets without moc; the portable parts (touch mapping, input bus, PCM helpers) live in `headunit_core`
+and are unit-tested in CoreTests.
 
 Display size: `DisplayConfig` (portable) is the one place that knows the offered sizes (800x480, 1280x720,
 1600x600, 1920x1080), the fixed Android Auto resolutions that carry them, the density and how to parse/print
@@ -215,9 +238,9 @@ home menu (Back first goes to the page, which may close something it opened, the
   While it asks, `FrontPage` returns it before anything else, also over the phone's picture; turning or left/right
   choose, pushing answers, Back cancels, a minute without an answer refuses. `HEADUNIT_TEST_PAIRING` shows it with a
   made-up phone in `--smoke-test` (for the window picture).
-- `PlayerPage` (`ui/MediaPages`): the page's tile at the left (orange while its source sounds), what plays now, the
-  controls previous/play/next, a list of five rows and buttons at the top right. The focus moves through them by the
-  portable `PageFocus` rules in `HomeMenuLayout.h` (tested): turning moves within a part (list rows, a row of buttons),
+- `PlayerPage` (`ui/PlayerPage`, base of `MultimediaPage` and `RadioPage`): the page's tile at the left (orange while
+  its source sounds), what plays now, the controls previous/play/next, a list of five rows and buttons at the top right.
+  The focus moves through them by the portable `PageFocus` rules in `ui/PageFocus.h` (tested): turning moves within a part (list rows, a row of buttons),
   up/down jump between the parts from wherever the focus is, left/right never move the focus but skip to the previous
   or next title or station (not while the country list is open); the list scrolls by `ListFirstRow`. The page polls
   the player four times a second.
@@ -242,7 +265,7 @@ controller's arrows).
 
 The radio's own player: `media/AudioPlayer` decodes a file path or an http(s) URL with FFmpeg (avformat for the
 container and the network, including ICY "now playing" titles read from the http context, avcodec, swresample to 48 kHz
-stereo 16-bit) and writes it to a media output of the same `IAudioEngine` as the phone's music, so volume, mute and the
+stereo 16-bit) and writes it to a media output of the same `AudioEngine` as the phone's music, so volume, mute and the
 level display apply. It runs one worker thread for its whole life; `Play`, `SetPaused` and `Stop` only hand over a
 request, and every blocking FFmpeg call checks an interrupt callback, so changing the station never blocks the GUI
 thread. The output is paced by `IPcmOutput::Queued()` (new): at most 250 ms decoded ahead in the 500 ms ring, so a file
@@ -251,7 +274,7 @@ carries a generation that counts `Play` calls: a page owns the player while the 
 got, and a finished run cannot overwrite a newer one's status. Streams use FFmpeg's reconnect options and a 15 s
 read timeout; a live stream that ends or drops is reported, not retried.
 
-One sound at a time (`audio/AudioFocus.h`, tested): the source started last keeps the media sound. When the radio's
+One sound at a time (`audio/MediaActivity`, `audio/WatchedOutput`, tested): the source started last keeps the media sound. When the radio's
 player starts or resumes, the window notes the time and sends the phone `MediaPause`. The phone's media output is
 wrapped in a `WatchedOutput` (the opener handed to the session), which tells a `MediaActivity` about every block: audio
 after a gap of more than 500 ms counts as a new start. `MainWindow::Tick` asks `IsPhoneTakingOver`: when the phone

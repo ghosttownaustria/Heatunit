@@ -1,30 +1,54 @@
 #pragma once
-#include "usb/UsbTypes.h"
-#include "logging/Logger.h"
 #include "androidauto/AndroidAutoSession.h"
+#include "logging/Logger.h"
+#include "usb/UsbProbeResult.h"
+#include "usb/UsbTypes.h"
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <optional>
+#include <string>
+
+struct libusb_context;
+struct libusb_device;
+struct libusb_device_descriptor;
+struct libusb_device_handle;
 
 namespace headunit {
-enum class UsbProbeState { Failed, DriverUnavailable, AoaAvailable, AccessoryAvailable, AccessoryTransportReady, VideoReceived };
-struct UsbProbeResult {
-    UsbProbeState state{UsbProbeState::Failed};
-    std::string stage;
-    std::string message;
-    // The phone is in its normal USB mode but Windows bound a driver libusb cannot open;
-    // rebinding WinUSB (DriverRepair) can fix exactly this. Never set on Linux, where a phone that cannot
-    // be opened lacks the udev rule, which only an administrator can install.
-    bool canRepairDriver{};
-    // The phone did not switch to accessory mode: asking again (after the phone is unlocked or
-    // the prompt on it is confirmed) can help.
-    bool isRetryable{};
-    // Accessory mode was up but Android Auto on the phone never answered: only restarting the
-    // phone's USB connection (like a cable replug) helps.
-    bool needsRecovery{};
+// One USB attempt with the selected phone: find it again through libusb, open it and confirm its identity, ask for AOA
+// support, switch it to accessory mode (or restart that), wait for its accessory device and check the accessory
+// interface or run a session over it. Every step names its stage, so that a failure says where it happened.
+class AndroidUsbProbe {
+public:
+    // Runs on the claimed accessory interface (handle, bulk IN and OUT endpoint) and says how that went.
+    using AccessorySession = std::function<UsbProbeResult(libusb_device_handle*, std::uint8_t, std::uint8_t)>;
+
+    AndroidUsbProbe(const UsbDevice& selected, Logger& logger, bool isStartAccessory, AccessorySession session, const std::atomic_bool& isStopRequested);
+
+    UsbProbeResult Run();
+
+private:
+    const UsbDevice& m_selected;
+    Logger& m_logger;
+    bool m_isStartAccessory;
+    AccessorySession m_session;
+    const std::atomic_bool& m_isStopRequested;
+    std::string m_stage{"device selection"};
+
+    UsbProbeResult RunSteps();
+    std::optional<UsbProbeResult> FindSelected(libusb_device** devices, std::ptrdiff_t count, libusb_device*& target, libusb_device_descriptor& descriptor);
+    UsbProbeResult OpenFailed(int error, const libusb_device_descriptor& descriptor);
+    std::optional<UsbProbeResult> VerifySerial(libusb_device_handle* handle, const libusb_device_descriptor& descriptor);
+    std::optional<UsbProbeResult> QueryAoaProtocol(libusb_device_handle* handle);
+    bool SwitchToAccessory(libusb_device_handle* handle, bool isAlreadyAccessory);
+    std::optional<UsbProbeResult> WaitForAccessory(libusb_context* context, bool isRestart);
+    UsbProbeResult CheckAccessory(libusb_device* device);
+    UsbProbeResult Finish(UsbProbeState state, const std::string& message, bool canRepairDriver = false, bool isRetryable = false, bool needsRecovery = false);
+    UsbProbeResult FinishWith(const UsbProbeResult& result);
 };
-// Reads AOA support, or briefly claims/releases an existing accessory interface.
-// Does not switch modes or install drivers.
+
 UsbProbeResult ProbeAndroidUsb(const UsbDevice& selected, Logger& logger);
-// Changes the selected phone's mode and checks its accessory interface, not AA video.
 UsbProbeResult StartAndroidAccessory(const UsbDevice& selected, Logger& logger);
-UsbProbeResult ConnectAndroidAuto(const UsbDevice& selected, Logger& logger,
-    std::atomic_bool& isStopRequested, ProjectionCallbacks callbacks);
+UsbProbeResult ConnectAndroidAuto(const UsbDevice& selected, Logger& logger, std::atomic_bool& isStopRequested, ProjectionCallbacks callbacks);
 }

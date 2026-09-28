@@ -14,30 +14,32 @@ namespace headunit {
 class PairingPage final : public MenuPage {
 public:
     explicit PairingPage(QWidget* parent = nullptr);
-    // Shows the question; `answer` gets the choice, at most once. A question still open is refused first.
+
+    void SetChangeHandler(std::function<void()> handler);
     void Ask(const QString& phone, const QString& code, std::function<void(bool isAccepted)> answer);
-    // The question is over without an answer here (the phone cancelled, or the pairing finished).
     void End();
-    bool IsAsking() const { return static_cast<bool>(m_answer); }
-    // The question came or went: the window shows or hides the page.
-    std::function<void()> onChange;
+    bool IsAsking() const;
     void Turn(int steps) override;
     void Nudge(unsigned keycode) override;
     void Push() override;
     bool Back() override;
+
 protected:
     void Paint(QPainter& painter) override;
     void mousePressEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
+
 private:
-    void Answer(bool isAccepted);
-    QRectF ButtonRect(int index) const;
-    std::optional<int> ButtonAt(const QPointF& position) const;
+    std::function<void()> m_onChange;
     QString m_phone;
     QString m_code;
     std::function<void(bool)> m_answer;
     int m_focus{};   // 0: Pair, 1: Cancel
     std::optional<int> m_pressed;
     QTimer* m_timeout{};
+
+    void Answer(bool isAccepted);
+    QRectF ButtonRect(int index) const;
+    std::optional<int> ButtonAt(const QPointF& position) const;
 };
 }

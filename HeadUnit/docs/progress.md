@@ -1,5 +1,49 @@
 # Progress
 
+## 2026-09-28: C++ coding standard applied to the whole project; `bin/` layout and four build profiles
+
+The user's C++ coding standard (global CLAUDE.md) is now applied throughout, with the exceptions recorded in the
+project CLAUDE.md (formatting kept; `m_` only for classes, not for plain data structs; Qt parent ownership).
+
+- **Build layout and profiles:** both build systems know `debug`, `release`, `debug_level_log`, `release_level_log`
+  (VS: `Debug`, `Release`, `DebugLevelLog`, `ReleaseLevelLog`; `cmake/BuildProfiles.cmake`, `msbuild/Common.props`) and
+  write to `HeadUnit/bin/<system><arch>/<profile>/` with intermediates in its `obj/`. The level-log profiles only
+  define `HEADUNIT_VERBOSE_LOGGING`. CMake presets were renamed to `linux-*`, `linux-arm64-*`, `linux-arm-*`,
+  `windows-*` (+ `*-core-only`); `windows-vs2022`, `core-only` and `core-debug` are gone. MSBuild treats `<...>`
+  headers as external (no more protobuf/abseil warnings), as CMake already did.
+- **Logging:** `Logger::Write` takes a `LogLevel` (trace, debug, info, warning, error) and leaves out lines below the
+  minimum level: the build profile picks the default, `HEADUNIT_LOG_LEVEL` overrides it. The AASDK protocol trace also
+  runs at trace level.
+- **`BuildAndRun.sh`:** profile as first argument (at most once), `--clean`, `--no-test`, `--no-run`, `--install-deps`,
+  `--pull`, `--reset` (destructive, then pulls), `-j/--jobs N` (validated), `--core-only`, `--install-udev`, `--` for
+  the program's arguments; unknown arguments are errors; the preset follows `uname -m`; a failed build or test never
+  starts an old binary; `build.log` beside the program with the first compiler error highlighted.
+- **Code:** every function and class has its description (member methods in the `.cpp` only), one class per file,
+  PascalCase file names, `is/has/...` booleans, smart pointers. Large files were split along their responsibilities:
+  `CarWidgets` into `VideoWidget`, `RotaryKnob`, `AudioDisplay`, `CarPanel`; `MediaPages` into `PlayerPage`,
+  `MultimediaPage`, `RadioPage`; the scripted `--test-*` window modes moved out of `MainWindow` into
+  `ScriptedPhoneTest`; the session into `ProjectionSession` and its channels; the audio engines into one `AudioEngine`
+  with `WasapiPcmStream`/`MiniaudioPcmStream` on a shared `QueuedPcmStream` (the duplicated ring/priming/level code is
+  gone); `DriverRepair.cpp`/`DriverRepairLinux.cpp` became `WindowsDriverRepair.cpp`/`LinuxDriverRepair.cpp`; the
+  command line moved to the tested `CommandLine`; the Bluetooth service into `BluetoothContext`, `BluezCalls`,
+  `PairingAgent`, `AndroidAutoProfile`, `DeviceWatcher`; `WirelessConnect` into `WirelessSettings`, `WirelessStation`
+  and `WirelessDiagnostics`. The Qt-free wireless parts are the library `headunit_wireless_link`, which ProtocolTests
+  links instead of compiling the sources a second time. UI callbacks are set through `SetXHandler` methods.
+- **Tests:** one entry point per test file (`tests/CoreTestSuites.h`, `tests/ProtocolTestSuites.h`), shared `Check`,
+  `TestLogger` and fake transports; `CarControlTests` split into Display, Console, Audio, Menu and Media tests; new
+  tests for the command line, the transport receive buffer and the log levels.
+- **Verified on this Windows machine:** CMake `windows-core-only` (CoreTests), `windows-debug` (full app, CoreTests,
+  ProtocolTests) and `windows-release-level-log` (CoreTests; `/O2`, `NDEBUG` and `HEADUNIT_VERBOSE_LOGGING` checked in
+  the generated project) build without warnings in own sources and pass; the Visual Studio solution builds in Debug;
+  `HeadUnit --help`, `--scan`, `--test-tone`, `--smoke-test` (home menu picture) and `--smoke-test` with
+  `HEADUNIT_TEST_PAIRING=1` (pairing page picture) behave as before; `BuildAndRun.sh`'s argument handling was
+  exercised in Git Bash. The Linux-only sources (`src/wireless/*`, `LinuxDriverRepair.cpp`, `MiniaudioPcmStream.cpp`,
+  `WirelessTests.cpp`, and `main.cpp`/`MainWindow.cpp` with `HEADUNIT_WIRELESS`) passed a compiler syntax check
+  against POSIX stub headers, including the moc output of the three D-Bus classes.
+- **Not verified:** a real Linux build (CI or the Pi: `bash BuildAndRun.sh --pull`), the wireless path with a phone
+  (pairing, Wi-Fi, session), USB Android Auto with a phone after the refactoring (no phone was attached here), and the
+  MSBuild `Release`/`*LevelLog` configurations of the full app.
+
 ## 2026-09-27 (late night): CI `windows-core` failed, the runner has Visual Studio 2026 only
 
 GitHub's `windows-latest` image now ships Visual Studio 2026 without 2022, so `cmake --preset core-only` stopped with

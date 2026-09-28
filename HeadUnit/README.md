@@ -169,9 +169,18 @@ anpassen oder `QT_ROOT` vor dem Start von Visual Studio setzen. Das SDK muss ein
 Qt-6-MSVC-x64-Kit sein. Die benoetigten Qt-DLLs und das Windows-Plattformplugin
 werden beim Build automatisch neben die EXE kopiert.
 
-Ausgabe: `out/vs2026/x64/Debug/HeadUnit.exe` bzw.
-`out/vs2026/x64/Release/HeadUnit.exe`. Das Debugger-Arbeitsverzeichnis ist der
-jeweilige Ausgabeordner; dort liegt auch `headunit.log`.
+Es gibt vier Build-Profile, in Visual Studio als Konfigurationen **Debug**,
+**Release**, **DebugLevelLog** und **ReleaseLevelLog**. Die beiden LevelLog-Profile
+uebersetzen genau wie Debug bzw. Release (ReleaseLevelLog bleibt voll optimiert) und
+schreiben nur ein ausfuehrliches Log (Stufe `trace`). Die Log-Stufe laesst sich
+unabhaengig vom Profil mit `HEADUNIT_LOG_LEVEL=trace|debug|info|warning|error`
+setzen.
+
+Ausgabe: `bin/windowsx64/debug/HeadUnit.exe`, `bin/windowsx64/release/HeadUnit.exe`,
+`bin/windowsx64/debug_level_log/...` bzw. `bin/windowsx64/release_level_log/...`
+(Zwischendateien im jeweiligen `obj`-Unterordner). CMake verwendet dieselben Ordner.
+Das Debugger-Arbeitsverzeichnis ist der jeweilige Ausgabeordner; dort liegt auch
+`headunit.log`.
 
 **CoreTests** ist ein separates Konsolenprojekt ohne Qt-Abhaengigkeit.
 Zum Ausfuehren voruebergehend als Startprojekt festlegen und Strg+F5 druecken.
@@ -203,8 +212,15 @@ sudo apt install build-essential cmake ninja-build pkg-config qt6-base-dev libbo
 cd HeadUnit
 cmake --preset linux-debug && cmake --build --preset linux-debug && ctest --preset linux-debug
 bash scripts/install-udev-rules.sh     # einmalig: Zugriff aufs Handy ohne root, danach Handy neu stecken
-./out/build/linux-debug/HeadUnit
+./bin/linuxx64/debug/HeadUnit
 ```
+
+Einfacher geht es mit `bash BuildAndRun.sh` im Wurzelordner des Repos: es waehlt das Preset passend zum Prozessor
+(`linux-arm64-*` auf dem Raspberry Pi 4 mit 64-Bit-System), baut, fuehrt die Tests aus und startet HeadUnit.
+Aufruf: `bash BuildAndRun.sh [debug|release|debug_level_log|release_level_log] [Optionen] [-- Programmargumente]`,
+zum Beispiel `bash BuildAndRun.sh release --clean -j 2 -- --display 1280x720`; alle Optionen zeigt
+`bash BuildAndRun.sh --help`. Die Ausgabe landet in `HeadUnit/bin/linux<Architektur>/<Profil>/` (auf dem Pi
+`bin/linuxarm64/debug/`), das Build-Log als `build.log` daneben.
 
 Die Linux-Teile (USB-Suche ueber libusb, Audio ueber miniaudio, Zugriffspruefung statt Treiber-Reparatur) sind auf
 einem Windows-Rechner fuer Linux (x86-64, teils ARM64/ARM32) uebersetzt und ohne neue Warnungen geprueft, aber noch
@@ -224,12 +240,16 @@ From `HeadUnit/`:
 
 ```powershell
 $env:QT_ROOT = 'C:\Qt\6.8.3\msvc2022_64'
-cmake --preset windows-vs2022
+cmake --preset windows-debug
 cmake --build --preset windows-debug
 ctest --preset windows-debug
 $env:PATH = "$env:QT_ROOT\bin;$env:PATH"
-.\out\build\windows-vs2022\Debug\HeadUnit.exe
+.\bin\windowsx64\debug\HeadUnit.exe
 ```
+
+The other profiles have presets of the same pattern (`windows-release`, `windows-debug-level-log`,
+`windows-release-level-log`); `windows-core-only` builds and tests only the portable core without Qt. The presets use
+the newest Visual Studio generator found (2022 or 2026).
 
 On the development machine used for this milestone the Qt base SDK is installed
 locally at `../.tools/Qt/6.8.3/msvc2022_64`. For that kit, use:
@@ -238,16 +258,16 @@ locally at `../.tools/Qt/6.8.3/msvc2022_64`. For that kit, use:
 $env:QT_ROOT = (Resolve-Path '..\.tools\Qt\6.8.3\msvc2022_64').Path
 ```
 
-Alternatively open this folder in VS 2022 with `QT_ROOT` set in its environment
-and select the `windows-vs2022` configure preset.
+Alternatively open this folder in Visual Studio with `QT_ROOT` set in its environment
+and select the `windows-debug` configure preset.
 
 ```powershell
 # Console scan, no GUI initialization. Qt DLLs still need to be on PATH.
-.\out\build\windows-vs2022\Debug\HeadUnit.exe --scan
+.\bin\windowsx64\debug\HeadUnit.exe --scan
 # Real Qt window plus real USB scan; exits when the result is displayed.
-.\out\build\windows-vs2022\Debug\HeadUnit.exe --smoke-test
-# Deploy app and Qt runtime to out/install/bin:
-cmake --install out/build/windows-vs2022 --config Debug
+.\bin\windowsx64\debug\HeadUnit.exe --smoke-test
+# Deploy app and Qt runtime to bin/windowsx64/install/bin:
+cmake --install bin/windowsx64/debug/obj --config Debug
 ```
 
 For a standalone Release build, build/install with `--config Release` instead.

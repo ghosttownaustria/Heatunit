@@ -13,10 +13,11 @@
 #include <thread>
 
 namespace headunit {
-using namespace std::chrono_literals;
 namespace {
+using namespace std::chrono_literals;
 constexpr const char* kConnectionName = "HeadUnit-AP";
 
+// `text` without white space at either end.
 std::string Trimmed(std::string text)
 {
     while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back()))) text.pop_back();
@@ -34,7 +35,7 @@ std::string Brief(const CommandResult& result)
     return text.empty() ? "Exit-Code " + std::to_string(result.exitCode) : text;
 }
 
-// "wlan0:wifi" lines of `nmcli -t -f DEVICE,TYPE device`.
+// The first Wi-Fi device of `nmcli -t -f DEVICE,TYPE device` ("wlan0:wifi" lines).
 std::string FirstWifiDevice(const std::string& listing)
 {
     std::istringstream lines(listing);
@@ -46,6 +47,7 @@ std::string FirstWifiDevice(const std::string& listing)
     return {};
 }
 
+// The IPv4 address of the interface, empty when it has none (yet).
 std::string Ipv4Of(const std::string& interfaceName)
 {
     ifaddrs* list = nullptr;
@@ -55,62 +57,86 @@ std::string Ipv4Of(const std::string& interfaceName)
         if (!entry->ifa_addr || entry->ifa_addr->sa_family != AF_INET || interfaceName != entry->ifa_name) continue;
         char text[INET_ADDRSTRLEN]{};
         const auto* socketAddress = reinterpret_cast<const sockaddr_in*>(entry->ifa_addr);
-        if (inet_ntop(AF_INET, &socketAddress->sin_addr, text, sizeof(text))) { address = text; break; }
+        if (inet_ntop(AF_INET, &socketAddress->sin_addr, text, sizeof(text))) {
+            address = text;
+            break;
+        }
     }
     freeifaddrs(list);
     return address;
 }
 
+// The MAC address of the interface, in lower case as Android writes BSSIDs in its scan results (and as sysfs has it).
 std::string MacOf(const std::string& interfaceName)
 {
     std::ifstream file("/sys/class/net/" + interfaceName + "/address");
     std::string mac;
     std::getline(file, mac);
-    // Lower case, as Android writes BSSIDs in its scan results (and as sysfs has it already).
     mac = Trimmed(mac);
-    std::transform(mac.begin(), mac.end(), mac.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    std::transform(mac.begin(), mac.end(), mac.begin(), [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
     return mac;
 }
 
+// Whether NetworkManager has the hotspot's connection profile.
 bool HasConnectionProfile()
 {
     const auto listing = RunCommand({"nmcli", "-t", "-f", "NAME", "connection", "show"}, 10s);
     std::istringstream lines(listing.output);
-    for (std::string line; std::getline(lines, line);)
+    for (std::string line; std::getline(lines, line);) {
         if (Trimmed(line) == kConnectionName) return true;
+    }
     return false;
 }
-}
 
-void RemoveLeftoverHotspot(Logger& logger)
+// Removes the hotspot's connection profile (a leftover would keep old settings).
+void DeleteConnectionProfile(std::chrono::seconds timeout)
 {
-    if (!HasConnectionProfile()) return;
-    RunCommand({"nmcli", "connection", "delete", "id", kConnectionName}, 20s);
-    logger.Write("INFO", "WLAN", "Removed the hotspot an earlier run left behind");
+    RunCommand({"nmcli", "connection", "delete", "id", kConnectionName}, timeout);
 }
 
+// The address NetworkManager assigns a moment after the connection is up; empty when none came within ten seconds.
+std::string WaitForAddress(const std::string& interfaceName)
+{
+    std::string address;
+    for (int attempt = 0; attempt < 50 && address.empty(); ++attempt) {
+        address = Ipv4Of(interfaceName);
+        if (address.empty()) std::this_thread::sleep_for(200ms);
+    }
+    return address;
+}
+}
+
+// A hotspot that is not running yet.
+Hotspot::Hotspot(Logger& logger) : m_logger(logger)
+{
+}
+
+// Takes the hotspot down.
+Hotspot::~Hotspot()
+{
+    Stop();
+}
+
+// Starts the hotspot and fills `info`. Empty on success, otherwise what went wrong and what to do about it (German, for
+// the window).
 std::string Hotspot::Start(const HotspotConfig& config, HotspotInfo& info)
 {
     Stop();
     if (config.password.size() < 8 || config.password.size() > 63) return "Das WLAN-Passwort muss 8 bis 63 Zeichen lang sein.";
-
     const auto version = RunCommand({"nmcli", "--version"}, 5s);
     if (!version.isStarted || version.exitCode != 0)
         return "NetworkManager (nmcli) ist nicht installiert. Raspberry Pi OS Bookworm bringt es mit; sonst: sudo apt install network-manager";
 
     std::string interfaceName = config.interfaceName;
     if (interfaceName.empty()) {
-        const auto devices = RunCommand({"nmcli", "-t", "-f", "DEVICE,TYPE", "device"}, 10s);
-        interfaceName = FirstWifiDevice(devices.output);
+        interfaceName = FirstWifiDevice(RunCommand({"nmcli", "-t", "-f", "DEVICE,TYPE", "device"}, 10s).output);
         if (interfaceName.empty()) return "NetworkManager kennt keinen WLAN-Chip. Pruefen mit: nmcli device   (WLAN mit rfkill unblock wifi einschalten)";
     }
-    m_logger.Write("INFO", "WLAN", "Hotspot on interface " + interfaceName + ", network '" + config.ssid + "'" + (config.isHidden ? " (hidden)" : "") +
+    m_logger.Write(LogLevel::Info, "WLAN", "Hotspot on interface " + interfaceName + ", network '" + config.ssid + "'" + (config.isHidden ? " (hidden)" : "") +
         ", band " + config.band + ", channel " + std::to_string(config.channel));
 
     RunCommand({"nmcli", "radio", "wifi", "on"}, 10s);
-    // A leftover from an earlier run (or a crash) would keep the old settings.
-    RunCommand({"nmcli", "connection", "delete", "id", kConnectionName}, 15s);
-
+    DeleteConnectionProfile(15s);
     // WPA2-PSK with CCMP, what the phone is told (kWifiSecurityWpa2Personal). Protected management frames (PMF, 802.11w)
     // are switched off: NetworkManager offers them by default, the Raspberry Pi's Wi-Fi chip (brcmfmac) does not handle
     // them as an access point, and a phone that uses them (current Android phones do) then fails the WPA2 handshake and
@@ -132,30 +158,36 @@ std::string Hotspot::Start(const HotspotConfig& config, HotspotInfo& info)
         Stop();
         return message;
     }
-
-    // NetworkManager assigns the address a moment after the connection is up.
-    std::string address;
-    for (int attempt = 0; attempt < 50 && address.empty(); ++attempt) {
-        address = Ipv4Of(interfaceName);
-        if (address.empty()) std::this_thread::sleep_for(200ms);
+    const std::string address = WaitForAddress(interfaceName);
+    if (address.empty()) {
+        Stop();
+        return "Der WLAN-Hotspot laeuft, hat aber keine IP-Adresse bekommen (Schnittstelle " + interfaceName + ").";
     }
-    if (address.empty()) { Stop(); return "Der WLAN-Hotspot laeuft, hat aber keine IP-Adresse bekommen (Schnittstelle " + interfaceName + ")."; }
-
     info.interfaceName = interfaceName;
     info.ssid = config.ssid;
     info.password = config.password;
     info.ipAddress = address;
     info.bssid = MacOf(interfaceName);
-    m_logger.Write("INFO", "WLAN", "Hotspot up: " + info.ipAddress + ", BSSID " + info.bssid);
+    m_logger.Write(LogLevel::Info, "WLAN", "Hotspot up: " + info.ipAddress + ", BSSID " + info.bssid);
     return {};
 }
 
+// Takes the hotspot down and removes its profile; the previous Wi-Fi connection returns.
 void Hotspot::Stop()
 {
     if (!m_isStarted) return;
     m_isStarted = false;
     RunCommand({"nmcli", "connection", "down", "id", kConnectionName}, 20s);
-    RunCommand({"nmcli", "connection", "delete", "id", kConnectionName}, 15s);
-    m_logger.Write("INFO", "WLAN", "Hotspot stopped");
+    DeleteConnectionProfile(15s);
+    m_logger.Write(LogLevel::Info, "WLAN", "Hotspot stopped");
+}
+
+// A run that was killed (Ctrl+C, crash) cannot take its hotspot down, and NetworkManager keeps it up until the next
+// reboot. Removes it; nothing happens when there is none or NetworkManager is missing.
+void RemoveLeftoverHotspot(Logger& logger)
+{
+    if (!HasConnectionProfile()) return;
+    DeleteConnectionProfile(20s);
+    logger.Write(LogLevel::Info, "WLAN", "Removed the hotspot an earlier run left behind");
 }
 }
