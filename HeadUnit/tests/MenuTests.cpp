@@ -7,6 +7,7 @@
 #include "ui/HomeTileSetup.h"
 #include "ui/KnobZones.h"
 #include "ui/PageFocus.h"
+#include "ui/VolumeBar.h"
 #include <cmath>
 #include <string>
 #include <vector>
@@ -174,13 +175,31 @@ void TestPlayerPageFocus() {
     Check(NudgeFocus(PageFocus{Part::Controls, 1, 0}, {0, 3, 4}, keys::DpadUp).part == Part::Controls, "Up went to top buttons that are not there");
     Check(NudgeFocus(PageFocus{Part::Controls, 1, 0}, {1, 3, 0}, keys::DpadDown).part == Part::Controls, "Down went into an empty list");
 }
+
+// The volume bar: centred, never wider than 1000 units nor closer than 50 to the edges, and a touch lights the segment
+// under it with all before it.
+void TestVolumeBar() {
+    const VolumePanel wide = VolumePanelOf(1600);
+    Check(wide.left == 300 && wide.right == 1300 && wide.barLeft == 410 && wide.barRight == 1180, "The bar is not centred on the wide display");
+    const VolumePanel small = VolumePanelOf(1000);
+    Check(small.left == 50 && small.right == 950, "The bar leaves the small display's margins");
+    constexpr int max = 30;
+    Check(VolumeAt(small.barLeft - 40, small, max) == 0 && VolumeAt(small.barLeft, small, max) == 0, "Left of the bar is not silence");
+    const double cell = (small.barRight - small.barLeft) / max;
+    Check(VolumeAt(small.barLeft + 1, small, max) == 1 && VolumeAt(small.barLeft + cell * 0.5, small, max) == 1 &&
+        VolumeAt(small.barLeft + cell * 1.5, small, max) == 2 && VolumeAt(small.barLeft + cell * 14.5, small, max) == 15,
+        "A touch does not light the segment under it");
+    Check(VolumeAt(small.barRight - 1, small, max) == max && VolumeAt(small.barRight + 80, small, max) == max, "The end of the bar is not the maximum");
+    Check(VolumeAt(500, VolumePanelOf(0), max) == 0 && VolumeAt(500, small, 0) == 0, "A bar without room set a volume");
+}
 }
 
-// The radio's menu pages: the knob, the home menu's layout and tiles, and the focus on the player pages.
+// The radio's menu pages: the knob, the home menu's layout and tiles, the focus on the player pages and the volume bar.
 void RunMenuTests()
 {
     TestKnobZones();
     TestHomeMenuLayout();
     TestTileSetup();
     TestPlayerPageFocus();
+    TestVolumeBar();
 }

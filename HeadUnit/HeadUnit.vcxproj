@@ -84,6 +84,7 @@
     <ClCompile Include="src\ui\ScriptedPhoneTest.cpp" />
     <ClCompile Include="src\ui\SettingsPage.cpp" />
     <ClCompile Include="src\ui\VideoWidget.cpp" />
+    <ClCompile Include="src\ui\VolumeOverlay.cpp" />
     <ClCompile Include="src\usb\AndroidUsbProbe.cpp" />
     <ClCompile Include="src\usb\AutoConnectSystem.cpp" />
     <ClCompile Include="src\usb\LibusbControl.cpp" />
@@ -163,6 +164,8 @@
     <ClInclude Include="src\ui\ScriptedTestHost.h" />
     <ClInclude Include="src\ui\SettingsPage.h" />
     <ClInclude Include="src\ui\VideoWidget.h" />
+    <ClInclude Include="src\ui\VolumeBar.h" />
+    <ClInclude Include="src\ui\VolumeOverlay.h" />
     <ClInclude Include="src\usb\AndroidUsbProbe.h" />
     <ClInclude Include="src\usb\AutoConnectSystem.h" />
     <ClInclude Include="src\usb\DriverRepair.h" />

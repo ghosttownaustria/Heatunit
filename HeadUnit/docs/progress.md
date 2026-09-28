@@ -21,6 +21,13 @@ From the user's list and the new design `docs/design/heatunit.svg` (status bar, 
   - Verified here: syntax check of the changed wireless sources. Not verified: whether the SM-F776B joins the hidden
     network (first try on the Pi shows it: a session, or "Das Handy ist dem verborgenen WLAN nicht beigetreten" after
     up to 60 s, then visible).
+- **Volume bar on the screen** (in the style of the tiles): `VolumeOverlay` over the page or the phone's picture for
+  2.5 s after any change of volume or mute: the tiles' frame with the orange focus corners, the speaker symbol of the
+  new design (struck and grey when muted), 30 growing segments in the lit orange, the number. Touch or drag on it sets
+  the volume. `HEADUNIT_TEST_VOLUME=1` shows it in the `--smoke-test` picture. `LitCorner` became the shared `LitBrush`,
+  `MenuPage::ScreenRect` uses the shared `ScreenRectIn`.
+  - Verified here: builds without warnings, CoreTests (`TestVolumeBar`) pass, smoke picture at 1600x600 shows the bar
+    centred over the home menu. Not verified: touch dragging on a real touch screen, the bar over a running projection.
 
 ## 2026-09-28: C++ coding standard applied to the whole project; `bin/` layout and four build profiles
 

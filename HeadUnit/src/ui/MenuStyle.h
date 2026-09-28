@@ -1,11 +1,14 @@
 #pragma once
+#include "androidauto/DisplayConfig.h"
 #include "ui/HomeMenuEntry.h"
+#include <QBrush>
 #include <QColor>
 #include <QFont>
 #include <QRectF>
 #include <QString>
 
 class QPainter;
+class QSizeF;
 
 // The look of the radio's own screens, taken from the home menu's design (docs/design/home-menu.svg): black screen, light
 // grey frames and text, grey diagonal stripes, and orange for what is lit (the focus, or what plays). All sizes are
@@ -28,6 +31,10 @@ inline constexpr double kPageTitleBaseline = 132;
 // The symbols of the player's buttons.
 enum class Symbol { Previous, Play, Pause, Stop, Next };
 
+// The symbols of the status bar (docs/design/heatunit.svg).
+enum class Icon { Speaker };
+
+QRectF ScreenRectIn(const QSizeF& area, const DisplayConfig& display);
 QFont Font(int pixels);
 QString Elided(const QString& text, const QFont& font, double width);
 void DrawTile(QPainter& painter, const QRectF& tile, HomeMenuEntry entry, bool isLit);
@@ -36,4 +43,6 @@ void DrawButton(QPainter& painter, const QRectF& box, Symbol symbol, bool isFocu
 void DrawTextButton(QPainter& painter, const QRectF& box, const QString& text, bool isFocused);
 void DrawCheck(QPainter& painter, const QRectF& box, bool isOn);
 void DrawRow(QPainter& painter, const QRectF& row, const QString& text, const QString& note, bool isFocused, bool isCurrent);
+void DrawIcon(QPainter& painter, Icon icon, const QRectF& box, bool isStruck);
+QBrush LitBrush(const QRectF& box);
 }

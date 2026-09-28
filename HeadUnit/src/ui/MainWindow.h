@@ -41,6 +41,7 @@ class PairingPage;
 class RadioPage;
 class SettingsPage;
 class VideoWidget;
+class VolumeOverlay;
 
 // Always ready, like a car: from the start the window watches USB and (where built) wireless Android Auto and connects
 // whichever phone comes, with no button to press (RunPhoneWatch). The Android Auto tile and the projection key connect
@@ -89,6 +90,9 @@ private:
     RadioPage* m_radio{};
     SettingsPage* m_settings{};
     PairingPage* m_pairing{};                         // a phone's Bluetooth pairing question; in front while it asks
+    VolumeOverlay* m_volumeBar{};                     // over the screens for a moment whenever the volume changes
+    int m_shownVolume{};                              // the volume and mute state the bar showed last
+    bool m_wasMuted{};
     HomeTileSetup m_tiles;                            // which tiles the home menu shows (remembered)
     std::shared_ptr<MediaActivity> m_phoneMedia{std::make_shared<MediaActivity>()};   // when the phone's music plays
     std::int64_t m_localStartMs{};                    // when the radio's own player last started or resumed
@@ -135,6 +139,7 @@ private:
     void Tick();
     void ShowLatestFrame();
     void UpdateAudioDisplay();
+    void UpdateVolumeBar();
     bool HandleKey(QKeyEvent* event, bool isDown);
     bool HandleExtraKey(int key);
     MenuPage* FrontPage() const;

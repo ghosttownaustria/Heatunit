@@ -11,6 +11,7 @@
 #include "ui/RadioPage.h"
 #include "ui/SettingsPage.h"
 #include "ui/VideoWidget.h"
+#include "ui/VolumeOverlay.h"
 #include "usb/LibusbUsbBackend.h"
 #ifdef HEADUNIT_WIRELESS
 #include "wireless/WirelessStation.h"
@@ -168,6 +169,7 @@ void MainWindow::SetDisplay(const DisplayConfig& display)
     for (MenuPage* page : {static_cast<MenuPage*>(m_homeMenu), static_cast<MenuPage*>(m_music), static_cast<MenuPage*>(m_radio),
              static_cast<MenuPage*>(m_settings), static_cast<MenuPage*>(m_pairing)})
         page->SetDisplay(display);
+    m_volumeBar->SetDisplay(display);
     for (int index = 0; index < static_cast<int>(std::size(kDisplays)); ++index) {
         if (kDisplays[index] == display) m_displayChoice->setCurrentIndex(index);
     }
@@ -204,7 +206,8 @@ void MainWindow::keyReleaseEvent(QKeyEvent* event)
 }
 
 // The phone's picture and the radio's pages share one place; ShowScreen picks the one in front. A phone that pairs over
-// Bluetooth asks there too, in front of everything else, until it is answered.
+// Bluetooth asks there too, in front of everything else, until it is answered. The volume bar shows over all of them
+// when the volume changes; a touch on it sets the volume (and ends a mute).
 QWidget* MainWindow::BuildScreens(QWidget* parent)
 {
     m_screens = new QStackedWidget(parent);
@@ -231,6 +234,13 @@ QWidget* MainWindow::BuildScreens(QWidget* parent)
     for (QWidget* screen : {static_cast<QWidget*>(m_video), static_cast<QWidget*>(m_homeMenu), static_cast<QWidget*>(m_music),
              static_cast<QWidget*>(m_radio), static_cast<QWidget*>(m_settings), static_cast<QWidget*>(m_pairing)})
         m_screens->addWidget(screen);
+    m_volumeBar = new VolumeOverlay(m_screens);
+    m_volumeBar->SetVolumeHandler([this](int volume) {
+        m_audioState->SetMuted(false);
+        m_audioState->SetVolume(volume);
+    });
+    m_shownVolume = m_audioState->Volume();
+    m_wasMuted = m_audioState->IsMuted();
     return m_screens;
 }
 
@@ -318,8 +328,8 @@ void MainWindow::ConnectSignals()
     });
 }
 
-// The smoke test is the real window plus one real USB scan, then exit (with HEADUNIT_TEST_PAIRING the pairing question
-// of a made-up phone shows, for the window picture). Everything else starts connecting at once, after --display has been
+// The smoke test is the real window plus one real USB scan, then exit (for the window picture, HEADUNIT_TEST_PAIRING
+// shows the pairing question of a made-up phone and HEADUNIT_TEST_VOLUME the volume bar). Everything else starts connecting at once, after --display has been
 // applied; nobody has to press anything.
 void MainWindow::StartMode()
 {
@@ -329,6 +339,7 @@ void MainWindow::StartMode()
                 m_logger.Write(LogLevel::Info, "UI", std::string("Test pairing answered: ") + (isAccepted ? "pair" : "cancel"));
             });
         }
+        if (qEnvironmentVariableIsSet("HEADUNIT_TEST_VOLUME")) m_volumeBar->ShowVolume(m_audioState->Volume(), m_audioState->IsMuted());
         m_scanWatcher.setFuture(QtConcurrent::run([this] {
             try {
                 return m_backend.EnumerateDevices();
@@ -543,11 +554,13 @@ void MainWindow::ShowStep(const QString& text)
     m_history->appendPlainText(text);
 }
 
-// The window's tick (every 33 ms): the newest frame, the audio display, who has the sound, and the scripted test.
+// The window's tick (every 33 ms): the newest frame, the audio display and the volume bar, who has the sound, and the
+// scripted test.
 void MainWindow::Tick()
 {
     ShowLatestFrame();
     UpdateAudioDisplay();
+    UpdateVolumeBar();
     KeepOneSound();
     if (m_state == State::Connecting && !m_isTestFinished && m_scriptedTest) m_scriptedTest->Tick();
 }
@@ -583,6 +596,18 @@ void MainWindow::UpdateAudioDisplay()
     std::array<AudioState::Meter, kAudioKindCount> meters;
     for (int kind = 0; kind < kAudioKindCount; ++kind) meters[static_cast<std::size_t>(kind)] = m_audioState->ReadMeter(static_cast<AudioKind>(kind));
     m_panel->Display()->SetState(m_audioState->Volume(), m_audioState->IsMuted(), meters);
+}
+
+// Whatever changed the volume or the mute state (the console's keys, the keyboard, a touch on the bar itself), the
+// screen shows the bar.
+void MainWindow::UpdateVolumeBar()
+{
+    const int volume = m_audioState->Volume();
+    const bool isMuted = m_audioState->IsMuted();
+    if (volume == m_shownVolume && isMuted == m_wasMuted) return;
+    m_shownVolume = volume;
+    m_wasMuted = isMuted;
+    m_volumeBar->ShowVolume(volume, isMuted);
 }
 
 // The keyboard: controller keys go through the console (see ConsoleController), phone keys to the radio's side or the
@@ -640,6 +665,7 @@ void MainWindow::ShowScreen()
 {
     MenuPage* page = FrontPage();
     m_screens->setCurrentWidget(page ? static_cast<QWidget*>(page) : m_video);
+    if (m_volumeBar->isVisible()) m_volumeBar->raise();
 }
 
 // Keys go to the radio's side when it takes them (PressLocally), otherwise to the phone. A release goes where its press

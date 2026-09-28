@@ -96,8 +96,7 @@ void MenuPage::paintEvent(QPaintEvent*)
 // Where the display is drawn: its shape, as large as the widget allows and centred, like the phone's picture.
 QRectF MenuPage::ScreenRect() const
 {
-    const QSizeF shown = QSizeF(m_display.width, m_display.height).scaled(QSizeF(size()), Qt::KeepAspectRatio);
-    return QRectF(QPointF((width() - shown.width()) / 2, (height() - shown.height()) / 2), shown);
+    return menu::ScreenRectIn(QSizeF(size()), m_display);
 }
 
 // Redraws when the minute changed.

@@ -259,6 +259,13 @@ home menu (Back first goes to the page, which may close something it opened, the
   Real DAB+ reception would need a tuner; a DAB+ source (for example `welle-cli` with an RTL-SDR stick, which serves the
   programmes as http streams) would plug in as another list of stream URLs.
 
+Volume bar: `VolumeOverlay` is a child of the screens' `QStackedWidget`, above the page or the phone's picture in front
+(raised by `ShowVolume` and `ShowScreen`). `MainWindow::UpdateVolumeBar` (every tick) shows it for 2.5 s whenever the
+volume or the mute state differs from what it showed last, whoever changed it. It paints in the pages' design units
+(`menu::ScreenRectIn` gives the same screen rectangle as `MenuPage`), and a mask limits it to the panel, so touches beside
+it reach what is below. The portable `ui/VolumeBar.h` (CoreTests) has the panel's place and which volume a touch at a
+position sets; touching or dragging on it calls the window's handler (unmute, set the volume).
+
 Knob routing: while a page is in front, `MainWindow::SendKey` gives the controller's arrows and push to it
 (`PressLocally`); the media keys (play/pause, track skip, from the panel or the keyboard) go to the radio's own player
 while it plays or is paused (the page that started it handles them), otherwise to the phone. A key's release always goes

@@ -113,7 +113,7 @@ if(HEADUNIT_BUILD_APP)
   add_executable(HeadUnit src/main.cpp src/platform/ShutdownSignal.cpp src/radio/RadioBrowser.cpp
     src/ui/MainWindow.cpp src/ui/ScriptedPhoneTest.cpp src/ui/VideoWidget.cpp src/ui/RotaryKnob.cpp src/ui/AudioDisplay.cpp src/ui/CarPanel.cpp
     src/ui/MenuStyle.cpp src/ui/MenuPage.cpp src/ui/HomeMenu.cpp src/ui/SettingsPage.cpp src/ui/PairingPage.cpp src/ui/PlayerPage.cpp
-    src/ui/MultimediaPage.cpp src/ui/RadioPage.cpp)
+    src/ui/MultimediaPage.cpp src/ui/RadioPage.cpp src/ui/VolumeOverlay.cpp)
   target_link_libraries(HeadUnit PRIVATE headunit_usb headunit_media Qt6::Widgets Qt6::Concurrent Qt6::Network)
   if(HEADUNIT_WIRELESS_ENABLED)
     target_link_libraries(HeadUnit PRIVATE headunit_wireless)

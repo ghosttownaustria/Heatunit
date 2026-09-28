@@ -135,6 +135,23 @@ const char* const kSettingsIcon =
     "M170.967,237.173C186.061,237.173 198.299,250.332 198.299,266.558C198.299,282.783 186.061,295.943 170.967,295.943"
     "C155.874,295.943 143.634,282.784 143.634,266.558C143.634,250.332 155.874,237.173 170.967,237.173Z";
 
+// The status bar's symbols, from docs/design/heatunit.svg (their own coordinates, fitted into a box when drawn).
+const char* const kSpeakerIcon =
+    "M11.32,19.85L33.89,19.85L52.56,1C53.935,-0.364 56.185,-0.364 57.56,1C58.218,1.668 58.578,2.573 58.56,3.51L58.56,81.3"
+    "C58.558,83.251 56.951,84.856 55,84.856C54.045,84.856 53.129,84.471 52.46,83.79L34.01,68.79L11.32,68.79"
+    "C5.124,68.774 0.027,63.686 0,57.49L0,31.17C0.027,24.97 5.12,19.877 11.32,19.85ZM74.71,31.62"
+    "C74.622,31.319 74.578,31.007 74.578,30.693C74.578,28.872 76.077,27.373 77.898,27.373C79.272,27.373 80.51,28.226 81,29.51"
+    "C82.14,32.9 82.69,38.17 82.6,43.18C82.51,48.19 81.79,52.9 80.41,55.75C79.853,56.897 78.685,57.629 77.41,57.629"
+    "C75.581,57.629 74.076,56.124 74.076,54.295C74.076,53.791 74.19,53.293 74.41,52.84C75.41,50.84 75.88,47.08 75.96,43.07"
+    "C76.118,39.211 75.69,35.35 74.69,31.62L74.71,31.62ZM91.85,19.22C91.682,18.816 91.596,18.383 91.596,17.945"
+    "C91.596,16.119 93.099,14.616 94.925,14.616C96.268,14.616 97.486,15.429 98,16.67C101.08,24.07 102.75,33.38 102.89,42.67"
+    "C103.03,51.96 101.68,60.92 98.75,68.18C98.247,69.433 97.025,70.259 95.675,70.259C93.857,70.259 92.361,68.763 92.361,66.945"
+    "C92.361,66.522 92.442,66.103 92.6,65.71C95.2,59.27 96.39,51.04 96.27,42.71C96.15,34.38 94.64,25.85 91.86,19.21"
+    "L91.85,19.22ZM108.42,8.68C108.204,8.231 108.092,7.738 108.092,7.24C108.092,5.414 109.594,3.912 111.42,3.912"
+    "C112.698,3.912 113.867,4.648 114.42,5.8C119.936,17.546 122.83,30.353 122.9,43.33C123,55.91 120.46,68.45 114.9,79.14"
+    "C114.371,80.337 113.181,81.112 111.872,81.112C110.057,81.112 108.562,79.618 108.562,77.802C108.562,77.218 108.717,76.645 109.01,76.14"
+    "C114.01,66.43 116.33,54.97 116.24,43.42C116.185,31.422 113.513,19.579 108.41,8.72L108.42,8.68Z";
+
 // Reads the design's path data: absolute M, L, C and Z commands, a letter may be left out when it repeats (pairs
 // after M are lines). Stops at anything else.
 QPainterPath ParsePath(std::string_view data, Qt::FillRule rule)
@@ -238,15 +255,6 @@ const TileLook& SharedTileLook()
     return look;
 }
 
-// Small corner stripes of the focus: the tiles' orange, diagonally.
-QBrush LitCorner(const QRectF& box)
-{
-    QLinearGradient gradient(box.bottomLeft(), box.topRight());
-    gradient.setColorAt(0, QColor(255, 45, 0));
-    gradient.setColorAt(1, QColor(255, 168, 0));
-    return gradient;
-}
-
 // The outline of a player symbol, drawn in a square around the box's centre.
 QPainterPath SymbolPath(Symbol symbol, const QRectF& box)
 {
@@ -292,6 +300,14 @@ void DrawButtonFrame(QPainter& painter, const QRectF& box, bool isFocused)
     painter.setBrush(Qt::NoBrush);
     painter.drawRect(box);
 }
+}
+
+// Where a display of `display`'s shape is drawn in an area of `area`'s size: as large as fits and centred, like the
+// phone's picture.
+QRectF ScreenRectIn(const QSizeF& area, const DisplayConfig& display)
+{
+    const QSizeF shown = QSizeF(display.width, display.height).scaled(area, Qt::KeepAspectRatio);
+    return QRectF(QPointF((area.width() - shown.width()) / 2, (area.height() - shown.height()) / 2), shown);
 }
 
 // The design's font (Roboto, else the system's sans serif), `pixels` design units high.
@@ -340,7 +356,7 @@ void DrawFocus(QPainter& painter, const QRectF& box)
     corners.closeSubpath();
     corners.addPolygon(QPolygonF({QPointF(inside.left(), inside.bottom() - leg), inside.bottomLeft(), QPointF(inside.left() + leg, inside.bottom())}));
     corners.closeSubpath();
-    painter.fillPath(corners, LitCorner(box));
+    painter.fillPath(corners, LitBrush(box));
     painter.setPen(QPen(kText, kFrameWidth));
     painter.setBrush(Qt::NoBrush);
     painter.drawRect(box);
@@ -350,7 +366,7 @@ void DrawFocus(QPainter& painter, const QRectF& box)
 void DrawButton(QPainter& painter, const QRectF& box, Symbol symbol, bool isFocused, bool isOn)
 {
     DrawButtonFrame(painter, box, isFocused);
-    painter.fillPath(SymbolPath(symbol, box), isOn ? LitCorner(box) : QBrush(kText));
+    painter.fillPath(SymbolPath(symbol, box), isOn ? LitBrush(box) : QBrush(kText));
 }
 
 // A framed button with a text.
@@ -370,7 +386,7 @@ void DrawCheck(QPainter& painter, const QRectF& box, bool isOn)
     painter.setBrush(Qt::NoBrush);
     painter.drawRect(box);
     if (!isOn) return;
-    painter.fillRect(box.adjusted(5, 5, -5, -5), LitCorner(box));
+    painter.fillRect(box.adjusted(5, 5, -5, -5), LitBrush(box));
     painter.setPen(QPen(Qt::black, 4, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     const QPointF centre = box.center();
     const double size = box.width() * 0.22;
@@ -399,5 +415,38 @@ void DrawRow(QPainter& painter, const QRectF& row, const QString& text, const QS
         painter.setPen(kDim);
         painter.drawText(row.adjusted(0, 0, -26, 0), Qt::AlignRight | Qt::AlignVCenter, Elided(note, noteFont, noteWidth));
     }
+}
+
+// A symbol of the status bar, as large as fits into `box` and centred there. Struck (muted): dim, with an orange slash.
+void DrawIcon(QPainter& painter, Icon icon, const QRectF& box, bool isStruck)
+{
+    static const std::array<QPainterPath, 1> kIcons = {ParsePath(kSpeakerIcon, Qt::WindingFill)};
+    const QPainterPath& path = kIcons[static_cast<std::size_t>(icon)];
+    const QRectF bounds = path.boundingRect();
+    if (bounds.isEmpty()) return;
+    const double scale = std::min(box.width() / bounds.width(), box.height() / bounds.height());
+    const QSizeF size = bounds.size() * scale;
+    const QRectF fitted(box.center() - QPointF(size.width() / 2, size.height() / 2), size);
+    painter.save();
+    painter.translate(fitted.topLeft());
+    painter.scale(scale, scale);
+    painter.translate(-bounds.topLeft());
+    painter.fillPath(path, isStruck ? kDim : kText);
+    painter.restore();
+    if (!isStruck) return;
+    const QLineF slash(fitted.topLeft(), fitted.bottomRight());
+    painter.setPen(QPen(Qt::black, 9, Qt::SolidLine, Qt::RoundCap));
+    painter.drawLine(slash);
+    painter.setPen(QPen(LitBrush(fitted), 4.5, Qt::SolidLine, Qt::RoundCap));
+    painter.drawLine(slash);
+}
+
+// The lit orange of the design (focus corners, lit segments), diagonally across `box`.
+QBrush LitBrush(const QRectF& box)
+{
+    QLinearGradient gradient(box.bottomLeft(), box.topRight());
+    gradient.setColorAt(0, QColor(255, 45, 0));
+    gradient.setColorAt(1, QColor(255, 168, 0));
+    return gradient;
 }
 }

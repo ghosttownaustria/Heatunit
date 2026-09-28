@@ -105,6 +105,9 @@ einer Groesse, ohne sie zu merken (auch fuer die `--test-...`-Laeufe, die sonst 
 - **Audio-Anzeige:** Lautstaerke (30 Stufen), Stumm und je ein Pegel fuer Medien, Navigation und
   System. Die Anzeige zeigt, welche Tonspur des Handys gerade Audio liefert. Lautstaerke und Stumm
   wirken in der App (der Windows-Regler bleibt unberuehrt); mehr Lautstaerke schaltet Stumm aus.
+- **Lautstaerke-Leiste im Bild:** Aendert sich Lautstaerke oder Stumm (Tasten, Tastatur), zeigt der Bildschirm
+  selbst unten fuer 2,5 Sekunden eine Leiste im Stil der Kacheln: Lautsprecher, 30 Segmente, die Zahl; auch ueber
+  dem Bild des Handys. Tippen oder Ziehen auf der Leiste stellt die Lautstaerke ein (und hebt Stumm auf).
 - **Tastatur:** Pfeile (die Pfeile des Reglers), Komma/Punkt (Regler drehen), Enter (Regler druecken), Esc/Rueck
   (Back), Pos1 (Home), F1 Menu, F2 Option,
   F3 Media, F4 Radio, F5 Tel, F6 Nav, F7 Map, F8 CarPlay / Android Auto, Leertaste (Play/Pause),
