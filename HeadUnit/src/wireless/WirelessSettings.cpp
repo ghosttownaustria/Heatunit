@@ -9,6 +9,8 @@
 namespace headunit {
 namespace {
 constexpr const char* kPasswordSetting = "wireless/wifiPassword";
+// Set once a phone did not join the hidden network (see WirelessStation::ShowWifi).
+constexpr const char* kVisibleSetting = "wireless/wifiVisible";
 constexpr std::size_t kMinimumPasswordLength = 8;
 constexpr int kRandomPasswordLength = 16;
 
@@ -64,7 +66,20 @@ WirelessSettings LoadWirelessSettings()
         int value = 0;
         if (std::from_chars(channel->data(), channel->data() + channel->size(), value).ec == std::errc{} && value > 0) hotspot.channel = value;
     }
-    if (const auto hidden = NonEmptyEnv("HEADUNIT_WIFI_HIDDEN")) hotspot.isHidden = !(*hidden == "0" || *hidden == "no" || *hidden == "false");
+    if (const auto hidden = NonEmptyEnv("HEADUNIT_WIFI_HIDDEN")) {
+        hotspot.isHidden = !(*hidden == "0" || *hidden == "no" || *hidden == "false");
+        settings.isVisibilityFixed = true;
+    } else if (QSettings().value(kVisibleSetting).toBool()) {
+        hotspot.isHidden = false;
+    }
     return settings;
+}
+
+// A phone did not join the hidden network: it is broadcast from now on, also in later runs.
+void RememberVisibleWifi()
+{
+    QSettings settings;
+    settings.setValue(kVisibleSetting, true);
+    settings.sync();
 }
 }

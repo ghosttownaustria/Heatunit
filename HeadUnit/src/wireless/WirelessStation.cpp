@@ -78,8 +78,10 @@ AutoConnectResult WirelessStation::Serve(int rfcommFd, std::atomic_bool& isStopR
     if (link.tcpFd < 0) {
         result.isStoppedByUser = isStopRequested;
         result.message = link.message;
-        if (link.hasSentInfo && !isStopRequested && m_settings.hotspot.isHidden)
-            result.message += " Das WLAN ist verborgen (HEADUNIT_WIFI_HIDDEN); Android Auto findet es dann meist nicht.";
+        if (link.hasSentInfo && !isStopRequested && m_settings.hotspot.isHidden) {
+            if (m_settings.isVisibilityFixed) result.message += " Das WLAN ist verborgen (HEADUNIT_WIFI_HIDDEN=1); Android Auto findet es dann womoeglich nicht.";
+            else ShowWifi();
+        }
         return result;
     }
     Report("Handy im WLAN verbunden (" + link.peer + "); starte Android Auto.");
@@ -212,5 +214,19 @@ void WirelessStation::WaitForWifi(const std::atomic_bool& isStopRequested)
     if (!m_wifiStart.valid()) StartWifi();
     const auto deadline = Clock::now() + kWifiWait;
     while (!isStopRequested && m_wifiStart.valid() && Clock::now() < deadline) CheckWifi(200ms);
+}
+
+// The phone got the details of the hidden network and did not join it: Android Auto on this phone does not find a
+// hidden network. The name is broadcast from now on (remembered), and the hotspot starts again; once it is up, the
+// paired phones are asked to connect again (CheckWifi).
+void WirelessStation::ShowWifi()
+{
+    m_settings.hotspot.isHidden = false;
+    RememberVisibleWifi();
+    Report("Das Handy ist dem verborgenen WLAN nicht beigetreten. Das WLAN '" + m_settings.hotspot.ssid +
+        "' ist ab jetzt sichtbar und startet neu; das Handy verbindet sich danach von selbst.");
+    if (m_wifiStart.valid()) m_wifiStart.wait();
+    m_wifiStart = {};
+    StartWifi();
 }
 }

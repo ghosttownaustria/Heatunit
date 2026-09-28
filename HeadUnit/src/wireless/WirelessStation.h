@@ -64,5 +64,6 @@ private:
     void CheckWifi(std::chrono::milliseconds wait = std::chrono::milliseconds::zero());
     void KeepRunning();
     void WaitForWifi(const std::atomic_bool& isStopRequested);
+    void ShowWifi();
 };
 }

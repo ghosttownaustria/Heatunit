@@ -12,6 +12,15 @@ From the user's list and the new design `docs/design/heatunit.svg` (status bar, 
   Connecting again is the Android Auto tile or the projection key; the texts that named the old button say so.
   - Verified here: `windows-debug` builds without warnings, CoreTests and ProtocolTests pass; the Linux sources passed
     the syntax check against POSIX stubs. Not verified: the click itself and the radios going off on the Pi.
+- **Hidden Wi-Fi HEATUNIT-AA** (asked for "only if possible and nothing breaks"): the hotspot is hidden again by
+  default. The earlier switch to a visible network rested on a suspicion that was never tested (the real cause then was
+  the unpublished RFCOMM service), so it is unknown whether Android Auto joins a hidden network. To keep wireless
+  working either way, the fallback of 2026-09-27 is back: when a phone got the Wi-Fi details and did not join,
+  `WirelessStation::ShowWifi` broadcasts the name from then on (`wireless/wifiVisible` in `QSettings`), restarts the
+  hotspot and calls the paired phones again. `HEADUNIT_WIFI_HIDDEN=1/0` fixes it without fallback.
+  - Verified here: syntax check of the changed wireless sources. Not verified: whether the SM-F776B joins the hidden
+    network (first try on the Pi shows it: a session, or "Das Handy ist dem verborgenen WLAN nicht beigetreten" after
+    up to 60 s, then visible).
 
 ## 2026-09-28: C++ coding standard applied to the whole project; `bin/` layout and four build profiles
 
