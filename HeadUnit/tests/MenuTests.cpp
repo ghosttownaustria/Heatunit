@@ -7,6 +7,7 @@
 #include "ui/HomeTileSetup.h"
 #include "ui/KnobZones.h"
 #include "ui/PageFocus.h"
+#include <cmath>
 #include <string>
 #include <vector>
 
