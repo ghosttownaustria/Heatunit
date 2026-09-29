@@ -67,6 +67,14 @@ einer Groesse, ohne sie zu merken (auch fuer die `--test-...`-Laeufe, die sonst 
     das Handy-Symbol), Multimedia, Radio, Bluetooth und Settings oeffnen die Seiten des Radios, Telephone und Navigation
     wirken wie die Tasten Tel und Nav; Vehicle hat noch keine Funktion. Ein Klick auf einen Randpfeil geht eine
     Kachel weiter, das Mausrad ueber dem Menue dreht.
+- **Nur mit Touch:** Alles im Bildschirm geht auch ohne Tasten (auf dem Pi-Touchscreen; unter Windows mit der Maus).
+  Tippen wirkt wie ein Klick. Die Kachelreihe laesst sich **wischen**: sie folgt dem Finger, danach bekommt die Kachel
+  in der Mitte den Fokus (ein kurzes Schnippen geht eine Kachel weiter). Listen (Musik, Sender, Laender, Bluetooth)
+  **scrollen** mit dem Finger; ein Wisch nach links/rechts oberhalb der Liste auf Multimedia und Radio springt zum
+  naechsten/vorigen Titel bzw. Sender. In **Settings** verschiebt Ziehen einer Zeile nach oben/unten die Kachel, Tippen
+  blendet sie ein/aus. Zurueck geht es ueber Home in der Statusleiste, lauter/leiser ueber die Lautstaerke-Leiste. Aus
+  Android Auto heraus fuehrt dessen eigener Beenden-/"Zurueck zum Auto"-Knopf im Startbildschirm des Handys ins
+  Startmenue des Radios; die Kachel Android Auto bringt das Handy wieder nach vorn.
 - **Statusleiste** (oben auf allen Seiten des Radios, nach [docs/design/heatunit.svg](docs/design/heatunit.svg)):
   links die Uhr, rechts die Tonquelle, Lautsprecher, Mikrofon und Home. Die Tonquelle ist der laufende Radiosender
   bzw. Musiktitel des Radios, sonst der Name des verbundenen Handys (kabellos der Bluetooth-Name wie "Jakob's Flip 8",

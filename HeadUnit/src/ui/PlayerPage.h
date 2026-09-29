@@ -4,6 +4,7 @@
 #include "ui/MenuPage.h"
 #include "ui/MenuStyle.h"
 #include "ui/PageFocus.h"
+#include "ui/TouchDrag.h"
 #include <QStringList>
 #include <functional>
 #include <optional>
@@ -14,7 +15,8 @@ namespace headunit {
 // while the page's source plays; at the right what plays now, the player's controls (previous, play, next) and a list,
 // with buttons at the top right. The controller moves a focus through these (PageFocus.h): turning moves within a part,
 // up and down jump between the parts, pushing activates what the focus is on; left and right skip to the previous or
-// next title (station). The mouse clicks them directly. Both pages share the one AudioPlayer: whichever started it last
+// next title (station). A tap works them directly; dragging on the list scrolls it, swiping sideways above it skips to
+// the previous or next title (station). Both pages share the one AudioPlayer: whichever started it last
 // owns it, and only the owner reacts to its end, to media keys and to the phone taking over.
 class PlayerPage : public MenuPage {
 public:
@@ -78,6 +80,7 @@ protected:
     int FocusedRow() const;
     void Paint(QPainter& painter) override;
     void mousePressEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
 
@@ -99,6 +102,8 @@ private:
     PageFocus m_focus;
     int m_firstRow{};
     std::optional<Hit> m_pressed;
+    TouchDrag m_drag;
+    int m_dragFirstRow{};   // the list's scroll when the finger went down
 
     PageShape Shape() const;
     void Activate(PageFocus::Part part, int index);

@@ -20,7 +20,7 @@ add_library(headunit_core src/CommandLine.cpp src/logging/LogLevel.cpp src/loggi
   src/androidauto/TouchMapping.cpp src/androidauto/TransportReceiveBuffer.cpp
   src/audio/AudioClock.cpp src/audio/PcmFormat.cpp src/audio/Pcm16.cpp src/audio/PcmRingBuffer.cpp src/audio/AudioState.cpp src/audio/MediaActivity.cpp
   src/audio/WatchedOutput.cpp src/media/MusicLibrary.cpp src/media/StreamText.cpp src/ui/KnobZones.cpp src/ui/HomeTileSetup.cpp src/ui/HomeMenuLayout.cpp
-  src/ui/BluetoothPhones.cpp)
+  src/ui/BluetoothPhones.cpp src/ui/TouchDrag.cpp)
 target_include_directories(headunit_core PUBLIC src)
 target_compile_definitions(headunit_core PRIVATE $<$<CONFIG:DebugLevelLog,ReleaseLevelLog>:HEADUNIT_VERBOSE_LOGGING>)
 if(MSVC)

@@ -1,6 +1,7 @@
 #pragma once
 #include "ui/BluetoothPhones.h"
 #include "ui/MenuPage.h"
+#include "ui/TouchDrag.h"
 #include <functional>
 #include <optional>
 #include <vector>
@@ -9,7 +10,8 @@ namespace headunit {
 // The phones paired with the head unit over Bluetooth: each with its state (Android Auto, connected, not connected),
 // the Android Auto phone first and in orange. Choosing another phone (push, or a click on its row) makes it the Android
 // Auto phone: the window ends the running session and has that phone connect anew, which starts Android Auto on it.
-// Turning the knob or up / down move through the list. Without Bluetooth (the Windows build) the page says so.
+// Turning the knob or up / down move through the list; dragging on it scrolls it. Without Bluetooth (the Windows build)
+// the page says so.
 class BluetoothPage final : public MenuPage {
 public:
     explicit BluetoothPage(QWidget* parent = nullptr);
@@ -24,6 +26,7 @@ public:
 protected:
     void Paint(QPainter& painter) override;
     void mousePressEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
 
@@ -34,6 +37,8 @@ private:
     int m_focus{};
     int m_firstRow{};
     std::optional<int> m_pressed;
+    TouchDrag m_drag;
+    int m_dragFirstRow{};   // the list's scroll when the finger went down
 
     int Count() const;
     void Focus(int row);

@@ -9,6 +9,7 @@
 #include "ui/KnobZones.h"
 #include "ui/PageFocus.h"
 #include "ui/StatusBar.h"
+#include "ui/TouchDrag.h"
 #include "ui/VolumeBar.h"
 #include <cmath>
 #include <string>
@@ -229,6 +230,27 @@ void TestStatusBar() {
         StatusSourceText("", true, "") == "Android Auto" && StatusSourceText("", false, "Flip").empty(), "The source of the sound is named wrongly");
 }
 
+// Touch: a press stays a tap until it moves more than the threshold; a swipe along the home row gives the focus to the
+// tile in the middle, never against the swipe, and a flick moves on by one.
+void TestTouch() {
+    TouchDrag drag;
+    Check(!drag.Move(50, 50) && !drag.IsDragging(), "A move without a press became a drag");
+    drag.Press(100, 100);
+    Check(!drag.Move(110, 90) && !drag.IsDragging() && drag.IsDown(), "A small wobble became a drag");
+    Check(drag.Move(100, 140) && drag.IsDragging() && !drag.IsHorizontal() && drag.DeltaY() == 40 && drag.StartY() == 100, "A drag down was not seen");
+    drag.Release();
+    Check(drag.IsDragging() && !drag.IsDown(), "The release forgot the drag");
+    drag.Press(0, 0);
+    Check(!drag.IsDragging() && drag.Move(-30, 5) && drag.IsHorizontal() && drag.DeltaX() == -30, "A new press kept the old drag");
+    // 1000 wide, 8 tiles: the middle tile after the swipe gets the focus.
+    Check(SwipeFocus(1, HomeMenuScroll(3, 1000, 8), 1000, 8, -600) == 3, "A swipe to the left did not focus the tile in the middle");
+    Check(SwipeFocus(5, HomeMenuScroll(2, 1000, 8), 1000, 8, +900) == 2, "A swipe to the right did not focus the tile in the middle");
+    Check(SwipeFocus(0, 0, 1600, 8, +200) == 0 && SwipeFocus(4, HomeMenuScroll(6, 1000, 8), 1000, 8, +300) <= 4, "A swipe moved the focus against it");
+    Check(SwipeFocus(2, HomeMenuScroll(2, 1000, 8) + 70, 1000, 8, -70) == 3 && SwipeFocus(2, HomeMenuScroll(2, 1000, 8) - 70, 1000, 8, +70) == 1 &&
+        SwipeFocus(2, HomeMenuScroll(2, 1000, 8) + 20, 1000, 8, -20) == 2, "A flick did not move on by one, or a tiny one did");
+    Check(SwipeFocus(7, HomeMenuScroll(7, 1000, 8), 1000, 8, -200) == 7 && SwipeFocus(0, 0, 1000, 0, -200) == 0, "A swipe left the row");
+}
+
 // The volume bar: centred, never wider than 1000 units nor closer than 50 to the edges, and a touch lights the segment
 // under it with all before it.
 void TestVolumeBar() {
@@ -248,7 +270,7 @@ void TestVolumeBar() {
 }
 
 // The radio's menu pages: the knob, the home menu's layout and tiles, the focus on the player pages, the volume bar, the
-// Bluetooth page's list and the status bar.
+// Bluetooth page's list, the status bar and touch.
 void RunMenuTests()
 {
     TestKnobZones();
@@ -258,4 +280,5 @@ void RunMenuTests()
     TestVolumeBar();
     TestBluetoothPhones();
     TestStatusBar();
+    TestTouch();
 }

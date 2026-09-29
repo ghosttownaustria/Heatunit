@@ -6,6 +6,7 @@
 #include <QPainter>
 #include <QWheelEvent>
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace headunit {
@@ -97,16 +98,33 @@ void BluetoothPage::Paint(QPainter& painter)
     painter.fillRect(QRectF(track.left(), top, track.width(), thumb), kDim);
 }
 
-// Remembers the row a click starts on.
+// Remembers the row a click starts on; it may also become a drag.
 void BluetoothPage::mousePressEvent(QMouseEvent* event)
 {
-    if (event->button() == Qt::LeftButton) m_pressed = RowAt(event->position());
+    if (event->button() != Qt::LeftButton) return;
+    m_pressed = RowAt(event->position());
+    if (const auto point = ToDesign(event->position())) {
+        m_drag.Press(point->x(), point->y());
+        m_dragFirstRow = m_firstRow;
+    }
 }
 
-// A click that ends on the row it started on focuses that phone and chooses it.
+// Dragging up or down scrolls the list with the finger.
+void BluetoothPage::mouseMoveEvent(QMouseEvent* event)
+{
+    const auto point = ToDesign(event->position());
+    if (!point || !m_drag.Move(point->x(), point->y())) return;
+    m_pressed.reset();
+    const int rows = static_cast<int>(std::lround(m_drag.DeltaY() / kRowHeight));
+    m_firstRow = std::clamp(m_dragFirstRow - rows, 0, std::max(0, Count() - kVisibleRows));
+    update();
+}
+
+// A click that ends on the row it started on focuses that phone and chooses it; a drag chooses nothing.
 void BluetoothPage::mouseReleaseEvent(QMouseEvent* event)
 {
     if (event->button() != Qt::LeftButton) return;
+    m_drag.Release();
     const auto pressed = std::exchange(m_pressed, std::nullopt);
     if (!pressed || pressed != RowAt(event->position())) return;
     Focus(*pressed);

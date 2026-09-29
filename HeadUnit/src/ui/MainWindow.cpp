@@ -507,6 +507,9 @@ ProjectionCallbacks MainWindow::MakeCallbacks()
     callbacks.onPhoneName = [this](const std::string& name) {
         QMetaObject::invokeMethod(this, [this, name] { m_phoneName = QString::fromStdString(name); }, Qt::QueuedConnection);
     };
+    callbacks.onNativeScreen = [this] {
+        QMetaObject::invokeMethod(this, [this] { ApplyConsoleEffect(m_console.Open(ConsoleController::Screen::RadioHome)); }, Qt::QueuedConnection);
+    };
     callbacks.onFrame = [this](VideoFrame frame) {
         std::lock_guard lock(m_frameMutex);
         m_latestFrame = std::move(frame);

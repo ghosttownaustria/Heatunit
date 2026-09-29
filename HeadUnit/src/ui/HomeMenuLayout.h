@@ -80,5 +80,19 @@ constexpr int MoveHomeFocus(int focus, int steps, int count)
     return std::clamp(focus + steps, 0, std::max(0, count - 1));
 }
 
+// The focus after a swipe along the row by `swipe` units (negative: the finger went left, showing tiles further right)
+// that left the row scrolled by `scroll`: the tile nearest to the middle of the screen, but never against the swipe's
+// direction; a short flick that leaves the focus where it was still moves it on by one.
+constexpr int SwipeFocus(int focus, double scroll, double width, int count, double swipe)
+{
+    if (count <= 0) return 0;
+    const double middle = (scroll + width / 2 - kHomeTileMargin - kHomeTileWidth / 2) / kHomeTilePitch;
+    int nearest = std::clamp(static_cast<int>(middle + 0.5 + count) - count, 0, count - 1);
+    if (swipe < 0) nearest = std::max(nearest, focus);
+    else if (swipe > 0) nearest = std::min(nearest, focus);
+    if (nearest == focus && (swipe < -kHomeTilePitch / 5 || swipe > kHomeTilePitch / 5)) nearest = MoveHomeFocus(focus, swipe < 0 ? +1 : -1, count);
+    return nearest;
+}
+
 std::optional<int> HomeTileAt(double x, double y, double scroll, int count);
 }

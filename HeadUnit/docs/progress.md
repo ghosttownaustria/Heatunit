@@ -44,6 +44,15 @@ From the user's list and the new design `docs/design/heatunit.svg` (status bar, 
   - Verified here: builds without warnings, CoreTests (`TestStatusBar`, microphone mute) and ProtocolTests pass, smoke
     pictures of the home menu and the music page at 1600x600 and 800x480; Linux sources syntax-checked. Not verified:
     the names shown with a real phone (which field the SM-F776B fills over USB), touches on a real touch screen.
+- **Touch only:** taps worked already (Qt turns touches into mouse events); new are swiping the home row (the row
+  follows the finger, the tile in the middle gets the focus, a flick moves one on), scrolling the lists with the finger,
+  a sideways swipe above the music/radio list to skip, and dragging a row on the settings page to move its tile (so the
+  order no longer needs the arrow keys). Drags never click (`TouchDrag`). Android Auto's own exit button
+  (`VIDEO_FOCUS_NATIVE`) now brings the radio's home menu to the front, so a touch-only car can leave the projection;
+  with the status bar's Home and the volume bar nothing on the screen needs the simulated console any more.
+  - Verified here: builds without warnings (CMake and MSBuild), CoreTests (`TestTouch`) and ProtocolTests pass. Not
+    verified: the gestures on the Pi's touch screen (only the rules are tested; mouse drags on Windows behave the same
+    way but were not driven here), and whether the SM-F776B sends `VIDEO_FOCUS_NATIVE` from its exit button.
 
 ## 2026-09-28: C++ coding standard applied to the whole project; `bin/` layout and four build profiles
 

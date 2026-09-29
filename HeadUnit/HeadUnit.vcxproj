@@ -85,6 +85,7 @@
     <ClCompile Include="src\ui\RotaryKnob.cpp" />
     <ClCompile Include="src\ui\ScriptedPhoneTest.cpp" />
     <ClCompile Include="src\ui\SettingsPage.cpp" />
+    <ClCompile Include="src\ui\TouchDrag.cpp" />
     <ClCompile Include="src\ui\VideoWidget.cpp" />
     <ClCompile Include="src\ui\VolumeOverlay.cpp" />
     <ClCompile Include="src\usb\AndroidUsbProbe.cpp" />
@@ -168,6 +169,7 @@
     <ClInclude Include="src\ui\ScriptedTestHost.h" />
     <ClInclude Include="src\ui\SettingsPage.h" />
     <ClInclude Include="src\ui\StatusBar.h" />
+    <ClInclude Include="src\ui\TouchDrag.h" />
     <ClInclude Include="src\ui\VideoWidget.h" />
     <ClInclude Include="src\ui\VolumeBar.h" />
     <ClInclude Include="src\ui\VolumeOverlay.h" />

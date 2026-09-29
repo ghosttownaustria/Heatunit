@@ -270,6 +270,14 @@ home menu (Back first goes to the page, which may close something it opened, the
   Real DAB+ reception would need a tuner; a DAB+ source (for example `welle-cli` with an RTL-SDR stick, which serves the
   programmes as http streams) would plug in as another list of stream URLs.
 
+Touch: Qt hands touches to the pages as mouse events (a touch screen needs nothing else). The portable `ui/TouchDrag`
+(CoreTests) tells a tap from a drag (more than 18 design units); a drag never clicks. `HomeMenu` moves the row with the
+finger and on release focuses `SwipeFocus` (`ui/HomeMenuLayout.h`, tested: the tile nearest the middle, never against
+the swipe, a flick moves one on). `PlayerPage` and `BluetoothPage` scroll their lists with the finger; a sideways swipe
+above a player page's list skips; `SettingsPage` moves a dragged row's tile along the order. When the phone asks for the
+car's own screen (`VIDEO_FOCUS_NATIVE`, the exit button of the Android Auto launcher), `ProjectionCallbacks::onNativeScreen`
+makes the window show the radio's home menu.
+
 Status bar: every `MenuPage` draws it after the clock (layout in the portable `ui/StatusBar.h`, CoreTests: the
 symbols' boxes from `docs/design/heatunit.svg` measured from the right edge, touch areas, `StatusBarLeft`, and
 `StatusSourceText`: the radio's own player while it sounds, else the projected phone). `MainWindow::UpdateStatusBar`

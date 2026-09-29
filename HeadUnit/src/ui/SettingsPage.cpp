@@ -4,6 +4,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace headunit {
@@ -73,7 +74,7 @@ void SettingsPage::Paint(QPainter& painter)
     painter.setFont(hintFont);
     painter.setPen(kDim);
     painter.drawText(QPointF(kPageColumnLeft, kHintBaseline),
-        Elided(QString::fromUtf8("Turn: choose  ·  Push: show or hide  ·  Up / down: move"), hintFont, width));
+        Elided(QString::fromUtf8("Turn or tap: show or hide  ·  Up / down or drag: move"), hintFont, width));
     for (int index = 0; index < Count(); ++index) {
         const auto& tile = m_setup.tiles[static_cast<std::size_t>(index)];
         const QRectF row = RowRect(index);
@@ -87,16 +88,41 @@ void SettingsPage::Paint(QPainter& painter)
     }
 }
 
-// Remembers the row a click starts on.
+// Remembers the row a click starts on; it may also become a drag of that row.
 void SettingsPage::mousePressEvent(QMouseEvent* event)
 {
-    if (event->button() == Qt::LeftButton) m_pressed = RowAt(event->position());
+    if (event->button() != Qt::LeftButton) return;
+    m_pressed = RowAt(event->position());
+    m_dragRow = m_pressed;
+    m_dragStartRow = m_pressed.value_or(0);
+    if (const auto point = ToDesign(event->position())) m_drag.Press(point->x(), point->y());
 }
 
-// A click that ends on the row it started on focuses and ticks it.
+// Dragging a row up or down moves its tile one place per row height; the focus goes with it.
+void SettingsPage::mouseMoveEvent(QMouseEvent* event)
+{
+    const auto point = ToDesign(event->position());
+    if (!point || !m_drag.Move(point->x(), point->y())) return;
+    m_pressed.reset();
+    if (!m_dragRow || m_drag.IsHorizontal()) return;
+    const int target = std::clamp(m_dragStartRow + static_cast<int>(std::lround(m_drag.DeltaY() / kRowHeight)), 0, std::max(0, Count() - 1));
+    while (*m_dragRow != target) {
+        const int direction = target > *m_dragRow ? +1 : -1;
+        HomeTileSetup setup = m_setup;
+        if (!MoveTile(setup, setup.tiles[static_cast<std::size_t>(*m_dragRow)].entry, direction, false)) break;
+        *m_dragRow += direction;
+        m_focus = *m_dragRow;
+        if (m_onChange) m_onChange(setup);
+    }
+    update();
+}
+
+// A click that ends on the row it started on focuses and ticks it; a drag ticks nothing.
 void SettingsPage::mouseReleaseEvent(QMouseEvent* event)
 {
     if (event->button() != Qt::LeftButton) return;
+    m_drag.Release();
+    m_dragRow.reset();
     const auto pressed = std::exchange(m_pressed, std::nullopt);
     if (!pressed || pressed != RowAt(event->position())) return;
     m_focus = *pressed;

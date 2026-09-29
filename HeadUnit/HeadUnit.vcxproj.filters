@@ -73,6 +73,7 @@
     <ClCompile Include="src\ui\RotaryKnob.cpp"><Filter>src\ui</Filter></ClCompile>
     <ClCompile Include="src\ui\ScriptedPhoneTest.cpp"><Filter>src\ui</Filter></ClCompile>
     <ClCompile Include="src\ui\SettingsPage.cpp"><Filter>src\ui</Filter></ClCompile>
+    <ClCompile Include="src\ui\TouchDrag.cpp"><Filter>src\ui</Filter></ClCompile>
     <ClCompile Include="src\ui\VideoWidget.cpp"><Filter>src\ui</Filter></ClCompile>
     <ClCompile Include="src\ui\VolumeOverlay.cpp"><Filter>src\ui</Filter></ClCompile>
     <ClCompile Include="src\usb\AndroidUsbProbe.cpp"><Filter>src\usb</Filter></ClCompile>
@@ -156,6 +157,7 @@
     <ClInclude Include="src\ui\ScriptedTestHost.h"><Filter>src\ui</Filter></ClInclude>
     <ClInclude Include="src\ui\SettingsPage.h"><Filter>src\ui</Filter></ClInclude>
     <ClInclude Include="src\ui\StatusBar.h"><Filter>src\ui</Filter></ClInclude>
+    <ClInclude Include="src\ui\TouchDrag.h"><Filter>src\ui</Filter></ClInclude>
     <ClInclude Include="src\ui\VideoWidget.h"><Filter>src\ui</Filter></ClInclude>
     <ClInclude Include="src\ui\VolumeBar.h"><Filter>src\ui</Filter></ClInclude>
     <ClInclude Include="src\ui\VolumeOverlay.h"><Filter>src\ui</Filter></ClInclude>

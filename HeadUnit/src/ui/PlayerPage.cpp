@@ -6,6 +6,7 @@
 #include <QTimer>
 #include <QWheelEvent>
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace headunit {
@@ -23,6 +24,8 @@ constexpr double kListTop = 268, kRowHeight = 46, kScrollbarRoom = 14;
 constexpr int kVisibleRows = 5;
 constexpr int kWheelStep = 120;
 constexpr int kLookIntervalMs = 250;
+// How far a sideways swipe above the list has to go to skip.
+constexpr double kSkipSwipe = 120;
 }
 
 // A page of `entry` that plays through `player`. The player runs on its own thread; the page looks at it a few times a
@@ -215,16 +218,43 @@ void PlayerPage::Paint(QPainter& painter)
     PaintList(painter);
 }
 
-// Remembers what a click starts on.
+// Remembers what a click starts on; it may also become a drag.
 void PlayerPage::mousePressEvent(QMouseEvent* event)
 {
-    if (event->button() == Qt::LeftButton) m_pressed = HitAt(event->position());
+    if (event->button() != Qt::LeftButton) return;
+    m_pressed = HitAt(event->position());
+    if (const auto point = ToDesign(event->position())) {
+        m_drag.Press(point->x(), point->y());
+        m_dragFirstRow = m_firstRow;
+    }
 }
 
-// Like a button: it acts when the click also ends on it, and the controller's focus goes there.
+// Dragging up or down on the list scrolls it with the finger, one row per row height.
+void PlayerPage::mouseMoveEvent(QMouseEvent* event)
+{
+    const auto point = ToDesign(event->position());
+    if (!point || !m_drag.Move(point->x(), point->y())) return;
+    m_pressed.reset();
+    if (m_drag.IsHorizontal() || m_drag.StartY() < kListTop) return;
+    const int rows = static_cast<int>(std::lround(m_drag.DeltaY() / kRowHeight));
+    m_firstRow = std::clamp(m_dragFirstRow - rows, 0, std::max(0, RowCount() - kVisibleRows));
+    update();
+}
+
+// Like a button: it acts when the click also ends on it, and the controller's focus goes there. A sideways swipe above
+// the list skips to the previous title (to the right) or the next one (to the left).
 void PlayerPage::mouseReleaseEvent(QMouseEvent* event)
 {
     if (event->button() != Qt::LeftButton) return;
+    m_drag.Release();
+    if (m_drag.IsDragging()) {
+        m_pressed.reset();
+        if (m_drag.IsHorizontal() && m_drag.StartY() < kListTop && std::abs(m_drag.DeltaX()) >= kSkipSwipe) {
+            Skip(m_drag.DeltaX() < 0 ? +1 : -1);
+            Look();
+        }
+        return;
+    }
     const auto pressed = std::exchange(m_pressed, std::nullopt);
     if (!pressed || pressed != HitAt(event->position())) return;
     if (!pressed->isTile) {
