@@ -21,7 +21,7 @@
 #endif
 #include <QApplication>
 #include <QCloseEvent>
-#include <QComboBox>
+#include <QLineEdit>
 #include <QDir>
 #include <QHBoxLayout>
 #include <QGuiApplication>
@@ -49,16 +49,6 @@ constexpr const char* kTilesSetting = "home/tiles";
 constexpr int kTickIntervalMs = 33;
 // Scripted runs must not blast the phone's music: they start quiet.
 constexpr int kTestVolume = 5;
-
-// The entry of the display choice: its size and, where it has one, its common name.
-QString DisplayChoiceText(const DisplayConfig& display)
-{
-    QString text = QString::fromStdString(DisplayText(display));
-    if (display.height == 720) text += " (HD)";
-    else if (display.height == 1080) text += " (Full HD)";
-    else if (display.height == 600) text += " (Ultrawide)";
-    return text;
-}
 
 // The folder the music player plays from: HEADUNIT_MUSIC_DIR, else "HeadUnit" in the user's music folder.
 QString MusicFolder()
@@ -161,11 +151,11 @@ MainWindow::~MainWindow()
     m_scanWatcher.waitForFinished();
 }
 
-// Selects the display size for the next connection (ignored while a session is running or for a size that is not
-// offered). Not remembered: only a choice made in the window is.
+// Selects the display size for the next connection (ignored while a session is running or for a size outside the accepted
+// range). Not remembered: only a size typed into the window is.
 void MainWindow::SetDisplay(const DisplayConfig& display)
 {
-    if (m_state == State::Connecting || m_state == State::Stopping || !IsSupportedDisplay(display)) return;
+    if (m_state == State::Connecting || m_state == State::Stopping || !IsValidDisplay(display)) return;
     {
         std::lock_guard lock(m_displayMutex);
         m_display = display;
@@ -174,9 +164,7 @@ void MainWindow::SetDisplay(const DisplayConfig& display)
     m_video->SetDisplay(display);
     for (MenuPage* page : MenuPages()) page->SetDisplay(display);
     m_volumeBar->SetDisplay(display);
-    for (int index = 0; index < static_cast<int>(std::size(kDisplays)); ++index) {
-        if (kDisplays[index] == display) m_displayChoice->setCurrentIndex(index);
-    }
+    m_displayInput->setText(QString::fromStdString(DisplayText(display)));
 }
 
 // The car's window: the picture and the radio's pages over the whole screen, shown for the size of that screen, without
@@ -200,7 +188,7 @@ void MainWindow::EnterKioskMode()
     const QScreen* screen = QGuiApplication::primaryScreen();
     if (!screen) return;
     const QSize pixels = screen->geometry().size() * screen->devicePixelRatio();
-    SetDisplay(BestDisplayFor(pixels.width(), pixels.height()));
+    SetDisplay(DisplayForScreen(pixels.width(), pixels.height()));
     m_logger.Write(LogLevel::Info, "UI", "Car mode: full screen " + std::to_string(pixels.width()) + "x" + std::to_string(pixels.height()) +
         ", display " + DisplayText(m_display));
 }
@@ -304,8 +292,8 @@ QWidget* MainWindow::BuildScreens(QWidget* parent)
     return m_screens;
 }
 
-// The display size next to the button that quits (the size is fixed once the connection starts), the current step, the
-// status line and the history of steps.
+// The display size (typed in as pixels) next to the button that quits (the size is fixed once the connection starts), the
+// current step, the status line and the history of steps.
 void MainWindow::BuildControls(QWidget* parent, QVBoxLayout* layout)
 {
     m_controls = new QWidget(parent);
@@ -314,14 +302,13 @@ void MainWindow::BuildControls(QWidget* parent, QVBoxLayout* layout)
     layout->addWidget(m_controls);
     auto* controls = new QHBoxLayout();
     auto* displayLabel = new QLabel("Displaygroesse:", parent);
-    m_displayChoice = new QComboBox(parent);
-    m_displayChoice->setMinimumHeight(48);
-    m_displayChoice->setMinimumWidth(190);
-    m_displayChoice->setFocusPolicy(Qt::NoFocus);
-    m_displayChoice->setToolTip("Groesse des Android-Auto-Bildes (Aufloesung). Das Handy erfaehrt sie beim Verbinden, "
-        "darum laesst sie sich nur einstellen, solange keine Verbindung besteht.");
-    for (const auto& display : kDisplays) m_displayChoice->addItem(DisplayChoiceText(display));
-    displayLabel->setBuddy(m_displayChoice);
+    m_displayInput = new QLineEdit(parent);
+    m_displayInput->setMinimumHeight(48);
+    m_displayInput->setMinimumWidth(190);
+    m_displayInput->setPlaceholderText("Breite x Hoehe, z. B. 1024x600");
+    m_displayInput->setToolTip("Groesse des Android-Auto-Bildes in Pixeln (Aufloesung des Displays), mit Enter uebernehmen. "
+        "Das Handy erfaehrt sie beim Verbinden, darum laesst sie sich nur einstellen, solange keine Verbindung besteht.");
+    displayLabel->setBuddy(m_displayInput);
     m_button = new QPushButton(parent);
     m_button->setMinimumHeight(48);
     m_button->setFocusPolicy(Qt::NoFocus);
@@ -331,7 +318,7 @@ void MainWindow::BuildControls(QWidget* parent, QVBoxLayout* layout)
     m_button->setToolTip("Trennt das Handy und beendet HeadUnit.");
 #endif
     controls->addWidget(displayLabel);
-    controls->addWidget(m_displayChoice);
+    controls->addWidget(m_displayInput);
     controls->addWidget(m_button, 1);
     box->addLayout(controls);
 #ifdef HEADUNIT_WIRELESS
@@ -368,18 +355,11 @@ void MainWindow::BuildPanel(QWidget* parent, QHBoxLayout* layout)
     layout->addWidget(m_panel);
 }
 
-// The display choice (only the user's choice is remembered: `activated` does not fire for SetDisplay), the button, the
-// tick and the ends of the workers.
+// The display input (only a size typed by the user is remembered: `editingFinished` does not fire for SetDisplay), the
+// button, the tick and the ends of the workers.
 void MainWindow::ConnectSignals()
 {
-    connect(m_displayChoice, &QComboBox::activated, this, [this](int index) {
-        if (m_state == State::Connecting || m_state == State::Stopping || index < 0 || index >= static_cast<int>(std::size(kDisplays))) return;
-        SetDisplay(kDisplays[index]);
-        QSettings().setValue(kDisplaySetting, QString::fromStdString(DisplayText(m_display)));
-        const std::string message = "Displaygroesse " + DisplayText(m_display) + ": gilt ab der naechsten Verbindung";
-        m_logger.Write(LogLevel::Info, "UI", message);
-        ShowStep(QString::fromStdString(message));
-    });
+    connect(m_displayInput, &QLineEdit::editingFinished, this, &MainWindow::ApplyTypedDisplay);
     connect(m_button, &QPushButton::clicked, this, &MainWindow::Quit);
     auto* tickTimer = new QTimer(this);
     connect(tickTimer, &QTimer::timeout, this, &MainWindow::Tick);
@@ -390,6 +370,26 @@ void MainWindow::ConnectSignals()
         SaveTestShot("window-idle.png", true);
         QTimer::singleShot(250, this, [errors = result.errors.size()] { QApplication::exit(errors == 0 ? 0 : 2); });
     });
+}
+
+// Takes the size typed into the display input for the next connection and remembers it. Text that is not a size in range
+// is put back to the size in use.
+void MainWindow::ApplyTypedDisplay()
+{
+    if (m_state == State::Connecting || m_state == State::Stopping) return;
+    const auto typed = ParseDisplay(m_displayInput->text().toStdString());
+    if (!typed) {
+        m_displayInput->setText(QString::fromStdString(DisplayText(m_display)));
+        ShowStep(QString("Displaygroesse: Breite x Hoehe in Pixeln, von %1 bis %2").arg(QString::fromStdString(DisplayText(kMinDisplay)),
+            QString::fromStdString(DisplayText(kMaxDisplay))));
+        return;
+    }
+    if (*typed == m_display) return;
+    SetDisplay(*typed);
+    QSettings().setValue(kDisplaySetting, QString::fromStdString(DisplayText(m_display)));
+    const std::string message = "Displaygroesse " + DisplayText(m_display) + ": gilt ab der naechsten Verbindung";
+    m_logger.Write(LogLevel::Info, "UI", message);
+    ShowStep(QString::fromStdString(message));
 }
 
 // The smoke test is the real window plus one real USB scan, then exit (for the window picture, HEADUNIT_TEST_PAIRING
@@ -434,7 +434,7 @@ void MainWindow::SetState(State state)
     m_state = state;
     m_button->setEnabled(state != State::Stopping);
     m_button->setText(state == State::Stopping ? "Beende ..." : "Beenden");
-    m_displayChoice->setEnabled(state == State::Idle || state == State::Watching);
+    m_displayInput->setEnabled(state == State::Idle || state == State::Watching);
 }
 
 // The button (and the one in the settings) quits like switching the car off: the phone gets its goodbye, Bluetooth and the Wi-Fi are switched off

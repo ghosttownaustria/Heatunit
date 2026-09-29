@@ -39,9 +39,7 @@ const ModeOption* FindModeOption(std::string_view name, bool hasWireless)
 // The message for a --display without a valid size.
 std::string DisplayError()
 {
-    std::string text = "--display needs one of these sizes:";
-    for (const auto& known : kDisplays) text += " " + std::to_string(known.width) + "x" + std::to_string(known.height);
-    return text;
+    return "--display needs a size in pixels as WIDTHxHEIGHT (from " + DisplayText(kMinDisplay) + " to " + DisplayText(kMaxDisplay) + "), e.g. 1024x600";
 }
 }
 
@@ -104,7 +102,7 @@ std::string CommandLineHelp(bool hasWireless)
 {
     std::string text =
         "HeadUnit [--scan | --smoke-test | --probe-usb | --start-accessory | --test-projection | --test-input | --test-audio | --test-console | "
-        "--test-keys | --test-tone | --repair-driver | --recover-phone] [--display 800x480|1280x720|1600x600|1920x1080]\n";
+        "--test-keys | --test-tone | --repair-driver | --recover-phone] [--display WIDTHxHEIGHT]\n";
     if (hasWireless) {
         text +=
             "HeadUnit [--test-bluetooth | --test-hotspot]\n"
@@ -118,7 +116,8 @@ std::string CommandLineHelp(bool hasWireless)
         "Logs: ./headunit.log (includes USB serial numbers); in the user's state directory when the working directory is not writable.\n"
         "      HEADUNIT_LOG_LEVEL=trace|debug|info|warning|error overrides the detail the build profile chose\n"
         "--api-port picks the TCP port of the remote API on 127.0.0.1 (default 47050, HEADUNIT_API_PORT also sets it, 0 switches it off; docs/api.md)\n"
-        "--display picks the display size for this run (the window's own choice is remembered, this one is not)\n"
+        "--display picks the display size in pixels for this run, e.g. 1024x600 (the window's own input is remembered, this one is not;\n"
+        "          the car window takes the size of the screen it runs on)\n"
         "--test-tone plays a short quiet tone through the audio output, which needs no phone\n"
         "--repair-driver Windows: rebinds the phone to WinUSB (needs administrator rights; the app starts it itself when needed)\n"
         "                Linux: checks that the phone can be opened and says what to install when it cannot (docs/linux.md)\n";

@@ -35,7 +35,7 @@ main (composition/lifetime)
         +-- ConnectAndroidAuto -> AOA switch and claimed libusb interface
               +-- ProjectionTransport : AASDK ITransport
               +-- AndroidAutoSession -> AASDK framing/TLS/channels
-              +-- VideoDecoder (FFmpeg H.264 -> RGB)
+              +-- VideoDecodeWorker (own thread, ordered queue) -> VideoDecoder (FFmpeg H.264 -> RGB)
               +-- latest-frame mailbox -> Qt timer -> VideoWidget
         +-- QStackedWidget: VideoWidget (phone) or a MenuPage of the radio, chosen by ConsoleController
         |     +-- HomeMenu, MultimediaPage (MusicLibrary), RadioPage (RadioBrowser -> radio-browser.info)
@@ -83,8 +83,8 @@ first calls `WirelessStation::SwitchRadiosOff` (station down, `BluetoothService:
 key.
 The same quit is the **Quit** button of the Settings tile. In the release profiles (`HEADUNIT_KIOSK`,
 `platform/BuildProfile.h`) the window is the car's: `EnterKioskMode` hides the simulated console and the controls
-under the picture, removes the frame and the cursor, picks the display with `BestDisplayFor` from the screen's pixel
-size and refuses the window manager's close requests (`spontaneous` close events); `main` shows it full screen. The
+under the picture, removes the frame and the cursor, takes the screen's exact pixel size as the display (`DisplayForScreen`),
+and refuses the window manager's close requests (`spontaneous` close events); `main` shows it full screen. The
 Quit button (and SIGINT/SIGTERM) is then the way out.
 
 FFmpeg accepts only the advertised H.264 video path. Decoded RGB frames replace
@@ -193,12 +193,12 @@ callbacks: the same `PressConsole`, `SendKey`, `Rotate` and `AudioState` calls t
 and the panel cannot drift apart, and it runs in the kiosk build where the panel is hidden. `GpioBridge.py` at the
 repository root is a client of it for the real buttons.
 
-Display size: `DisplayConfig` (portable) is the one place that knows the offered sizes (800x480, 1280x720,
-1600x600, 1920x1080), the fixed Android Auto resolutions that carry them, the density and how to parse/print
+Display size: `DisplayConfig` (portable) is the one place that knows what a display is: any size in pixels from 320x200 to 7680x4320
+(no fixed list), the fixed Android Auto resolutions that carry it, the density and how to parse/print
 them. `VideoLayoutOf` maps a display to a `VideoLayout`: the frame the phone encodes (smallest fixed
 resolution that holds the display), the margins that fit the display's shape into it, and the shown area.
-`MainWindow` holds the chosen size (combo box, only enabled while idle, remembered with `QSettings`,
-`--display` override for a run; the car window has no combo box and takes `BestDisplayFor` the screen) and hands it to the session in `ProjectionCallbacks::display`;
+`MainWindow` holds the chosen size (text field "WxH", only enabled while idle, remembered with `QSettings`,
+`--display` override for a run; the car window has no field and takes the screen's size) and hands it to the session in `ProjectionCallbacks::display`;
 `DisplayService.h` turns it into the video service's `VideoConfiguration` (resolution, margins, density), and
 the session announces the shown area as the touchscreen. Video and touch therefore share one coordinate
 space: the pixels of the shown area, which `VideoWidget::SetFrame` cuts out of each decoded frame (the phone

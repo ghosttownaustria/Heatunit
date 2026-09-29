@@ -1,5 +1,6 @@
 #include "ProtocolTestSuites.h"
 #include "FakeTransports.h"
+#include "TestDisplays.h"
 #include "TestSupport.h"
 #include "androidauto/AndroidAutoSession.h"
 #include "androidauto/DisplayService.h"
@@ -55,8 +56,9 @@ void TestDisplayService() {
     const auto ultrawide = BuildVideoConfiguration({1600, 600});
     Check(ultrawide.codec_resolution() == sink::VIDEO_1920x1080 && ultrawide.width_margin() == 0 && ultrawide.height_margin() == 360 &&
         ultrawide.density() == 240 && ultrawide.frame_rate() == sink::VIDEO_FPS_30, "The 1600x600 video configuration is wrong");
-    for (const auto& display : kDisplays) Check(VideoResolutionOf(display).has_value(), "An offered display has no video resolution");
-    Check(!VideoResolutionOf({3840, 2160}) && !VideoResolutionOf({1920, 1200}) && !VideoResolutionOf({0, 0}), "A display that no frame holds got a video resolution");
+    for (const auto& display : kTestDisplays) Check(VideoResolutionOf(display).has_value(), "An offered display has no video resolution");
+    Check(VideoResolutionOf({3840, 2160}) == std::optional<sink::VideoCodecResolutionType>(sink::VIDEO_1920x1080) && VideoResolutionOf({1024, 600}) == std::optional<sink::VideoCodecResolutionType>(sink::VIDEO_1280x720) && !VideoResolutionOf({0, 0}),
+        "A display larger than the largest frame, one between two frames or one of no size got the wrong video resolution");
     Check(VideoResolutionOf({1600, 600}) == std::optional<sink::VideoCodecResolutionType>(sink::VIDEO_1920x1080), "The video resolution of 1600x600 is wrong");
     Check(VideoResolutionOf({1280, 720}) == std::optional<sink::VideoCodecResolutionType>(sink::VIDEO_1280x720), "The video resolution lookup is wrong");
     sink::VideoConfiguration parsed;

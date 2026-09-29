@@ -118,7 +118,7 @@ stopping must join transport workers and drain AASDK completions before destroyi
 architecture.md "Session lifecycle" before touching shutdown code).
 
 Video: FFmpeg H.264 → RGB into a latest-frame mailbox, consumed by a 33 ms Qt timer. `DisplayConfig`/`VideoLayoutOf`
-map a chosen display (800x480, 1280x720, 1600x600, 1920x1080) to a fixed AA resolution plus margins; video crop and
+map the display (any pixel size; the car window takes the screen's exact size, larger than 1920x1080 is scaled down) to a fixed AA resolution plus margins; video crop and
 touch mapping share the shown-area coordinate space. Phone screen state is inferred from pixels (`DetectPhoneScreen`),
 since the protocol does not report it.
 

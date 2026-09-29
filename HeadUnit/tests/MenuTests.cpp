@@ -1,4 +1,5 @@
 #include "CoreTestSuites.h"
+#include "TestDisplays.h"
 #include "TestSupport.h"
 #include "androidauto/ConsoleController.h"
 #include "androidauto/ProjectionKeys.h"
@@ -81,7 +82,7 @@ void TestHomeMenuLayout() {
         HomeMenuScroll(6, 1000, 7) == 1100, "The focused tile is not kept in the middle on 800x480");
     Check(HomeMenuScroll(5, 2400, 6) == 0, "A row that fits scrolled");
     // On every display and with any number of tiles, every focused tile is fully in view and clear of the edge strips.
-    for (const auto& display : kDisplays) {
+    for (const auto& display : kTestDisplays) {
         const double width = HomeMenuWidth(display);
         for (int count = 1; count <= kHomeMenuCount; ++count) {
             for (int focus = 0; focus < count; ++focus) {

@@ -75,6 +75,7 @@
     <ClCompile Include="..\src\platform\WindowsSupport.cpp" />
     <ClCompile Include="..\src\audio\WasapiPcmStream.cpp" />
     <ClCompile Include="..\src\video\VideoDecoder.cpp" />
+    <ClCompile Include="..\src\video\VideoDecodeWorker.cpp" />
     <ClCompile Include="..\src\video\FfmpegHandles.cpp" />
     <ProjectReference Include="..\Aasdk.vcxproj"><Project>{D37D4DBC-67C4-4572-BDCB-123D4AF98A76}</Project></ProjectReference>
   </ItemGroup>

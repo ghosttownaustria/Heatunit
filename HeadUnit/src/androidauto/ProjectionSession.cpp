@@ -66,7 +66,7 @@ ProjectionSession::~ProjectionSession()
 void ProjectionSession::Start()
 {
     m_cryptor->init();
-    m_decoder = std::make_unique<VideoDecoder>([this](VideoFrame frame) { ShowFrame(std::move(frame)); });
+    StartVideoDecoding();
     StartChannels();
     AttachInput();
     m_video->receive(shared_from_this());
@@ -116,7 +116,9 @@ void ProjectionSession::BeginShutdown()
 // How the session went, so far.
 ProjectionResult ProjectionSession::Result() const
 {
-    return m_result;
+    ProjectionResult result = m_result;
+    result.hasVideo = m_hasDecodedFrame;
+    return result;
 }
 
 // Sends one input event of the window to the phone, once the phone has opened the input channel.
@@ -239,8 +241,8 @@ void ProjectionSession::onMediaChannelStopIndication(const media::Stop&)
     m_video->receive(shared_from_this());
 }
 
-// A video packet: decoded and acknowledged. An undecodable packet is still acknowledged, so that the phone keeps
-// streaming and can send the next keyframe.
+// A video packet: handed to the decode thread and acknowledged at once, so that the phone keeps streaming while it is
+// decoded. An undecodable packet is acknowledged too, so that the phone can send the next keyframe.
 void ProjectionSession::onMediaWithTimestampIndication(aasdk::messenger::Timestamp::ValueType, const aasdk::common::DataConstBuffer& buffer)
 {
     MarkAlive();
@@ -249,16 +251,7 @@ void ProjectionSession::onMediaWithTimestampIndication(aasdk::messenger::Timesta
         m_hasVideoPackets = true;
         Status("First real H.264 payload received: " + std::to_string(buffer.size) + " bytes");
     }
-    try {
-        m_decoder->Decode({buffer.cdata, buffer.size});
-        m_decodeFailures = 0;
-    } catch (const std::exception& error) {
-        if (++m_decodeFailures == 1 || m_decodeFailures % 50 == 0) Status(std::string("Dropped undecodable video packet: ") + error.what());
-        if (m_decodeFailures >= kMaxDecodeFailures) {
-            End(std::string("Video decoding keeps failing: ") + error.what());
-            return;
-        }
-    }
+    m_decoder->Submit(std::vector<std::uint8_t>(buffer.cdata, buffer.cdata + buffer.size));
     source::Ack ack;
     ack.set_session_id(m_videoSession);
     ack.set_ack(1);
@@ -405,11 +398,26 @@ void ProjectionSession::AttachInput()
     });
 }
 
-// A decoded frame goes to the window; the first one is what makes the session a success.
+// Starts the thread that decodes the phone's video. Its failures are logged; a decoder that keeps failing ends the
+// session (on the protocol strand, like every other end).
+void ProjectionSession::StartVideoDecoding()
+{
+    auto decoder = std::make_shared<VideoDecoder>([this](VideoFrame frame) { ShowFrame(std::move(frame)); });
+    m_decoder = std::make_unique<VideoDecodeWorker>(
+        [decoder](std::span<const std::uint8_t> packet) { decoder->Decode(packet); },
+        [this, weak = weak_from_this()](const std::string& reason, int consecutiveFailures) {
+            if (consecutiveFailures == 1 || consecutiveFailures % 50 == 0) Status("Dropped undecodable video packet: " + reason);
+            if (consecutiveFailures < kMaxDecodeFailures) return;
+            boost::asio::post(m_strand, [weak, reason] {
+                if (auto self = weak.lock()) self->End("Video decoding keeps failing: " + reason);
+            });
+        });
+}
+
+// A decoded frame goes to the window (from the decode thread); the first one is what makes the session a success.
 void ProjectionSession::ShowFrame(VideoFrame frame)
 {
-    if (!m_result.hasVideo) {
-        m_result.hasVideo = true;
+    if (!m_hasDecodedFrame.exchange(true)) {
         Status("First real Android Auto video frame decoded: " + std::to_string(frame.width) + "x" + std::to_string(frame.height));
     }
     if (m_callbacks.onFrame) m_callbacks.onFrame(std::move(frame));
@@ -495,7 +503,7 @@ bool ProjectionSession::RunWatchdogs(Clock::time_point now)
         End("The phone stopped responding (no data for " + std::to_string(std::chrono::duration_cast<std::chrono::seconds>(kSilenceTimeout).count()) + " seconds)");
         return false;
     }
-    if ((!m_hasVersionReply && now - m_started > kVersionTimeout) || (!m_result.hasVideo && now - m_started > kStartupTimeout)) {
+    if ((!m_hasVersionReply && now - m_started > kVersionTimeout) || (!m_hasDecodedFrame && now - m_started > kStartupTimeout)) {
         End(StartupTimeoutMessage());
         return false;
     }

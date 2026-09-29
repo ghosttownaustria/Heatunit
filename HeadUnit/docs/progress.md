@@ -1,5 +1,35 @@
 # Progress
 
+## 2026-09-29: display size in exact pixels
+
+On the Pi (screen 1024x600) the car window picked the "closest" of four fixed displays, 800x480, and Qt scaled the phone's
+picture up by 1.28 (soft, pixelated). The fixed list is gone.
+
+- **`DisplayConfig`** is any size from 320x200 to 7680x4320. The car window takes the screen's exact pixel size
+  (`DisplayForScreen`, default 800x480 only for a screen without a size); the window's display combo box is a text field
+  "WxH"; `--display WIDTHxHEIGHT` takes any size. A display larger than 1920x1080 is announced scaled down to that frame
+  with its own shape (`PhoneSizeOf`); a display between two frames, like 1024x600, rides in the next larger frame with
+  margins (1280x720 frame, 1228x720 shown area, 52 px width margin) and is scaled down to the screen.
+  - Verified here: CoreTests (`DisplayTests`, `CommandLineTests`, video configuration in ProtocolTests) and the smoke
+    window at 1024x600; builds without warnings (MSBuild Debug x64, core-only preset).
+  - Not verified: **the phone with a taller-than-frame display** (width margin; the wide 1600x600 case with a height margin
+    was measured on the phone, this mirror case was not), touch position at the edges, the Pi. If the phone ignores
+    the width margin the picture is stretched horizontally: then this needs a different fit.
+
+## 2026-09-29: video decoding on its own thread
+
+Android Auto felt slow on the Pi. The whole session (USB reads, TLS, protobuf, H.264 decode, colour conversion, the
+acknowledgement of every video packet) ran on the one protocol thread, so the phone was paced by the decoder.
+
+- **`VideoDecodeWorker`** (portable, in `headunit_core`): `ProjectionSession` hands each video packet to a decode thread
+  (ordered queue of 4, nothing is dropped; `Submit` waits when it is full) and acknowledges at once. Failures are counted
+  on the worker; 200 in a row still end the session, posted to the strand. `hasVideo` is now an atomic set on the decode thread.
+  - Verified here: CoreTests (`VideoDecodeWorkerTests`: order, own thread, back-pressure, failure runs, destruction with a
+    full queue) and ProtocolTests pass; MSBuild Debug x64 and the core-only preset build without warnings.
+  - Not verified: any effect on the Pi. Measure with `top -H -d 2 -n 2 -p $(pgrep -n HeadUnit)` (the first sample of
+    `top -n 1` is an average since start and says nothing) while Android Auto runs. Ideas not done yet: hardware decode
+    (`h264_v4l2m2m`), fewer per-frame copies, USB read-ahead.
+
 ## 2026-09-29: remote API and GPIO bridge
 
 The functions of the simulated console can be driven by other programs (design: `docs/superpowers/specs/2026-09-29-remote-api-design.md`, use: `docs/api.md`).

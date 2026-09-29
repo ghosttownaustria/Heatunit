@@ -106,6 +106,7 @@
     <ClCompile Include="src\usb\WindowsUsbBackend.cpp" />
     <ClCompile Include="src\video\FfmpegHandles.cpp" />
     <ClCompile Include="src\video\VideoDecoder.cpp" />
+    <ClCompile Include="src\video\VideoDecodeWorker.cpp" />
     <ClInclude Include="src\CommandLine.h" />
     <ClInclude Include="src\androidauto\AndroidAutoSession.h" />
     <ClInclude Include="src\androidauto\AndroidDeviceDetector.h" />
@@ -195,6 +196,7 @@
     <ClInclude Include="src\usb\WindowsUsbBackend.h" />
     <ClInclude Include="src\video\FfmpegHandles.h" />
     <ClInclude Include="src\video\VideoDecoder.h" />
+    <ClInclude Include="src\video\VideoDecodeWorker.h" />
     <!-- Linux-only sources (wireless Android Auto, driver check, miniaudio output) and documents; the Windows build does not compile them. -->
     <None Include="src\audio\MiniaudioImpl.cpp" />
     <None Include="src\audio\MiniaudioPcmStream.cpp" />
