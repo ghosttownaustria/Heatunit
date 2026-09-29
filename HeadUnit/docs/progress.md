@@ -1,5 +1,13 @@
 # Progress
 
+## 2026-09-29: Volume bar in the new design
+
+- The volume bar follows the new design (Heatunit.svg): a shaded panel with a soft black shadow, the speaker symbol and
+  one continuous line lit red up to the volume. No number and no visible steps, on purpose. Touch and drag set the
+  nearest step along the line.
+  - Verified here: builds (MSBuild Debug), CoreTests (`TestVolumeBar`), smoke picture at 1600x600 with
+    `HEADUNIT_TEST_VOLUME=1`. Not verified: on the Pi's real display.
+
 ## 2026-09-29: Auto Connect and Connect buttons on the Bluetooth tile
 
 - The Bluetooth page has a **Connect** button (was: push / click on a row) and an **Auto Connect: On/Off** button, both
