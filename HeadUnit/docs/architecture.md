@@ -263,6 +263,13 @@ home menu (Back first goes to the page, which may close something it opened, the
   and leaves the phone in `m_phoneSwitch`; the watch's worker takes it before its next wait for a wireless phone
   (`TakePhoneSwitch`, on the thread that owns the station) and calls `WirelessStation::SwitchToPhone`, which
   disconnects and reconnects that phone on the service thread. The Windows build shows that there is no Bluetooth.
+  The page has two buttons below the list that act on the selected phone (the row that had the focus last): Connect
+  (the switch above) and Auto Connect (on/off, per phone). A phone with Auto Connect off (`BluetoothPhone::isAutoConnect`)
+  is remembered by its BlueZ path in `QSettings` (`bluetooth/manualPhones`, `MainWindow::SetPhoneAutoConnect`) and
+  handed to the station every watch round (`WirelessStation::SetManualPhones` -> `BluetoothContext::SetManualPhones`):
+  `BluetoothService::ConnectPairedOnServiceThread` does not ask it to connect, and `BluetoothContext::AddPhone` turns
+  its Android Auto connection away unless Connect asked for it in the last two minutes (`AllowManualConnection`).
+  USB is not affected.
   `HEADUNIT_TEST_PAGE=<tile>` opens a tile's page in `--smoke-test`, Bluetooth with made-up phones.
 - `PlayerPage` (`ui/PlayerPage`, base of `MultimediaPage` and `RadioPage`): the page's tile at the left (orange while
   its source sounds), what plays now, the controls previous/play/next, a list of five rows and buttons at the top right.

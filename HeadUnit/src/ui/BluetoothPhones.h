@@ -12,6 +12,7 @@ struct BluetoothPhone {
     std::string name;        // the name the phone gave itself ("Jakob's Flip 8")
     bool isConnected{};
     bool isAndroidAuto{};    // the phone of the running wireless Android Auto session
+    bool isAutoConnect{true};   // the head unit connects it by itself; false: only the Connect button starts Android Auto on it
 };
 
 std::vector<BluetoothPhone> SortedPhones(std::vector<BluetoothPhone> phones);

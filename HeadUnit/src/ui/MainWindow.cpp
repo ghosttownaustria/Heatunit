@@ -46,6 +46,7 @@ namespace {
 // Remembered between runs, per user (QSettings: registry on Windows, ~/.config on Linux).
 constexpr const char* kDisplaySetting = "display";
 constexpr const char* kTilesSetting = "home/tiles";
+constexpr const char* kManualPhonesSetting = "bluetooth/manualPhones";
 constexpr int kTickIntervalMs = 33;
 // Scripted runs must not blast the phone's music: they start quiet.
 constexpr int kTestVolume = 5;
@@ -272,6 +273,8 @@ QWidget* MainWindow::BuildScreens(QWidget* parent)
     m_bluetoothPage->SetAvailable(true);
 #endif
     m_bluetoothPage->SetSwitchHandler([this](const BluetoothPhone& phone) { SwitchToPhone(phone); });
+    m_bluetoothPage->SetAutoConnectHandler([this](const BluetoothPhone& phone, bool isAutoConnect) { SetPhoneAutoConnect(phone, isAutoConnect); });
+    for (const QString& id : QSettings().value(kManualPhonesSetting).toStringList()) m_manualPhones.insert(id.toStdString());
     m_pairing = new PairingPage(m_screens);
     m_pairing->SetChangeHandler([this] { ShowScreen(); });
     m_music = new MultimediaPage(m_player, MusicFolder(), m_screens);
@@ -529,12 +532,19 @@ AutoConnectResult MainWindow::WatchPhones()
         }, Qt::QueuedConnection);
     };
     events.onPairingEnd = [this] { QMetaObject::invokeMethod(this, [this] { m_pairing->End(); }, Qt::QueuedConnection); };
-    events.onPhonesChanged = [this](const std::vector<BluetoothPhone>& phones) {
-        QMetaObject::invokeMethod(this, [this, phones] { m_bluetoothPage->SetPhones(phones); }, Qt::QueuedConnection);
+    events.onPhonesChanged = [this](const std::vector<BluetoothPhone>& reported) {
+        QMetaObject::invokeMethod(this, [this, reported] {
+            std::vector<BluetoothPhone> phones = reported;
+            const std::set<std::string> manual = ManualPhones();
+            for (BluetoothPhone& phone : phones) phone.isAutoConnect = !manual.contains(phone.id);
+            m_bluetoothPage->SetPhones(std::move(phones));
+        }, Qt::QueuedConnection);
     };
     WirelessStation wireless(m_logger, events);
+    wireless.SetManualPhones(ManualPhones());
     wireless.Start();
     deps.waitForWirelessPhone = [this, &wireless](std::chrono::milliseconds timeout) {
+        wireless.SetManualPhones(ManualPhones());
         if (const std::string phone = TakePhoneSwitch(); !phone.empty()) wireless.SwitchToPhone(phone);
         return wireless.WaitForPhone(timeout);
     };
@@ -880,6 +890,28 @@ void MainWindow::SwitchToPhone(const BluetoothPhone& phone)
     const std::string message = "Bluetooth: Android Auto wechselt zu " + phone.name + " ...";
     m_logger.Write(LogLevel::Info, "BT", message);
     ShowStep(QString::fromStdString(message));
+}
+
+// A phone's Auto Connect was switched on the Bluetooth page: remembered, and the watch's worker hands it to the station
+// with its next round. A phone with it off is not connected by the head unit; only Connect starts Android Auto on it.
+void MainWindow::SetPhoneAutoConnect(const BluetoothPhone& phone, bool isAutoConnect)
+{
+    QStringList manual;
+    {
+        std::lock_guard lock(m_manualPhonesMutex);
+        if (isAutoConnect) m_manualPhones.erase(phone.id);
+        else m_manualPhones.insert(phone.id);
+        for (const std::string& id : m_manualPhones) manual.append(QString::fromStdString(id));
+    }
+    QSettings().setValue(kManualPhonesSetting, manual);
+    m_logger.Write(LogLevel::Info, "BT", "Auto Connect for " + phone.name + (isAutoConnect ? ": on" : ": off (connects only with the Connect button)"));
+}
+
+// The phones with Auto Connect off (any thread).
+std::set<std::string> MainWindow::ManualPhones()
+{
+    std::lock_guard lock(m_manualPhonesMutex);
+    return m_manualPhones;
 }
 
 // The phone chosen on the Bluetooth page, once (watch's worker); empty when none was chosen since.

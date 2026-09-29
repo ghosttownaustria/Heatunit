@@ -1,5 +1,15 @@
 # Progress
 
+## 2026-09-29: Auto Connect and Connect buttons on the Bluetooth tile
+
+- The Bluetooth page has a **Connect** button (was: push / click on a row) and an **Auto Connect: On/Off** button, both
+  acting on the selected phone. With Auto Connect off the head unit neither asks that phone to connect (start, "Android
+  Auto verbinden") nor accepts its own Android Auto connection; only Connect starts Android Auto on it. The setting is per
+  phone and survives restarts. A row's note reads e.g. "Connected, manual". Knob: turn through the phones and on to the
+  buttons, push a phone to jump to the buttons, push a button to press it.
+  - Verified here: CoreTests (`TestBluetoothPhones`). Not verified: the page in the window and the Linux sources
+    (`src/wireless/*`, needs CI or the Pi); a real phone with Auto Connect off not starting Android Auto by itself.
+
 ## 2026-09-29: display size in exact pixels
 
 On the Pi (screen 1024x600) the car window picked the "closest" of four fixed displays, 800x480, and Qt scaled the phone's

@@ -124,6 +124,8 @@ private:
     std::mutex m_displayMutex;                        // m_display, as the worker reads it for each connection
     std::mutex m_phoneSwitchMutex;                    // m_phoneSwitch, handed to the watch's worker
     std::string m_phoneSwitch;                        // the phone chosen on the Bluetooth page, until the worker takes it
+    std::mutex m_manualPhonesMutex;                   // m_manualPhones, read by the watch's worker
+    std::set<std::string> m_manualPhones;             // the phones with Auto Connect off (Bluetooth page), remembered between runs
     std::mutex m_frameMutex;
     std::optional<VideoFrame> m_latestFrame;
     unsigned m_displayedFrames{};
@@ -173,6 +175,8 @@ private:
     void SetTiles(const HomeTileSetup& setup);
     void SwitchToPhone(const BluetoothPhone& phone);
     std::string TakePhoneSwitch();
+    void SetPhoneAutoConnect(const BluetoothPhone& phone, bool isAutoConnect);
+    std::set<std::string> ManualPhones();
     void KeepOneSound();
     void TapPhone(int x, int y);
     void ApplyConsoleEffect(const ConsoleEffect& effect);

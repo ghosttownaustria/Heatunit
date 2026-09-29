@@ -27,8 +27,9 @@ std::vector<BluetoothPhone> SortedPhones(std::vector<BluetoothPhone> phones)
 // The note at the right of a phone's row.
 std::string PhoneStateText(const BluetoothPhone& phone)
 {
-    if (phone.isAndroidAuto) return "Android Auto";
-    return phone.isConnected ? "Connected" : "Not connected";
+    std::string state = phone.isAndroidAuto ? "Android Auto" : phone.isConnected ? "Connected" : "Not connected";
+    if (!phone.isAutoConnect) state += ", manual";
+    return state;
 }
 
 // Whether choosing the phone does something: every phone but the one Android Auto runs on already.
