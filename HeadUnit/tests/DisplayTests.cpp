@@ -105,6 +105,18 @@ void TestDisplayConfig() {
     for (const auto& display : kDisplays) Check(ParseDisplay(DisplayText(display)) == std::optional<DisplayConfig>(display), "A display text does not read back");
 }
 
+// The display a release build picks for the screen it finds: the closest shape, then the closest height.
+void TestBestDisplay() {
+    for (const auto& display : kDisplays) Check(BestDisplayFor(display.width, display.height) == display, "A screen of an offered size did not get that display");
+    Check(BestDisplayFor(1024, 600) == DisplayConfig{800, 480}, "A 1024x600 screen did not get the 800x480 display");
+    Check(BestDisplayFor(1366, 768) == DisplayConfig{1280, 720}, "A 1366x768 screen did not get the 1280x720 display");
+    Check(BestDisplayFor(2560, 1440) == DisplayConfig{1920, 1080}, "A 2560x1440 screen did not get the 1920x1080 display");
+    Check(BestDisplayFor(1280, 400) == DisplayConfig{1600, 600}, "A very wide screen did not get the ultrawide display");
+    Check(BestDisplayFor(0, 0) == kDefaultDisplay && BestDisplayFor(-1, 480) == kDefaultDisplay && BestDisplayFor(800, 0) == kDefaultDisplay,
+        "A screen without a size did not get the default display");
+    Check(IsSupportedDisplay(BestDisplayFor(480, 800)), "A portrait screen got a display that is not offered");
+}
+
 // A picture of the phone, dark like Android Auto's bar, with the navigation bar button drawn in one of
 // its two symbols. The shapes follow measurements of a real phone: nine 6x5 dots on a 10 px grid, or a
 // 31x30 frame with a divider and a bar in its right half. Drawn in the 800x480 layout and scaled by the
@@ -221,5 +233,6 @@ void RunDisplayTests()
     TestTouchMapping();
     TestTouchMappingOtherDisplays();
     TestDisplayConfig();
+    TestBestDisplay();
     TestPhoneScreenDetector();
 }

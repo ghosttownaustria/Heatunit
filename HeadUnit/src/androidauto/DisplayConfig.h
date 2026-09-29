@@ -81,5 +81,6 @@ constexpr bool IsSupportedDisplay(const DisplayConfig& display)
 }
 
 std::string DisplayText(const DisplayConfig& display);
+DisplayConfig BestDisplayFor(int screenWidth, int screenHeight);
 std::optional<DisplayConfig> ParseDisplay(std::string_view text);
 }

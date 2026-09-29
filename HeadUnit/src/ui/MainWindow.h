@@ -7,11 +7,14 @@
 #include "audio/AudioState.h"
 #include "audio/MediaActivity.h"
 #include "logging/Logger.h"
+#include "remote/RemoteCommand.h"
 #include "media/AudioPlayer.h"
+#include "ui/BluetoothPhones.h"
 #include "ui/HomeMenuEntry.h"
 #include "ui/HomeTileSetup.h"
 #include "ui/ScriptedPhoneTest.h"
 #include "ui/ScriptedTestHost.h"
+#include "ui/StatusBar.h"
 #include "usb/AutoConnectSystem.h"
 #include "usb/IUsbBackend.h"
 #include <QFutureWatcher>
@@ -21,6 +24,8 @@
 #include <mutex>
 #include <optional>
 #include <set>
+#include <string>
+#include <vector>
 
 class QCloseEvent;
 class QComboBox;
@@ -33,24 +38,28 @@ class QStackedWidget;
 class QVBoxLayout;
 
 namespace headunit {
+class BluetoothPage;
 class CarPanel;
 class HomeMenu;
 class MenuPage;
 class MultimediaPage;
 class PairingPage;
 class RadioPage;
+class RemoteServer;
 class SettingsPage;
 class VideoWidget;
+class VolumeOverlay;
 
 // Always ready, like a car: from the start the window watches USB and (where built) wireless Android Auto and connects
-// whichever phone comes, with no button to press (RunPhoneWatch). The button ends a running session, and otherwise
-// connects the phone on the USB cable once more (finding the phone, repairing the driver, starting Android Auto,
-// restarting the USB link when needed). The scripted test modes connect once over USB instead. Next to the picture sits
+// whichever phone comes, with no button to press (RunPhoneWatch). The Android Auto tile and the projection key connect
+// the phone on the USB cable once more (finding the phone, repairing the driver, starting Android Auto, restarting the
+// USB link when needed). The button quits: it ends the session, switches Bluetooth and the Wi-Fi off (where wireless is
+// built) and closes the program. The scripted test modes connect once over USB instead. Next to the picture sits
 // the simulated centre console: rotary knob, hard keys and the audio display. The picture itself takes mouse input as
 // touch. In its place the radio's own pages are shown whenever the console is on the radio's side (always while no phone
-// is projected): the home menu, the music player, the tuner and the settings; the knob then works the page instead of
-// the phone. The radio's own player plays through the same audio output as the phone, and only one of them sounds at a
-// time: the one started last. The display size (video resolution) is chosen next to the button and only while no session
+// is projected): the home menu, the music player, the tuner, the Bluetooth phones and the settings; the knob then works
+// the page instead of the phone. The radio's own player plays through the same audio output as the phone, and only one
+// of them sounds at a time: the one started last. The display size (video resolution) is chosen next to the button and only while no session
 // runs: the phone is told the size once, when the connection starts.
 class MainWindow final : public QMainWindow, private ScriptedTestHost {
 public:
@@ -61,6 +70,8 @@ public:
     ~MainWindow() override;
 
     void SetDisplay(const DisplayConfig& display);
+    void EnterKioskMode();
+    void StartRemoteApi(int port);
 
 protected:
     void closeEvent(QCloseEvent* event) override;
@@ -87,12 +98,20 @@ private:
     MultimediaPage* m_music{};
     RadioPage* m_radio{};
     SettingsPage* m_settings{};
+    BluetoothPage* m_bluetoothPage{};
     PairingPage* m_pairing{};                         // a phone's Bluetooth pairing question; in front while it asks
+    VolumeOverlay* m_volumeBar{};                     // over the screens for a moment whenever the volume changes
+    int m_shownVolume{};                              // the volume and mute state the bar showed last
+    bool m_wasMuted{};
+    StatusState m_shownStatus;                        // what the pages' status bar shows
+    QString m_phoneName;                              // the connected phone's name, for the status bar
     HomeTileSetup m_tiles;                            // which tiles the home menu shows (remembered)
     std::shared_ptr<MediaActivity> m_phoneMedia{std::make_shared<MediaActivity>()};   // when the phone's music plays
     std::int64_t m_localStartMs{};                    // when the radio's own player last started or resumed
     std::set<unsigned> m_localKeys;                   // keys held down whose press the radio's side took
+    RemoteServer* m_remote{};                         // the remote API (docs/api.md); owned by the window as its child
     CarPanel* m_panel{};
+    QWidget* m_controls{};                            // the development controls under the picture
     QLabel* m_status{};
     QLabel* m_step{};
     QComboBox* m_displayChoice{};
@@ -101,11 +120,15 @@ private:
     std::atomic_bool m_isStopRequested{};             // ends the running connection or session
     std::atomic_bool m_isWatchStopRequested{};        // ends the automatic mode (the window closes)
     std::atomic_bool m_isUsbRequested{};              // the automatic mode connects the phone on the USB cable once more
+    std::atomic_bool m_isRadioOffRequested{};         // the program quits with Bluetooth and the Wi-Fi switched off
     std::mutex m_displayMutex;                        // m_display, as the worker reads it for each connection
+    std::mutex m_phoneSwitchMutex;                    // m_phoneSwitch, handed to the watch's worker
+    std::string m_phoneSwitch;                        // the phone chosen on the Bluetooth page, until the worker takes it
     std::mutex m_frameMutex;
     std::optional<VideoFrame> m_latestFrame;
     unsigned m_displayedFrames{};
     bool m_isCloseRequested{};
+    bool m_isKiosk{};                                 // the window is the car's: full screen, only the program's own way out
     State m_state{State::Idle};
     QFutureWatcher<AutoConnectResult> m_watcher;
     QFutureWatcher<UsbScanResult> m_scanWatcher;
@@ -119,7 +142,7 @@ private:
     void ConnectSignals();
     void StartMode();
     void SetState(State state);
-    void OnButton();
+    void Quit();
     void StartConnect();
     void BeginConnect();
     void BeginWatch();
@@ -127,13 +150,16 @@ private:
     ProjectionCallbacks MakeCallbacks();
     void OnAttemptStart();
     void OnAttemptEnd(const AutoConnectResult& result);
-    void RequestStop();
     void FinishConnect(const AutoConnectResult& result);
     void ClearPicture(const QString& message);
     void ShowStep(const QString& text);
     void Tick();
     void ShowLatestFrame();
     void UpdateAudioDisplay();
+    void UpdateVolumeBar();
+    void UpdateStatusBar();
+    void PressStatus(StatusButton button);
+    std::vector<MenuPage*> MenuPages() const;
     bool HandleKey(QKeyEvent* event, bool isDown);
     bool HandleExtraKey(int key);
     MenuPage* FrontPage() const;
@@ -144,6 +170,8 @@ private:
     void OpenMenuEntry(HomeMenuEntry entry);
     void PausePhoneMedia();
     void SetTiles(const HomeTileSetup& setup);
+    void SwitchToPhone(const BluetoothPhone& phone);
+    std::string TakePhoneSwitch();
     void KeepOneSound();
     void TapPhone(int x, int y);
     void ApplyConsoleEffect(const ConsoleEffect& effect);

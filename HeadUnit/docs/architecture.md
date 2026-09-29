@@ -75,9 +75,17 @@ skip queued completions. Watchdogs: 30 s without any inbound data after service
 discovery, and a 90 s startup limit whose message names the stage that stalled.
 Undecodable video packets are dropped and still acknowledged.
 
-UI lifecycle: `MainWindow` has a single state (Idle, Connecting,
-Stopping) behind one button that connects (all steps run in `RunAutoConnect`) or ends the session. Closing the window during a
-session requests a stop and closes once the worker has finished.
+UI lifecycle: `MainWindow` has a single state (Idle, Watching, Connecting, Stopping) shown on one button, **Beenden**,
+which quits like switching a car off: it sets `m_isRadioOffRequested` and closes the window. Closing the window during
+a session requests a stop and closes once the worker has finished; with `m_isRadioOffRequested` the watch's worker
+first calls `WirelessStation::SwitchRadiosOff` (station down, `BluetoothService::SwitchOff` powers the adapter off,
+`SwitchWifiOff` runs `nmcli radio wifi off`). Connecting again goes through the Android Auto tile or the projection
+key.
+The same quit is the **Quit** button of the Settings tile. In the release profiles (`HEADUNIT_KIOSK`,
+`platform/BuildProfile.h`) the window is the car's: `EnterKioskMode` hides the simulated console and the controls
+under the picture, removes the frame and the cursor, picks the display with `BestDisplayFor` from the screen's pixel
+size and refuses the window manager's close requests (`spontaneous` close events); `main` shows it full screen. The
+Quit button (and SIGINT/SIGTERM) is then the way out.
 
 FFmpeg accepts only the advertised H.264 video path. Decoded RGB frames replace
 the previous mailbox frame under a mutex; a 33 ms Qt timer consumes the newest
@@ -127,7 +135,7 @@ The automatic mode: outside the scripted test modes the window starts one worker
 (core, Qt-free, tested with scripted deps) until the window closes. Each round it takes a quiet libusb scan
 (`UsbPhoneIdentities`: serial numbers, so a phone switching into and out of accessory mode stays the same phone) and
 connects a newly plugged-in phone with `ConnectPhoneAutomatically`; in between it waits a second for a wireless phone.
-Two stop flags: `m_isStopRequested` ends the running attempt ("Verbindung beenden"; the watch clears it before each
+Two stop flags: `m_isStopRequested` ends the running attempt (the watch clears it before each
 attempt), `m_isWatchStopRequested` ends the watch (closing, which sets both). Attempt start and end are posted to the
 window, which switches between the phone's picture and the radio's pages.
 
@@ -144,10 +152,10 @@ function (callable from any thread; it holds only a `weak_ptr` to the pending re
 asks in front of everything else (`MainWindow::FrontPage`); BlueZ's `Cancel`, a finished pairing or the service's
 stop take the question away (`onPairingEnd`). Without that event (`--test-bluetooth`) the agent confirms by itself.
 The NetworkManager hotspot (`Hotspot`, `nmcli` without a shell; WPA2-PSK/CCMP with protected management frames off,
-which the Pi's brcmfmac chip cannot do as an access point; its name is broadcast, as Android Auto does not find a
-hidden network) starts at the same time in the background (`std::async`). Once it is up, the phones paired before are
+which the Pi's brcmfmac chip cannot do as an access point; hidden, unless a phone that got its details did not join:
+then `WirelessStation::ShowWifi` broadcasts the name from then on, remembered as `wireless/wifiVisible`, and restarts it) starts at the same time in the background (`std::async`). Once it is up, the phones paired before are
 (re)connected (`ConnectPairedPhones`: a phone that was connected before the service existed is disconnected first; with
-"Android Auto verbinden" and no phone on the cable, `PhoneWatchDeps::requestWireless` reconnects every connected
+the Android Auto tile and no phone on the cable, `PhoneWatchDeps::requestWireless` reconnects every connected
 phone). When a phone opens the service, `WirelessStation::Serve`
 waits for a hotspot that is still starting, then `EstablishWirelessLink` hands the phone the Wi-Fi details over the
 RFCOMM socket (`WirelessHandshake`: pure message logic; both Qt-free and tested against a simulated phone) and accepts
@@ -178,12 +186,19 @@ device on its own thread so a sound server that hangs cannot stall the protocol 
 Qt widgets without moc; the portable parts (touch mapping, input bus, PCM helpers) live in `headunit_core`
 and are unit-tested in CoreTests.
 
+Remote API (`docs/api.md`): `RemoteCommand` (portable, `src/remote/`) reads one flat JSON line and runs it through
+injected callbacks (`RemoteCommandDeps`); it has its own small reader, so the core stays free of Qt. `RemoteServer` (Qt,
+no moc) listens on 127.0.0.1 and feeds it line by line in the GUI thread. `MainWindow::StartRemoteApi` supplies the
+callbacks: the same `PressConsole`, `SendKey`, `Rotate` and `AudioState` calls the simulated `CarPanel` makes, so the API
+and the panel cannot drift apart, and it runs in the kiosk build where the panel is hidden. `GpioBridge.py` at the
+repository root is a client of it for the real buttons.
+
 Display size: `DisplayConfig` (portable) is the one place that knows the offered sizes (800x480, 1280x720,
 1600x600, 1920x1080), the fixed Android Auto resolutions that carry them, the density and how to parse/print
 them. `VideoLayoutOf` maps a display to a `VideoLayout`: the frame the phone encodes (smallest fixed
 resolution that holds the display), the margins that fit the display's shape into it, and the shown area.
 `MainWindow` holds the chosen size (combo box, only enabled while idle, remembered with `QSettings`,
-`--display` override for a run) and hands it to the session in `ProjectionCallbacks::display`;
+`--display` override for a run; the car window has no combo box and takes `BestDisplayFor` the screen) and hands it to the session in `ProjectionCallbacks::display`;
 `DisplayService.h` turns it into the video service's `VideoConfiguration` (resolution, margins, density), and
 the session announces the shown area as the touchscreen. Video and touch therefore share one coordinate
 space: the pixels of the shown area, which `VideoWidget::SetFrame` cuts out of each decoded frame (the phone
@@ -222,7 +237,7 @@ give the home menu, Radio the tuner, Media without a phone the music player; Hom
 home menu (Back first goes to the page, which may close something it opened, the tuner's country list).
 
 - `HomeMenu`: the row of tiles the user chose (Android Auto, Multimedia, Radio, Telephone, Navigation, Vehicle,
-  Settings; the focused one orange), sliding with a short `QVariantAnimation`; an edge beyond which more tiles follow
+  Bluetooth, Settings; the focused one orange; the Bluetooth symbol comes from `docs/design/heatunit.svg`), sliding with a short `QVariantAnimation`; an edge beyond which more tiles follow
   is a black strip with a fade, a line and an orange arrow; the bar at the bottom shows which part of the row is in
   view. Turning moves the focus, left/right move the focused tile along the row (`onShift`, the window stores the
   order), the wheel turns, a click on an edge arrow moves the focus. The portable `ui/HomeMenuLayout.h` (CoreTests) has
@@ -238,6 +253,17 @@ home menu (Back first goes to the page, which may close something it opened, the
   While it asks, `FrontPage` returns it before anything else, also over the phone's picture; turning or left/right
   choose, pushing answers, Back cancels, a minute without an answer refuses. `HEADUNIT_TEST_PAIRING` shows it with a
   made-up phone in `--smoke-test` (for the window picture).
+- `BluetoothPage`: the paired phones (`ui/BluetoothPhones.h`, portable and tested: `BluetoothPhone`, `SortedPhones`
+  with the Android Auto phone first, then the connected ones, each group by name; the state texts; `CanSwitchTo`).
+  On Linux `BluetoothContext::PublishPhones` (service thread, reading BlueZ) sends the list through
+  `BluetoothEvents::onPhonesChanged` whenever `DeviceWatcher` sees a phone pair, connect or disconnect, when the service
+  starts or stops, and when a wireless session starts or ends (`WirelessStation::Serve` marks its phone with
+  `BluetoothService::SetAndroidAutoPhone`; the context knows each Android Auto socket's device from
+  `AndroidAutoProfile::NewConnection`). Choosing another phone (`MainWindow::SwitchToPhone`) ends the running attempt
+  and leaves the phone in `m_phoneSwitch`; the watch's worker takes it before its next wait for a wireless phone
+  (`TakePhoneSwitch`, on the thread that owns the station) and calls `WirelessStation::SwitchToPhone`, which
+  disconnects and reconnects that phone on the service thread. The Windows build shows that there is no Bluetooth.
+  `HEADUNIT_TEST_PAGE=<tile>` opens a tile's page in `--smoke-test`, Bluetooth with made-up phones.
 - `PlayerPage` (`ui/PlayerPage`, base of `MultimediaPage` and `RadioPage`): the page's tile at the left (orange while
   its source sounds), what plays now, the controls previous/play/next, a list of five rows and buttons at the top right.
   The focus moves through them by the portable `PageFocus` rules in `ui/PageFocus.h` (tested): turning moves within a part (list rows, a row of buttons),
@@ -255,6 +281,31 @@ home menu (Back first goes to the page, which may close something it opened, the
   `QLocale::system()`'s territory; country and last station are kept in `QSettings` (`radio/country`, `radio/station`).
   Real DAB+ reception would need a tuner; a DAB+ source (for example `welle-cli` with an RTL-SDR stick, which serves the
   programmes as http streams) would plug in as another list of stream URLs.
+
+Touch: Qt hands touches to the pages as mouse events (a touch screen needs nothing else). The portable `ui/TouchDrag`
+(CoreTests) tells a tap from a drag (more than 18 design units); a drag never clicks. `HomeMenu` moves the row with the
+finger and on release focuses `SwipeFocus` (`ui/HomeMenuLayout.h`, tested: the tile nearest the middle, never against
+the swipe, a flick moves one on). `PlayerPage` and `BluetoothPage` scroll their lists with the finger; a sideways swipe
+above a player page's list skips; `SettingsPage` moves a dragged row's tile along the order. When the phone asks for the
+car's own screen (`VIDEO_FOCUS_NATIVE`, the exit button of the Android Auto launcher), `ProjectionCallbacks::onNativeScreen`
+makes the window show the radio's home menu.
+
+Status bar: every `MenuPage` draws it after the clock (layout in the portable `ui/StatusBar.h`, CoreTests: the
+symbols' boxes from `docs/design/heatunit.svg` measured from the right edge, touch areas, `StatusBarLeft`, and
+`StatusSourceText`: the radio's own player while it sounds, else the projected phone). `MainWindow::UpdateStatusBar`
+(every tick) hands a `StatusState` (source, sound muted, microphone muted) to all pages when it changed. The page's
+event filter on itself takes presses on the symbols before the page's own mouse handlers; `PressStatus` mutes the
+sound, toggles `AudioState`'s microphone mute (no capture exists yet, so it is only the switch) or presses Home. The
+phone's name comes from `ProjectionCallbacks::onPhoneName` (the service discovery request's device name, else its
+label); `WirelessStation::Serve` replaces it with the phone's Bluetooth name. `PlayerPage`'s top buttons end left of
+`StatusBarLeft`.
+
+Volume bar: `VolumeOverlay` is a child of the screens' `QStackedWidget`, above the page or the phone's picture in front
+(raised by `ShowVolume` and `ShowScreen`). `MainWindow::UpdateVolumeBar` (every tick) shows it for 2.5 s whenever the
+volume or the mute state differs from what it showed last, whoever changed it. It paints in the pages' design units
+(`menu::ScreenRectIn` gives the same screen rectangle as `MenuPage`), and a mask limits it to the panel, so touches beside
+it reach what is below. The portable `ui/VolumeBar.h` (CoreTests) has the panel's place and which volume a touch at a
+position sets; touching or dragging on it calls the window's handler (unmute, set the volume).
 
 Knob routing: while a page is in front, `MainWindow::SendKey` gives the controller's arrows and push to it
 (`PressLocally`); the media keys (play/pause, track skip, from the panel or the keyboard) go to the radio's own player

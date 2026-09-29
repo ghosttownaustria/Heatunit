@@ -45,6 +45,18 @@ void AudioState::ToggleMute()
     m_isMuted = !m_isMuted;
 }
 
+// Whether the microphone is muted (the status bar's microphone).
+bool AudioState::IsMicrophoneMuted() const
+{
+    return m_isMicrophoneMuted;
+}
+
+// Mutes the microphone when it is on and the other way round; the sound's volume and mute stay as they are.
+void AudioState::ToggleMicrophoneMute()
+{
+    m_isMicrophoneMuted = !m_isMicrophoneMuted;
+}
+
 // Linear gain applied to the samples; squared so that the steps sound even (step 30 = full scale).
 float AudioState::Gain() const
 {

@@ -10,12 +10,15 @@ namespace headunit {
 //   HEADUNIT_WIFI_INTERFACE the Wi-Fi device (default: the first one NetworkManager knows)
 //   HEADUNIT_WIFI_BAND      a = 5 GHz (default), bg = 2.4 GHz
 //   HEADUNIT_WIFI_CHANNEL   default 36 (5 GHz) or 6 (2.4 GHz)
-//   HEADUNIT_WIFI_HIDDEN    1 = the network name is not broadcast (default: broadcast; Android Auto does not find a
-//                           hidden network in its scan)
+//   HEADUNIT_WIFI_HIDDEN    1 = the network name is never broadcast, 0 = always broadcast. Unset: hidden, until a phone
+//                           that got the Wi-Fi details did not join the hidden network; from then on it is broadcast
+//                           (remembered, see RememberVisibleWifi)
 struct WirelessSettings {
     std::string bluetoothName{"HEATUNIT"};
     HotspotConfig hotspot;
+    bool isVisibilityFixed{};   // HEADUNIT_WIFI_HIDDEN decides, the fallback to a visible network does not apply
 };
 
 WirelessSettings LoadWirelessSettings();
+void RememberVisibleWifi();
 }

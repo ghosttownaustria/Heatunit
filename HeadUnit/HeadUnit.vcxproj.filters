@@ -9,6 +9,7 @@
     <Filter Include="src\media" />
     <Filter Include="src\platform" />
     <Filter Include="src\radio" />
+    <Filter Include="src\remote" />
     <Filter Include="src\ui" />
     <Filter Include="src\usb" />
     <Filter Include="src\video" />
@@ -56,6 +57,8 @@
     <ClCompile Include="src\platform\WindowsSupport.cpp"><Filter>src\platform</Filter></ClCompile>
     <ClCompile Include="src\radio\RadioBrowser.cpp"><Filter>src\radio</Filter></ClCompile>
     <ClCompile Include="src\ui\AudioDisplay.cpp"><Filter>src\ui</Filter></ClCompile>
+    <ClCompile Include="src\ui\BluetoothPage.cpp"><Filter>src\ui</Filter></ClCompile>
+    <ClCompile Include="src\ui\BluetoothPhones.cpp"><Filter>src\ui</Filter></ClCompile>
     <ClCompile Include="src\ui\CarPanel.cpp"><Filter>src\ui</Filter></ClCompile>
     <ClCompile Include="src\ui\HomeMenu.cpp"><Filter>src\ui</Filter></ClCompile>
     <ClCompile Include="src\ui\HomeMenuLayout.cpp"><Filter>src\ui</Filter></ClCompile>
@@ -71,7 +74,11 @@
     <ClCompile Include="src\ui\RotaryKnob.cpp"><Filter>src\ui</Filter></ClCompile>
     <ClCompile Include="src\ui\ScriptedPhoneTest.cpp"><Filter>src\ui</Filter></ClCompile>
     <ClCompile Include="src\ui\SettingsPage.cpp"><Filter>src\ui</Filter></ClCompile>
+    <ClCompile Include="src\ui\TouchDrag.cpp"><Filter>src\ui</Filter></ClCompile>
     <ClCompile Include="src\ui\VideoWidget.cpp"><Filter>src\ui</Filter></ClCompile>
+    <ClCompile Include="src\ui\VolumeOverlay.cpp"><Filter>src\ui</Filter></ClCompile>
+    <ClCompile Include="src\remote\RemoteCommand.cpp"><Filter>src\remote</Filter></ClCompile>
+    <ClCompile Include="src\remote\RemoteServer.cpp"><Filter>src\remote</Filter></ClCompile>
     <ClCompile Include="src\usb\AndroidUsbProbe.cpp"><Filter>src\usb</Filter></ClCompile>
     <ClCompile Include="src\usb\AutoConnectSystem.cpp"><Filter>src\usb</Filter></ClCompile>
     <ClCompile Include="src\usb\LibusbControl.cpp"><Filter>src\usb</Filter></ClCompile>
@@ -127,11 +134,14 @@
     <ClInclude Include="src\media\AudioPlayer.h"><Filter>src\media</Filter></ClInclude>
     <ClInclude Include="src\media\MusicLibrary.h"><Filter>src\media</Filter></ClInclude>
     <ClInclude Include="src\media\StreamText.h"><Filter>src\media</Filter></ClInclude>
+    <ClInclude Include="src\platform\BuildProfile.h"><Filter>src\platform</Filter></ClInclude>
     <ClInclude Include="src\platform\Environment.h"><Filter>src\platform</Filter></ClInclude>
     <ClInclude Include="src\platform\ShutdownSignal.h"><Filter>src\platform</Filter></ClInclude>
     <ClInclude Include="src\platform\WindowsSupport.h"><Filter>src\platform</Filter></ClInclude>
     <ClInclude Include="src\radio\RadioBrowser.h"><Filter>src\radio</Filter></ClInclude>
     <ClInclude Include="src\ui\AudioDisplay.h"><Filter>src\ui</Filter></ClInclude>
+    <ClInclude Include="src\ui\BluetoothPage.h"><Filter>src\ui</Filter></ClInclude>
+    <ClInclude Include="src\ui\BluetoothPhones.h"><Filter>src\ui</Filter></ClInclude>
     <ClInclude Include="src\ui\CarPanel.h"><Filter>src\ui</Filter></ClInclude>
     <ClInclude Include="src\ui\HomeMenu.h"><Filter>src\ui</Filter></ClInclude>
     <ClInclude Include="src\ui\HomeMenuEntry.h"><Filter>src\ui</Filter></ClInclude>
@@ -150,7 +160,13 @@
     <ClInclude Include="src\ui\ScriptedPhoneTest.h"><Filter>src\ui</Filter></ClInclude>
     <ClInclude Include="src\ui\ScriptedTestHost.h"><Filter>src\ui</Filter></ClInclude>
     <ClInclude Include="src\ui\SettingsPage.h"><Filter>src\ui</Filter></ClInclude>
+    <ClInclude Include="src\ui\StatusBar.h"><Filter>src\ui</Filter></ClInclude>
+    <ClInclude Include="src\ui\TouchDrag.h"><Filter>src\ui</Filter></ClInclude>
     <ClInclude Include="src\ui\VideoWidget.h"><Filter>src\ui</Filter></ClInclude>
+    <ClInclude Include="src\ui\VolumeBar.h"><Filter>src\ui</Filter></ClInclude>
+    <ClInclude Include="src\ui\VolumeOverlay.h"><Filter>src\ui</Filter></ClInclude>
+    <ClInclude Include="src\remote\RemoteCommand.h"><Filter>src\remote</Filter></ClInclude>
+    <ClInclude Include="src\remote\RemoteServer.h"><Filter>src\remote</Filter></ClInclude>
     <ClInclude Include="src\usb\AndroidUsbProbe.h"><Filter>src\usb</Filter></ClInclude>
     <ClInclude Include="src\usb\AutoConnectSystem.h"><Filter>src\usb</Filter></ClInclude>
     <ClInclude Include="src\usb\DriverRepair.h"><Filter>src\usb</Filter></ClInclude>

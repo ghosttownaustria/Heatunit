@@ -6,6 +6,7 @@
 #include <QTimer>
 #include <QWheelEvent>
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace headunit {
@@ -14,7 +15,7 @@ using State = AudioPlayer::State;
 using Part = PageFocus::Part;
 // Layout in design units (the screen is 600 high): the tile as on the home menu, everything else in the column at its
 // right (see menu::kPageTile).
-constexpr double kHeaderTop = 24, kHeaderHeight = 50, kHeaderGap = 12, kHeaderMinWidth = 140, kHeaderMaxWidth = 420;
+constexpr double kHeaderTop = 24, kHeaderHeight = 50, kHeaderGap = 12, kHeaderMinWidth = 140, kHeaderMaxWidth = 360;
 constexpr double kSubtitleBaseline = 168;
 constexpr double kProgressTop = 182, kProgressHeight = 5;
 constexpr double kControlsTop = 200, kControlHeight = 52, kControlWidth = 84, kControlGap = 12;
@@ -23,6 +24,8 @@ constexpr double kListTop = 268, kRowHeight = 46, kScrollbarRoom = 14;
 constexpr int kVisibleRows = 5;
 constexpr int kWheelStep = 120;
 constexpr int kLookIntervalMs = 250;
+// How far a sideways swipe above the list has to go to skip.
+constexpr double kSkipSwipe = 120;
 }
 
 // A page of `entry` that plays through `player`. The player runs on its own thread; the page looks at it a few times a
@@ -157,6 +160,12 @@ void PlayerPage::StartPlayer(const std::string& source)
     update();
 }
 
+// What the status bar names while this page's source sounds (the station, the title); empty otherwise.
+QString PlayerPage::SoundingName() const
+{
+    return IsOwnSoundingNow() ? NowTitle() : QString();
+}
+
 // Tells the window that this page is about to start or resume the player.
 void PlayerPage::NotifyWillPlay()
 {
@@ -209,16 +218,43 @@ void PlayerPage::Paint(QPainter& painter)
     PaintList(painter);
 }
 
-// Remembers what a click starts on.
+// Remembers what a click starts on; it may also become a drag.
 void PlayerPage::mousePressEvent(QMouseEvent* event)
 {
-    if (event->button() == Qt::LeftButton) m_pressed = HitAt(event->position());
+    if (event->button() != Qt::LeftButton) return;
+    m_pressed = HitAt(event->position());
+    if (const auto point = ToDesign(event->position())) {
+        m_drag.Press(point->x(), point->y());
+        m_dragFirstRow = m_firstRow;
+    }
 }
 
-// Like a button: it acts when the click also ends on it, and the controller's focus goes there.
+// Dragging up or down on the list scrolls it with the finger, one row per row height.
+void PlayerPage::mouseMoveEvent(QMouseEvent* event)
+{
+    const auto point = ToDesign(event->position());
+    if (!point || !m_drag.Move(point->x(), point->y())) return;
+    m_pressed.reset();
+    if (m_drag.IsHorizontal() || m_drag.StartY() < kListTop) return;
+    const int rows = static_cast<int>(std::lround(m_drag.DeltaY() / kRowHeight));
+    m_firstRow = std::clamp(m_dragFirstRow - rows, 0, std::max(0, RowCount() - kVisibleRows));
+    update();
+}
+
+// Like a button: it acts when the click also ends on it, and the controller's focus goes there. A sideways swipe above
+// the list skips to the previous title (to the right) or the next one (to the left).
 void PlayerPage::mouseReleaseEvent(QMouseEvent* event)
 {
     if (event->button() != Qt::LeftButton) return;
+    m_drag.Release();
+    if (m_drag.IsDragging()) {
+        m_pressed.reset();
+        if (m_drag.IsHorizontal() && m_drag.StartY() < kListTop && std::abs(m_drag.DeltaX()) >= kSkipSwipe) {
+            Skip(m_drag.DeltaX() < 0 ? +1 : -1);
+            Look();
+        }
+        return;
+    }
     const auto pressed = std::exchange(m_pressed, std::nullopt);
     if (!pressed || pressed != HitAt(event->position())) return;
     if (!pressed->isTile) {
@@ -284,12 +320,12 @@ double PlayerPage::Right() const
     return Width() - menu::kPageTile.left();
 }
 
-// Where header button `index` is: right-aligned at the top, next to nothing but the clock.
+// Where header button `index` is: at the top, right-aligned up to the status bar.
 QRectF PlayerPage::HeaderRect(int index) const
 {
     const QStringList buttons = HeaderButtons();
     const QFontMetricsF metrics(menu::Font(24));
-    double right = Right();
+    double right = StatusBarLeft(Width()) - kHeaderGap;
     for (int button = static_cast<int>(buttons.size()) - 1; button >= 0; --button) {
         const double width = std::clamp(metrics.horizontalAdvance(buttons[button]) + 44, kHeaderMinWidth, kHeaderMaxWidth);
         if (button == index) return QRectF(right - width, kHeaderTop, width, kHeaderHeight);

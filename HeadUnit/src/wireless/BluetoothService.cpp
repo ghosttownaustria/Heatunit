@@ -14,6 +14,7 @@
 #include <QThread>
 #include <QTimer>
 #include <QVariantMap>
+#include <algorithm>
 #include <thread>
 #include <utility>
 
@@ -109,6 +110,21 @@ void BluetoothService::Stop()
     m_context.CloseWaitingPhones();
 }
 
+// Stops the service and switches the Bluetooth adapter off, which ends every phone's Bluetooth link. Start switches it
+// on again.
+void BluetoothService::SwitchOff()
+{
+    Stop();
+    auto bus = QDBusConnection::systemBus();
+    if (!bus.isConnected()) return;
+    const auto state = bluez::ReadBluez(bus);
+    if (state.adapterPath.isEmpty()) return;
+    if (const auto error = bluez::SetAdapterProperty(bus, state.adapterPath, "Powered", false); !error.empty())
+        m_context.Log(LogLevel::Warning, "Switching the Bluetooth adapter off failed: " + error);
+    else
+        m_context.Log(LogLevel::Info, "Bluetooth adapter switched off");
+}
+
 // Whether Bluetooth is visible with the Android Auto service.
 bool BluetoothService::IsRunning() const
 {
@@ -131,6 +147,35 @@ void BluetoothService::ConnectPairedPhones(bool isReconnectingAll)
 int BluetoothService::WaitForPhone(std::chrono::milliseconds timeout)
 {
     return m_context.WaitForPhone(timeout);
+}
+
+// The device (BlueZ's path) whose Android Auto socket `fd` is; empty when unknown.
+std::string BluetoothService::PhoneOf(int fd)
+{
+    return Text(m_context.PhonePathOf(fd));
+}
+
+// The name a paired phone gave itself ("Jakob's Flip 8"); empty when BlueZ does not know it.
+std::string BluetoothService::PhoneName(const std::string& devicePath)
+{
+    if (devicePath.empty()) return {};
+    const std::string name = bluez::DeviceName(QString::fromStdString(devicePath));
+    return name == devicePath ? std::string() : name;
+}
+
+// Notes the phone a wireless session runs on (empty: none) and tells the window.
+void BluetoothService::SetAndroidAutoPhone(const std::string& devicePath)
+{
+    m_context.SetAndroidAutoPhone(QString::fromStdString(devicePath));
+    if (m_isRunning) QMetaObject::invokeMethod(m_worker.get(), [this] { m_context.PublishPhones(); }, Qt::QueuedConnection);
+}
+
+// The person chose this phone for Android Auto (the caller has ended the running session): it is connected anew, which
+// starts Android Auto on it. Returns at once.
+void BluetoothService::SwitchToPhone(const std::string& devicePath)
+{
+    if (!m_isRunning) return;
+    QMetaObject::invokeMethod(m_worker.get(), [this, path = QString::fromStdString(devicePath)] { SwitchToPhoneOnServiceThread(path); }, Qt::QueuedConnection);
 }
 
 // Runs `work` on the service's thread and returns when it is done.
@@ -167,6 +212,7 @@ std::string BluetoothService::StartOnServiceThread(const std::string& name)
     if (const auto error = RegisterProfile(bus, channel, isListed); !error.empty()) return error;
     MakeVisible(bus);
     m_isRunning = true;
+    m_context.PublishPhones();
     m_context.Log(LogLevel::Info, "Bluetooth visible as '" + name + "', pairing with code comparison, Android Auto Wireless service registered on RFCOMM channel " +
         std::to_string(channel) + (isListed ? " (listed in the adapter's services)" : " (NOT listed in the adapter's services: phones may not find it; see journalctl -u bluetooth)"));
     return {};
@@ -253,7 +299,10 @@ void BluetoothService::StopOnServiceThread()
     m_watcher.reset();
     m_agentObject.reset();
     m_profileObject.reset();
-    if (m_isRunning) m_context.Log(LogLevel::Info, "Bluetooth service stopped");
+    if (m_isRunning) {
+        m_context.Log(LogLevel::Info, "Bluetooth service stopped");
+        m_context.PublishNoPhones();
+    }
     m_isRunning = false;
 }
 
@@ -280,6 +329,29 @@ void BluetoothService::ConnectPairedOnServiceThread(bool isReconnectingAll)
     // The old link needs a moment to go down before a new one can start; BlueZ is answered meanwhile.
     if (isAnyDisconnected) QTimer::singleShot(2000, m_worker.get(), [this, phones] { ConnectPhones(phones); });
     else ConnectPhones(phones);
+}
+
+// See SwitchToPhone (service thread). Like ConnectPairedOnServiceThread for one phone: a connected phone is disconnected
+// first, as Android Auto looks for its service when the Bluetooth connection starts.
+void BluetoothService::SwitchToPhoneOnServiceThread(const QString& devicePath)
+{
+    if (!m_isRunning) return;
+    auto bus = QDBusConnection::systemBus();
+    const auto paired = bluez::ReadBluez(bus).paired;
+    const auto found = std::find_if(paired.begin(), paired.end(), [&devicePath](const bluez::PairedDevice& device) { return device.path == devicePath; });
+    if (found == paired.end()) {
+        m_context.Log(LogLevel::Warning, "The phone chosen for Android Auto is no longer paired: " + Text(devicePath));
+        return;
+    }
+    const bluez::PairedDevice phone = *found;
+    m_context.Log(LogLevel::Info, "Android Auto switches to '" + phone.name + "'" + (phone.isConnected ? "; reconnecting it" : "; connecting it"));
+    if (!phone.isConnected) {
+        ConnectPhones({phone});
+        return;
+    }
+    if (const auto error = bluez::Call(bus, phone.path, bluez::kDeviceInterface, "Disconnect", {}); !error.empty())
+        m_context.Log(LogLevel::Warning, "Disconnecting '" + phone.name + "' failed: " + error);
+    QTimer::singleShot(2000, m_worker.get(), [this, phone] { ConnectPhones({phone}); });
 }
 
 // Asks each phone to connect. That takes seconds, or fails when the phone is out of reach, so the answer is only logged

@@ -53,6 +53,11 @@
       <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(HeadUnitIsDebug)'!='true'">
+    <ClCompile>
+      <PreprocessorDefinitions>HEADUNIT_KIOSK;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(HeadUnitIsVerboseLogging)'=='true'">
     <ClCompile>
       <PreprocessorDefinitions>HEADUNIT_VERBOSE_LOGGING;%(PreprocessorDefinitions)</PreprocessorDefinitions>

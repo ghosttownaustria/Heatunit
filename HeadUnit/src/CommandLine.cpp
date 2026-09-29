@@ -45,6 +45,19 @@ std::string DisplayError()
 }
 }
 
+// A TCP port number from 0 to 65535, or nothing for any other text.
+std::optional<int> ParsePort(std::string_view text)
+{
+    if (text.empty() || text.size() > 5) return std::nullopt;
+    int port = 0;
+    for (const char c : text) {
+        if (c < '0' || c > '9') return std::nullopt;
+        port = port * 10 + (c - '0');
+    }
+    if (port > 65535) return std::nullopt;
+    return port;
+}
+
 // Reads the program's arguments (without the program name). At most one run mode may be chosen; --wireless counts as
 // one. --help ends the reading. The wireless options exist only when `hasWireless`.
 CommandLine ParseCommandLine(const std::vector<std::string_view>& arguments, bool hasWireless)
@@ -61,6 +74,13 @@ CommandLine ParseCommandLine(const std::vector<std::string_view>& arguments, boo
             commandLine.display = index + 1 < arguments.size() ? ParseDisplay(arguments[index + 1]) : std::nullopt;
             if (!commandLine.display) {
                 commandLine.error = DisplayError();
+                return commandLine;
+            }
+            ++index;
+        } else if (argument == "--api-port") {
+            commandLine.apiPort = index + 1 < arguments.size() ? ParsePort(arguments[index + 1]) : std::nullopt;
+            if (!commandLine.apiPort) {
+                commandLine.error = "--api-port needs a port number from 0 to 65535";
                 return commandLine;
             }
             ++index;
@@ -97,6 +117,7 @@ std::string CommandLineHelp(bool hasWireless)
     text +=
         "Logs: ./headunit.log (includes USB serial numbers); in the user's state directory when the working directory is not writable.\n"
         "      HEADUNIT_LOG_LEVEL=trace|debug|info|warning|error overrides the detail the build profile chose\n"
+        "--api-port picks the TCP port of the remote API on 127.0.0.1 (default 47050, HEADUNIT_API_PORT also sets it, 0 switches it off; docs/api.md)\n"
         "--display picks the display size for this run (the window's own choice is remembered, this one is not)\n"
         "--test-tone plays a short quiet tone through the audio output, which needs no phone\n"
         "--repair-driver Windows: rebinds the phone to WinUSB (needs administrator rights; the app starts it itself when needed)\n"

@@ -115,6 +115,12 @@ const char* const kVehicleIcon =
     "C163.319,202.333 165.203,202.177 167.087,202.093L170.821,211.98L170.955,212.711L171.089,211.98L174.823,202.093"
     "C176.707,202.177 178.591,202.333 180.486,202.56L181.11,220.501C179.762,220.261 178.379,220.058 177.053,219.926"
     "L176.651,207.822L176.718,206.983L176.484,207.786L172.694,216.834Z";
+// The Bluetooth symbol comes from the newer design, docs/design/heatunit.svg (same artboard).
+const char* const kBluetoothIcon =
+    "M160.859,239.967L160.859,192.925L213.49,237.626L184.648,266.027L213.49,295.224L160.407,340.19L160.9,290.586"
+    "L138.55,314.085L128.442,303.749L160.859,271.195L160.859,259.578L128.648,227.29L138.755,216.203L160.859,239.967Z"
+    "M174.993,224.374L189.907,237.846L174.993,250.744L174.993,224.374ZM174.993,281.973L189.907,295.445L174.993,308.343"
+    "L174.993,281.973Z";
 const char* const kSettingsIcon =
     "M215.723,210.543L225.553,221.113C228.14,223.894 228.14,228.445 225.553,231.226L217.637,239.737"
     "C219.821,244.12 221.487,248.846 222.548,253.821L232.802,253.821C236.462,253.821 239.456,257.04 239.456,260.973"
@@ -134,6 +140,42 @@ const char* const kSettingsIcon =
     "C190.857,213.583 195.131,215.693 199.06,218.344L206.313,210.543C208.903,207.762 213.136,207.762 215.723,210.543Z"
     "M170.967,237.173C186.061,237.173 198.299,250.332 198.299,266.558C198.299,282.783 186.061,295.943 170.967,295.943"
     "C155.874,295.943 143.634,282.784 143.634,266.558C143.634,250.332 155.874,237.173 170.967,237.173Z";
+
+// The status bar's symbols, from docs/design/heatunit.svg (their own coordinates, fitted into a box when drawn).
+const char* const kSpeakerIcon =
+    "M11.32,19.85L33.89,19.85L52.56,1C53.935,-0.364 56.185,-0.364 57.56,1C58.218,1.668 58.578,2.573 58.56,3.51L58.56,81.3"
+    "C58.558,83.251 56.951,84.856 55,84.856C54.045,84.856 53.129,84.471 52.46,83.79L34.01,68.79L11.32,68.79"
+    "C5.124,68.774 0.027,63.686 0,57.49L0,31.17C0.027,24.97 5.12,19.877 11.32,19.85ZM74.71,31.62"
+    "C74.622,31.319 74.578,31.007 74.578,30.693C74.578,28.872 76.077,27.373 77.898,27.373C79.272,27.373 80.51,28.226 81,29.51"
+    "C82.14,32.9 82.69,38.17 82.6,43.18C82.51,48.19 81.79,52.9 80.41,55.75C79.853,56.897 78.685,57.629 77.41,57.629"
+    "C75.581,57.629 74.076,56.124 74.076,54.295C74.076,53.791 74.19,53.293 74.41,52.84C75.41,50.84 75.88,47.08 75.96,43.07"
+    "C76.118,39.211 75.69,35.35 74.69,31.62L74.71,31.62ZM91.85,19.22C91.682,18.816 91.596,18.383 91.596,17.945"
+    "C91.596,16.119 93.099,14.616 94.925,14.616C96.268,14.616 97.486,15.429 98,16.67C101.08,24.07 102.75,33.38 102.89,42.67"
+    "C103.03,51.96 101.68,60.92 98.75,68.18C98.247,69.433 97.025,70.259 95.675,70.259C93.857,70.259 92.361,68.763 92.361,66.945"
+    "C92.361,66.522 92.442,66.103 92.6,65.71C95.2,59.27 96.39,51.04 96.27,42.71C96.15,34.38 94.64,25.85 91.86,19.21"
+    "L91.85,19.22ZM108.42,8.68C108.204,8.231 108.092,7.738 108.092,7.24C108.092,5.414 109.594,3.912 111.42,3.912"
+    "C112.698,3.912 113.867,4.648 114.42,5.8C119.936,17.546 122.83,30.353 122.9,43.33C123,55.91 120.46,68.45 114.9,79.14"
+    "C114.371,80.337 113.181,81.112 111.872,81.112C110.057,81.112 108.562,79.618 108.562,77.802C108.562,77.218 108.717,76.645 109.01,76.14"
+    "C114.01,66.43 116.33,54.97 116.24,43.42C116.185,31.422 113.513,19.579 108.41,8.72L108.42,8.68Z";
+
+const char* const kMicrophoneIcon =
+    "M85.6,57.11C85.6,53.9 83,51.31 79.8,51.31C76.59,51.31 74,53.91 74,57.11C74,68.54 71.26,77.98 65.71,84.28"
+    "C60.68,89.98 53.08,93.27 42.81,93.27C32.54,93.27 24.94,89.99 19.91,84.29C14.35,77.99 11.62,68.55 11.62,57.11"
+    "C11.62,53.9 9.02,51.31 5.82,51.31C2.61,51.31 0.02,53.91 0.02,57.11C0.02,71.36 3.71,83.44 11.21,91.95"
+    "C16.73,98.21 24.17,102.45 33.54,104.1L33.54,113.62L19.32,113.62C16.78,113.62 14.7,115.7 14.7,118.24L14.7,122.87"
+    "L70.94,122.87L70.94,118.24C70.94,115.7 68.86,113.62 66.32,113.62L52.07,113.62L52.07,104.1"
+    "C61.44,102.44 68.87,98.21 74.4,91.94C81.9,83.44 85.6,71.36 85.6,57.11ZM42.8,0C54.64,0 64.32,9.69 64.32,21.52"
+    "L64.32,22.08L52.75,22.08L52.75,35.79L64.33,35.79L64.33,42.77L52.75,42.77L52.75,56.48L64.33,56.48L64.33,61.41"
+    "C64.33,73.25 54.64,82.93 42.81,82.93C30.97,82.93 21.29,73.24 21.29,61.41L21.29,56.48L32.87,56.48L32.87,42.77"
+    "L21.28,42.77L21.28,35.79L32.86,35.79L32.86,22.08L21.28,22.08L21.28,21.52C21.28,9.69 30.96,0 42.8,0Z";
+const char* const kHomeIcon =
+    "M181.568,511.832L29.337,511.832C21.247,511.832 13.909,508.532 8.605,503.227C3.3,497.923 0,490.585 0,482.495"
+    "L0,244.611C0.059,238.93 2.298,233.265 6.733,229.043L241.038,5.915C249.274,-1.931 262.322,-2.012 270.654,5.915"
+    "L503.168,227.238C507.95,231.195 511,237.169 511,243.852L511,482.495C511,490.459 507.684,497.886 502.358,503.212"
+    "C497.105,508.465 489.767,511.832 481.663,511.832L327.059,511.832C315.168,511.832 305.517,502.181 305.517,490.29"
+    "L305.517,364.721C305.517,350.612 299.778,337.808 290.539,328.576L290.458,328.495C281.227,319.257 268.422,313.517 254.314,313.517"
+    "C240.227,313.517 227.401,319.279 218.125,328.532C208.872,337.808 203.111,350.634 203.111,364.721L203.111,490.29"
+    "C203.111,502.181 193.459,511.832 181.568,511.832Z";
 
 // Reads the design's path data: absolute M, L, C and Z commands, a letter may be left out when it repeats (pairs
 // after M are lines). Stops at anything else.
@@ -223,7 +265,7 @@ const TileLook& SharedTileLook()
         // order of HomeMenuEntry.
         result.iconShapes = {ParsePath(kAndroidAutoIcon, Qt::WindingFill), ParsePath(kMultimediaIcon, Qt::OddEvenFill),
             ParsePath(kRadioIcon, Qt::WindingFill), ParsePath(kTelephoneIcon, Qt::OddEvenFill), ParsePath(kNavigationIcon, Qt::OddEvenFill),
-            ParsePath(kVehicleIcon, Qt::OddEvenFill), ParsePath(kSettingsIcon, Qt::OddEvenFill)};
+            ParsePath(kVehicleIcon, Qt::OddEvenFill), ParsePath(kBluetoothIcon, Qt::OddEvenFill), ParsePath(kSettingsIcon, Qt::OddEvenFill)};
         // Stripes: vertical, brightest in the middle of the tile; grey at half opacity, orange opaque.
         const QTransform vertical(0, 392.557, -392.557, 0, 158.23, 70.6259);
         const auto grey = [](int value) { return QColor(value, value, value, 128); };
@@ -236,15 +278,6 @@ const TileLook& SharedTileLook()
         return result;
     }();
     return look;
-}
-
-// Small corner stripes of the focus: the tiles' orange, diagonally.
-QBrush LitCorner(const QRectF& box)
-{
-    QLinearGradient gradient(box.bottomLeft(), box.topRight());
-    gradient.setColorAt(0, QColor(255, 45, 0));
-    gradient.setColorAt(1, QColor(255, 168, 0));
-    return gradient;
 }
 
 // The outline of a player symbol, drawn in a square around the box's centre.
@@ -294,6 +327,14 @@ void DrawButtonFrame(QPainter& painter, const QRectF& box, bool isFocused)
 }
 }
 
+// Where a display of `display`'s shape is drawn in an area of `area`'s size: as large as fits and centred, like the
+// phone's picture.
+QRectF ScreenRectIn(const QSizeF& area, const DisplayConfig& display)
+{
+    const QSizeF shown = QSizeF(display.width, display.height).scaled(area, Qt::KeepAspectRatio);
+    return QRectF(QPointF((area.width() - shown.width()) / 2, (area.height() - shown.height()) / 2), shown);
+}
+
 // The design's font (Roboto, else the system's sans serif), `pixels` design units high.
 QFont Font(int pixels)
 {
@@ -340,7 +381,7 @@ void DrawFocus(QPainter& painter, const QRectF& box)
     corners.closeSubpath();
     corners.addPolygon(QPolygonF({QPointF(inside.left(), inside.bottom() - leg), inside.bottomLeft(), QPointF(inside.left() + leg, inside.bottom())}));
     corners.closeSubpath();
-    painter.fillPath(corners, LitCorner(box));
+    painter.fillPath(corners, LitBrush(box));
     painter.setPen(QPen(kText, kFrameWidth));
     painter.setBrush(Qt::NoBrush);
     painter.drawRect(box);
@@ -350,7 +391,7 @@ void DrawFocus(QPainter& painter, const QRectF& box)
 void DrawButton(QPainter& painter, const QRectF& box, Symbol symbol, bool isFocused, bool isOn)
 {
     DrawButtonFrame(painter, box, isFocused);
-    painter.fillPath(SymbolPath(symbol, box), isOn ? LitCorner(box) : QBrush(kText));
+    painter.fillPath(SymbolPath(symbol, box), isOn ? LitBrush(box) : QBrush(kText));
 }
 
 // A framed button with a text.
@@ -370,7 +411,7 @@ void DrawCheck(QPainter& painter, const QRectF& box, bool isOn)
     painter.setBrush(Qt::NoBrush);
     painter.drawRect(box);
     if (!isOn) return;
-    painter.fillRect(box.adjusted(5, 5, -5, -5), LitCorner(box));
+    painter.fillRect(box.adjusted(5, 5, -5, -5), LitBrush(box));
     painter.setPen(QPen(Qt::black, 4, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
     const QPointF centre = box.center();
     const double size = box.width() * 0.22;
@@ -399,5 +440,40 @@ void DrawRow(QPainter& painter, const QRectF& row, const QString& text, const QS
         painter.setPen(kDim);
         painter.drawText(row.adjusted(0, 0, -26, 0), Qt::AlignRight | Qt::AlignVCenter, Elided(note, noteFont, noteWidth));
     }
+}
+
+// A symbol of the status bar, as large as fits into `box` and centred there. Struck (muted): dim, with an orange slash.
+// Lit (a finger is on it): in the lit orange.
+void DrawIcon(QPainter& painter, Icon icon, const QRectF& box, bool isStruck, bool isLit)
+{
+    static const std::array<QPainterPath, 3> kIcons = {ParsePath(kSpeakerIcon, Qt::WindingFill), ParsePath(kMicrophoneIcon, Qt::WindingFill),
+        ParsePath(kHomeIcon, Qt::WindingFill)};
+    const QPainterPath& path = kIcons[static_cast<std::size_t>(icon)];
+    const QRectF bounds = path.boundingRect();
+    if (bounds.isEmpty()) return;
+    const double scale = std::min(box.width() / bounds.width(), box.height() / bounds.height());
+    const QSizeF size = bounds.size() * scale;
+    const QRectF fitted(box.center() - QPointF(size.width() / 2, size.height() / 2), size);
+    painter.save();
+    painter.translate(fitted.topLeft());
+    painter.scale(scale, scale);
+    painter.translate(-bounds.topLeft());
+    painter.fillPath(path, isLit ? LitBrush(QRectF(bounds)) : QBrush(isStruck ? kDim : kText));
+    painter.restore();
+    if (!isStruck) return;
+    const QLineF slash(fitted.topLeft(), fitted.bottomRight());
+    painter.setPen(QPen(Qt::black, 9, Qt::SolidLine, Qt::RoundCap));
+    painter.drawLine(slash);
+    painter.setPen(QPen(LitBrush(fitted), 4.5, Qt::SolidLine, Qt::RoundCap));
+    painter.drawLine(slash);
+}
+
+// The lit orange of the design (focus corners, lit segments), diagonally across `box`.
+QBrush LitBrush(const QRectF& box)
+{
+    QLinearGradient gradient(box.bottomLeft(), box.topRight());
+    gradient.setColorAt(0, QColor(255, 45, 0));
+    gradient.setColorAt(1, QColor(255, 168, 0));
+    return gradient;
 }
 }

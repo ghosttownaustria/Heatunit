@@ -60,12 +60,18 @@ CI (`.github/workflows/build.yml`): Linux full build (`linux-release`) + tests +
 core-only. The full Windows Qt build is not in CI. `src/wireless/*` and `#ifdef HEADUNIT_WIRELESS` code only compiles on
 Linux (needs Qt6 DBus), so on Windows it can only be reviewed by reading; CI or the Pi catches errors there.
 
+Remote API for other programs (`HeadUnit/docs/api.md`): JSON lines over TCP on 127.0.0.1:47050 (`--api-port`,
+`HEADUNIT_API_PORT`); `RemoteCommand` in the core, `RemoteServer` + `MainWindow::StartRemoteApi` in the app; `GpioBridge.py`
+in the repo root is the client for the real buttons and encoder. A new console action must be added to the API as well.
+
 App diagnostics (no window needed for most): `--scan`, `--probe-usb`, `--start-accessory`, `--repair-driver`,
 `--recover-phone`, `--test-projection`, `--test-input`, `--test-audio`, `--test-tone`, `--test-console`, `--test-keys`,
 `--smoke-test`, `--display WxH` (parsed in `src/CommandLine.cpp`). Useful env vars: `HEADUNIT_LOG_LEVEL=trace|debug|info|warning|error`,
 `HEADUNIT_PROTOCOL_TRACE=1`, `HEADUNIT_TEST_SHOTS=<dir>`, `HEADUNIT_TEST_KEYS`, `HEADUNIT_TEST_PAIRING=1` (with
-`--smoke-test`: shows the Bluetooth pairing page), `HEADUNIT_MUSIC_DIR`, `HEADUNIT_USB_BACKEND=libusb`, `HEADUNIT_WIFI_*`,
-`HEADUNIT_BT_NAME`. `headunit.log` is appended in the working directory; lines carry a level and a `[TAG]` such as
+`--smoke-test`: shows the Bluetooth pairing page), `HEADUNIT_TEST_VOLUME=1` (with `--smoke-test`: shows the volume
+bar), `HEADUNIT_TEST_PAGE=<tile id>` (with `--smoke-test`: opens that tile's page, e.g. `Bluetooth` with made-up phones,
+`Settings`), `HEADUNIT_MUSIC_DIR`, `HEADUNIT_USB_BACKEND=libusb`, `HEADUNIT_WIFI_*`, `HEADUNIT_BT_NAME`.
+`headunit.log` is appended in the working directory; lines carry a level and a `[TAG]` such as
 `WATCH`, `BT`, `WLAN`, `AA`, `USB`, `REPAIR`, `AUDIO` (`logger.Write(LogLevel::Info, "WATCH", ...)`). Without a phone
 attached, the default (automatic) mode will connect any plugged-in Android phone on its own — check `--scan` first when
 smoke-running.

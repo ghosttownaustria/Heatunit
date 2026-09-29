@@ -135,7 +135,7 @@ void PhoneWatch::Attempt(const std::function<AutoConnectResult()>& run, bool isU
     std::string text = hasRun ? "Android Auto beendet" : isUsb ? "Android Auto per USB kam nicht zustande" : "Kabellos kam keine Verbindung zustande";
     if (!result.message.empty()) text += ": " + result.message;
     text = Sentence(text);
-    if (isUsb) text += " Neu verbinden: Kabel neu anstecken oder auf Android Auto verbinden druecken.";
+    if (isUsb) text += " Neu verbinden: Kabel neu anstecken oder die Kachel Android Auto waehlen.";
     Step(text);
     if (!m_isStopRequested) Step(m_readyText);
 }

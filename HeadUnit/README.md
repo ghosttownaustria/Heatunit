@@ -19,12 +19,14 @@ jeden davon im Fenster gemeldet: bei Bedarf den USB-Treiber reparieren (einmal d
 Windows-Abfrage nach Administratorrechten bestaetigen), Android Auto auf dem Handy starten
 und das Video anzeigen. Auf dem Handy nur die Android-Auto-Hinweise bestaetigen. Unter
 Linux kommt kabelloses Android Auto dazu, ebenfalls automatisch ([wireless.md](docs/wireless.md)).
-Waehrend der Sitzung heisst der Knopf **Verbindung beenden**: Das Handy bekommt ein Goodbye,
-dann wird die USB-Schnittstelle freigegeben; die Automatik wartet danach weiter. Ein Handy,
-das stecken bleibt, startet erst nach neuem Anstecken wieder, oder mit **Android Auto verbinden**.
+Der Knopf **Beenden** schaltet das Radio aus: Das Handy bekommt ein Goodbye, die USB-Schnittstelle
+wird freigegeben, unter Linux werden Bluetooth und WLAN des Raspberry Pi ausgeschaltet (beim naechsten
+Start schaltet HeadUnit beides wieder ein), dann schliesst sich das Programm. Ein Handy, das stecken
+bleibt, startet nach einer beendeten Sitzung erst nach neuem Anstecken wieder, oder mit der Kachel
+**Android Auto** bzw. der Projektionstaste.
 
-**Displaygroesse.** Solange keine Sitzung laeuft, laesst sich neben dem Verbinden-Knopf die Displaygroesse
-waehlen: 800 x 480, 1280 x 720 (HD), 1600 x 600 (Ultrawide) oder 1920 x 1080 (Full HD). Das Handy erfaehrt sie
+**Displaygroesse.** Solange keine Sitzung laeuft, laesst sich die Displaygroesse
+waehlen (neben dem Knopf Beenden): 800 x 480, 1280 x 720 (HD), 1600 x 600 (Ultrawide) oder 1920 x 1080 (Full HD). Das Handy erfaehrt sie
 beim Verbinden (Video-Aufloesung, Touchflaeche und passende Bilddichte), darum ist die Auswahl waehrend einer
 Verbindung gesperrt. Die Wahl wird gemerkt (Windows-Benutzer, Registry `HKCU\Software\HeadUnit`); das
 Startmenue im Bildfeld zeigt schon vor dem Verbinden die Form des gewaehlten Displays.
@@ -53,7 +55,8 @@ einer Groesse, ohne sie zu merken (auch fuer die `--test-...`-Laeufe, die sonst 
   Zurueck-Taste des Handys, Option sendet dessen Menue-Taste. Menu holt das Startmenue des Radios nach vorn,
   Radio den Radioempfang (siehe unten). Ohne verbundenes Handy oeffnet Media den Musikordner des Radios.
 - **Startmenue des Radios:** Die Uhr und eine Reihe Kacheln (Android Auto, Multimedia, Radio, Telephone,
-  Navigation, Vehicle, Settings) nach der Vorlage [docs/design/home-menu.svg](docs/design/home-menu.svg), an der
+  Navigation, Vehicle, Bluetooth, Settings) nach den Vorlagen [docs/design/home-menu.svg](docs/design/home-menu.svg)
+  und [docs/design/heatunit.svg](docs/design/heatunit.svg), an der
   Stelle des Handybilds und in der Form des gewaehlten Displays. Ohne verbundenes Handy ist es immer zu sehen,
   waehrend des Verbindens auch; das Handybild kommt nach vorn, sobald es da ist.
   - **Drehen** am Regler waehlt eine Kachel (sie leuchtet orange). Die gewaehlte Kachel steht in der Mitte, nur
@@ -61,9 +64,28 @@ einer Groesse, ohne sie zu merken (auch fuer die `--test-...`-Laeufe, die sonst 
     zeigt, welcher Teil der Reihe gerade zu sehen ist.
   - **Pfeil links/rechts** verschiebt die gewaehlte Kachel in der Reihenfolge um einen Platz (wird gemerkt).
   - **Druecken** oder ein Klick oeffnet die Kachel: Android Auto verbindet bzw. holt das Handy nach vorn (wie
-    das Handy-Symbol), Multimedia, Radio und Settings oeffnen die Seiten des Radios, Telephone und Navigation
+    das Handy-Symbol), Multimedia, Radio, Bluetooth und Settings oeffnen die Seiten des Radios, Telephone und Navigation
     wirken wie die Tasten Tel und Nav; Vehicle hat noch keine Funktion. Ein Klick auf einen Randpfeil geht eine
     Kachel weiter, das Mausrad ueber dem Menue dreht.
+- **Nur mit Touch:** Alles im Bildschirm geht auch ohne Tasten (auf dem Pi-Touchscreen; unter Windows mit der Maus).
+  Tippen wirkt wie ein Klick. Die Kachelreihe laesst sich **wischen**: sie folgt dem Finger, danach bekommt die Kachel
+  in der Mitte den Fokus (ein kurzes Schnippen geht eine Kachel weiter). Listen (Musik, Sender, Laender, Bluetooth)
+  **scrollen** mit dem Finger; ein Wisch nach links/rechts oberhalb der Liste auf Multimedia und Radio springt zum
+  naechsten/vorigen Titel bzw. Sender. In **Settings** verschiebt Ziehen einer Zeile nach oben/unten die Kachel, Tippen
+  blendet sie ein/aus. Zurueck geht es ueber Home in der Statusleiste, lauter/leiser ueber die Lautstaerke-Leiste. Aus
+  Android Auto heraus fuehrt dessen eigener Beenden-/"Zurueck zum Auto"-Knopf im Startbildschirm des Handys ins
+  Startmenue des Radios; die Kachel Android Auto bringt das Handy wieder nach vorn.
+- **Statusleiste** (oben auf allen Seiten des Radios, nach [docs/design/heatunit.svg](docs/design/heatunit.svg)):
+  links die Uhr, rechts die Tonquelle, Lautsprecher, Mikrofon und Home. Die Tonquelle ist der laufende Radiosender
+  bzw. Musiktitel des Radios, sonst der Name des verbundenen Handys (kabellos der Bluetooth-Name wie "Jakob's Flip 8",
+  per USB der Name, den das Handy Android Auto meldet). Tippen auf den **Lautsprecher** schaltet den Ton stumm (wie
+  Stumm; durchgestrichen und grau, solange stumm), auf das **Mikrofon** das Mikrofon (die Aufnahme ist noch nicht
+  angebunden, bisher ist es nur der Schalter), **Home** wirkt wie die Taste HOME.
+- **Bluetooth:** Die gekoppelten Handys mit ihrem Zustand ("Android Auto", "Connected", "Not connected"); das
+  Handy, auf dem Android Auto laeuft, steht oben in Orange. Drehen (oder Pfeil hoch/runter) waehlt, Druecken oder
+  Tippen macht das gewaehlte Handy zum Android-Auto-Handy: die laufende Sitzung endet, das Handy wird ueber Bluetooth
+  neu verbunden und startet Android Auto. Nur unter Linux (kabelloses Android Auto); unter Windows sagt die Seite das.
+  Wer schon eine gemerkte Kachelreihe hat, findet Bluetooth am Ende der Reihe (hinter Settings).
 - **Settings:** Alle Kacheln in ihrer Reihenfolge mit Haekchen. Drehen waehlt, Druecken blendet die Kachel ein
   oder aus (Settings bleibt immer), Pfeil hoch/runter verschiebt sie in der Reihenfolge. Wird gemerkt.
 - **Multimedia (Musikordner):** Spielt Musik aus dem Ordner `HeadUnit` im Musikordner des Benutzers (Windows:
@@ -103,6 +125,9 @@ einer Groesse, ohne sie zu merken (auch fuer die `--test-...`-Laeufe, die sonst 
 - **Audio-Anzeige:** Lautstaerke (30 Stufen), Stumm und je ein Pegel fuer Medien, Navigation und
   System. Die Anzeige zeigt, welche Tonspur des Handys gerade Audio liefert. Lautstaerke und Stumm
   wirken in der App (der Windows-Regler bleibt unberuehrt); mehr Lautstaerke schaltet Stumm aus.
+- **Lautstaerke-Leiste im Bild:** Aendert sich Lautstaerke oder Stumm (Tasten, Tastatur), zeigt der Bildschirm
+  selbst unten fuer 2,5 Sekunden eine Leiste im Stil der Kacheln: Lautsprecher, 30 Segmente, die Zahl; auch ueber
+  dem Bild des Handys. Tippen oder Ziehen auf der Leiste stellt die Lautstaerke ein (und hebt Stumm auf).
 - **Tastatur:** Pfeile (die Pfeile des Reglers), Komma/Punkt (Regler drehen), Enter (Regler druecken), Esc/Rueck
   (Back), Pos1 (Home), F1 Menu, F2 Option,
   F3 Media, F4 Radio, F5 Tel, F6 Nav, F7 Map, F8 CarPlay / Android Auto, Leertaste (Play/Pause),

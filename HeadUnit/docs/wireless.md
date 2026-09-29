@@ -13,7 +13,9 @@ Codevergleich klappt. Danach blieb das Handy bei "Wird mit Android Auto verbunde
 nicht. Vermutete Ursache: das damals **verborgene** WLAN. Android Auto sucht das Netz, dessen Namen es ueber Bluetooth
 bekommen hat, in seiner WLAN-Suche, und ein verborgenes Netz taucht dort nicht mit Namen auf; der funktionierende
 Raspberry-Pi-Adapter [WirelessAndroidAutoDongle](https://github.com/nisargjhaveri/WirelessAndroidAutoDongle) sendet
-seinen Netznamen (hostapd ohne `ignore_broadcast_ssid`). Seitdem ist das WLAN sichtbar. Am Handy noch nicht bestaetigt.
+seinen Netznamen (hostapd ohne `ignore_broadcast_ssid`). Spaeter zeigte sich ein anderer Grund (der Android-Auto-Dienst
+war auf dem belegten RFCOMM-Kanal 8 gar nicht veroeffentlicht), das verborgene WLAN wurde also nie wirklich geprueft.
+Seit 2026-09-28 ist es wieder **verborgen**, mit Rueckfall auf sichtbar (siehe unten). Am Handy noch nicht bestaetigt.
 Ohne Handy getestet (`ctest`): Nachrichtenformat, der Bluetooth-Dialog gegen ein simuliertes Handy, Socket-Transport,
 der Ablauf der Automatik.
 
@@ -39,12 +41,15 @@ Handy                                      HeadUnit (Raspberry Pi), ab Programms
 - **Automatik** (`RunPhoneWatch`): Ein Hintergrund-Ablauf schaut jede Sekunde auf den USB-Bus und wartet dazwischen
   auf Bluetooth. Ein Handy am USB-Kabel bekommt **einmal** Android Auto, wenn es angesteckt wird (auch wenn es beim
   Start schon steckt), und erst nach dem Abziehen wieder. So startet ein Handy, bei dem die Sitzung beendet wurde, nicht
-  sofort neu. Nochmals ohne Abziehen: **Android Auto verbinden** (oder die Kachel Android Auto). Steckt kein Handy am
+  sofort neu. Nochmals ohne Abziehen: die Kachel **Android Auto** (oder die Projektionstaste). Steckt kein Handy am
   Kabel, verbindet dieselbe Taste die gekoppelten Handys kabellos: ein verbundenes wird kurz getrennt und neu
   verbunden, das stoesst Android Auto am Handy neu an. Ein kabelloses Handy kann sich jederzeit selbst neu verbinden. Wird ein Handy waehrend einer kabellosen Sitzung zum Laden angesteckt,
   uebernimmt USB danach nicht.
-- **Verbindung beenden** beendet nur die laufende Sitzung; die Automatik laeuft weiter. Erst das Schliessen des
-  Fensters (oder Ctrl+C, `systemctl stop`) baut WLAN und Bluetooth ab.
+- **Beenden** (Knopf unter dem Bild) schaltet ab wie ein Auto: die Sitzung endet mit Goodbye, der Hotspot und der
+  Bluetooth-Dienst werden abgebaut, dann werden der Bluetooth-Adapter (trennt jedes Handy) und der WLAN-Chip
+  ausgeschaltet (`nmcli radio wifi off`, also auch ein anderes WLAN des Pi; eine SSH-Sitzung ueber WLAN endet) und das
+  Programm schliesst sich. Der naechste Start schaltet beides wieder ein. Das Schliessen des Fensters (oder Ctrl+C,
+  `systemctl stop`) baut nur Hotspot und Bluetooth-Dienst ab; der Pi kehrt dann in sein vorheriges WLAN zurueck.
 - Der **Hotspot kommt vom HeadUnit-Rechner**, nicht vom Handy. Er wird mit NetworkManager (`nmcli`) angelegt, der auch
   die Adressen verteilt (`ipv4.method shared`). Das Handy bekommt Name und Passwort ueber Bluetooth; auswaehlen muss
   man das WLAN nie. Es startet gleichzeitig mit Bluetooth im Hintergrund (`nmcli` braucht einige Sekunden), damit
@@ -54,9 +59,14 @@ Handy                                      HeadUnit (Raspberry Pi), ab Programms
   (`wifi-sec.pmf disable`). NetworkManager bietet sie sonst an, der WLAN-Chip des Pi (brcmfmac) beherrscht sie als
   Access Point aber nicht; ein Handy, das sie nutzt (aktuelle Android-Handys), scheitert dann an der Anmeldung und
   zeigt beim WLAN **"Falsches Passwort"**, obwohl das Passwort stimmt (so am Samsung gesehen).
-- **Sichtbar, nicht verborgen:** Der Netzname wird gesendet; HEATUNIT-AA taucht also in WLAN-Listen auf (wie bei den
-  kabellosen Adaptern und Autos, die mit echten Handys funktionieren). Verborgen (`HEADUNIT_WIFI_HIDDEN=1`) findet
-  Android Auto das Netz in seiner WLAN-Suche vermutlich nicht und bleibt bei "Wird mit Android Auto verbunden" stehen.
+- **Verborgen, mit Rueckfall auf sichtbar:** Der Netzname wird nicht gesendet; HEATUNIT-AA taucht in keiner WLAN-Liste
+  auf. Das Handy braucht ihn nicht zu sehen, es bekommt Name, Passwort und BSSID ueber Bluetooth. Ob Android Auto
+  einem verborgenen Netz beitritt, ist aber nicht sicher (die funktionierenden Adapter senden ihren Namen). Darum:
+  Bekommt ein Handy die WLAN-Daten und tritt nicht bei (es meldet einen Fehler oder meldet sich 60 Sekunden lang nicht),
+  wird das WLAN ab dann **sichtbar** (gemerkt in `wireless/wifiVisible` der Einstellungen, auch fuer spaetere Starts)
+  und startet neu; die gekoppelten Handys werden danach wieder gerufen. Zurueck auf verborgen: den Eintrag loeschen
+  (`~/.config/HeadUnit/HeadUnit.conf`, Abschnitt `[wireless]`, Zeile `wifiVisible=true`). `HEADUNIT_WIFI_HIDDEN=1`
+  bzw. `=0` legt es fest, dann gibt es keinen Rueckfall.
 - **Bluetooth** dient dazu, das Handy zu finden und ihm die WLAN-Daten zu geben. HeadUnit spricht dafuer mit
   BlueZ ueber D-Bus (QtDBus, steckt in `qt6-base-dev`) und schaltet es selbst ein: Adapter einschalten, und wenn er
   per rfkill gesperrt ist (Raspberry Pi OS macht das), zuerst entsperren (ueber `/dev/rfkill`, sonst `sudo -n rfkill`).
@@ -81,6 +91,12 @@ Handy                                      HeadUnit (Raspberry Pi), ab Programms
   22 bis 30 (`kAndroidAutoWirelessChannels`) und behaelt den ersten, auf dem die UUID `4de17a00-...` in der
   Dienstliste des Adapters auftaucht. Das Log sagt es: "service registered on RFCOMM channel 22 (listed in the
   adapter's services)". Das Handy findet den Kanal im Diensteintrag, die Nummer ist ihm gleich.
+- **Bluetooth-Seite, Handy wechseln:** Die Kachel **Bluetooth** listet die gekoppelten Handys (nur Geraete, die BlueZ
+  als Handy fuehrt), ob sie verbunden sind und auf welchem Android Auto laeuft; die Liste kommt bei jeder Kopplung,
+  Verbindung und Trennung und bei Beginn und Ende einer kabellosen Sitzung neu. Waehlt man ein anderes Handy, endet die
+  laufende Sitzung (mit Goodbye), und HeadUnit verbindet das gewaehlte Handy neu (ein verbundenes wird kurz getrennt);
+  Android Auto startet dann dort. Das bisherige Handy bleibt per Bluetooth verbunden, startet Android Auto nach dem
+  Goodbye aber nicht von selbst neu. Log `[BT]`: "Android Auto switches to ...".
 - **Schon verbundenes Handy:** PipeWire verbindet ein gekoppeltes Handy "fuer Anrufe und Audio" von selbst, schon bevor
   HeadUnit laeuft. Android Auto sucht seinen Dienst beim Verbinden; gibt es ihn da noch nicht, bleibt "Wird mit Android
   Auto verbunden" stehen. Darum trennt HeadUnit, sobald alles bereit ist, jedes Handy, das schon vor dem Start verbunden
@@ -167,7 +183,7 @@ anfangen will, entfernt es auch am Pi: `bluetoothctl devices`, dann `bluetoothct
 | `HEADUNIT_BT_NAME` | Bluetooth-Name | `HEATUNIT` |
 | `HEADUNIT_WIFI_SSID` | Name des Hotspots | `HEATUNIT-AA` |
 | `HEADUNIT_WIFI_PASSWORD` | Passwort des Hotspots (8 bis 63 Zeichen) | 16 zufaellige Zeichen, gespeichert in `~/.config/HeadUnit/HeadUnit.conf` |
-| `HEADUNIT_WIFI_HIDDEN` | `1` = Netzname wird nicht gesendet (Android Auto findet das Netz dann vermutlich nicht) | sichtbar |
+| `HEADUNIT_WIFI_HIDDEN` | `1` = Netzname wird nie gesendet, `0` = immer gesendet (beides ohne Rueckfall) | verborgen, sichtbar nach einem gescheiterten Beitritt |
 | `HEADUNIT_WIFI_INTERFACE` | WLAN-Geraet | das erste, das NetworkManager kennt (`wlan0`) |
 | `HEADUNIT_WIFI_BAND` | `a` = 5 GHz, `bg` = 2,4 GHz | `a` |
 | `HEADUNIT_WIFI_CHANNEL` | Kanal | 36 (`a`) bzw. 6 (`bg`) |
@@ -194,11 +210,11 @@ Hotspot ist mit WPA2 geschuetzt; er hat keinen Internetzugang und ist nur fuer d
 | "Der Bluetooth-Dienst fuer Android Auto laesst sich nicht anmelden" | Keine Rechte am System-D-Bus | Nutzer in die Gruppe `bluetooth`: `sudo usermod -aG bluetooth $USER`, neu anmelden |
 | HEATUNIT erscheint am Handy nicht | Nicht sichtbar | `bluetoothctl show` (Discoverable: yes), Log `[BT]` |
 | Am Handy "Keine Kopplung durchgefuehrt" | Kopplung abgelehnt, am Pi nicht bestaetigt oder zu spaet | Im Menue von HeadUnit **Pair** waehlen. Log `[BT]`: steht "pairing with code comparison" da, kommen "Pairing request from ..." und "Pairing confirmed at the head unit"? Wenn nicht: am Pi `bluetoothctl remove <Adresse>` und neu koppeln |
-| "Wird mit Android Auto verbunden" bleibt, im Log kein "opened the Android Auto Wireless service" | Das Handy erreicht den Dienst nicht | Log: steht "service registered on RFCOMM channel ... (listed in the adapter's services)" da? `bluetoothctl show` muss die UUID `4de17a00-...` listen, sonst `journalctl -u bluetooth`; **Android Auto verbinden** druecken (verbindet das Handy neu); am Handy HEATUNIT entkoppeln und neu koppeln |
-| Am Handy steht beim WLAN HEATUNIT-AA "Falsches Passwort" | WPA2-Anmeldung scheitert (PMF, siehe oben), oder das Handy hat ein altes Passwort gespeichert | Neue Version (PMF aus); am Handy HEATUNIT-AA "Vergessen", dann **Android Auto verbinden**. Zur Gegenprobe: `./HeadUnit --test-hotspot` gibt das Passwort aus, von Hand damit beitreten |
-| "Wird mit Android Auto verbunden" bleibt, im Log "Wi-Fi details sent", aber kein "opened the wireless connection" | Das Handy findet oder betritt das WLAN nicht: verborgen, falsches WLAN-Land, Handy ohne 5 GHz, WLAN am Handy aus | `HEADUNIT_WIFI_HIDDEN` nicht setzen; `HEADUNIT_WIFI_BAND=bg`; Log `[WLAN]` zeigt den Status des Handys |
+| "Wird mit Android Auto verbunden" bleibt, im Log kein "opened the Android Auto Wireless service" | Das Handy erreicht den Dienst nicht | Log: steht "service registered on RFCOMM channel ... (listed in the adapter's services)" da? `bluetoothctl show` muss die UUID `4de17a00-...` listen, sonst `journalctl -u bluetooth`; Kachel **Android Auto** waehlen (verbindet das Handy neu); am Handy HEATUNIT entkoppeln und neu koppeln |
+| Am Handy steht beim WLAN HEATUNIT-AA "Falsches Passwort" | WPA2-Anmeldung scheitert (PMF, siehe oben), oder das Handy hat ein altes Passwort gespeichert | Neue Version (PMF aus); am Handy HEATUNIT-AA "Vergessen", dann Kachel **Android Auto**. Zur Gegenprobe: `./HeadUnit --test-hotspot` gibt das Passwort aus, von Hand damit beitreten |
+| "Wird mit Android Auto verbunden" bleibt, im Log "Wi-Fi details sent", aber kein "opened the wireless connection" | Das Handy findet oder betritt das WLAN nicht: verborgen, falsches WLAN-Land, Handy ohne 5 GHz, WLAN am Handy aus | Beim verborgenen WLAN schaltet HeadUnit danach selbst auf sichtbar ("... ab jetzt sichtbar"); sonst `HEADUNIT_WIFI_HIDDEN=0`; `HEADUNIT_WIFI_BAND=bg`; Log `[WLAN]` zeigt den Status des Handys |
 | Handy ist im WLAN, Android Auto startet nicht | Port 5288 blockiert | `sudo ss -ltnp \| grep 5288`; Firewall pruefen |
-| Handy am USB-Kabel startet nicht erneut | Absicht: ein Handy bekommt einen Versuch pro Anstecken | Kabel neu anstecken oder **Android Auto verbinden** |
+| Handy am USB-Kabel startet nicht erneut | Absicht: ein Handy bekommt einen Versuch pro Anstecken | Kabel neu anstecken oder Kachel **Android Auto** |
 
 **Das Log lesen:** Jeder Schritt steht in `headunit.log` (im Ordner, aus dem HeadUnit gestartet wurde), die Automatik
 unter `[WATCH]`, Bluetooth unter `[BT]`, der Dialog und das WLAN unter `[WLAN]`, die Sitzung unter `[AA]`:
@@ -219,9 +235,10 @@ zeigt, wo es haengt.
 
 - **Kopplungsseite im Menue:** unter Windows im Bild geprueft (`HEADUNIT_TEST_PAIRING=1 HeadUnit --smoke-test`), mit
   einem Handy noch nicht.
-- **Sichtbares WLAN:** Dass Android Auto mit dem sichtbaren WLAN bis zur Sitzung kommt, ist am Handy noch nicht
-  bestaetigt (der Verdacht gegen das verborgene WLAN stuetzt sich auf den Vergleich mit WirelessAndroidAutoDongle, nicht
-  auf ein Log).
+- **Handy wechseln:** Mit zwei gekoppelten Handys noch nicht geprueft (nur ein Handy vorhanden); ob das alte Handy nach
+  dem Goodbye wirklich ruhig bleibt, zeigt erst der Versuch.
+- **Verborgenes WLAN:** Ob Android Auto dem verborgenen WLAN beitritt, ist am Handy noch nicht bestaetigt. Wenn nicht,
+  greift der Rueckfall auf sichtbar; im Fenster steht dann "Das Handy ist dem verborgenen WLAN nicht beigetreten".
 - **Neu verbinden:** Ob das Trennen und Neuverbinden eines schon verbundenen Handys Android Auto zuverlaessig neu
   anstoesst, ist noch nicht bestaetigt. Sonst hilft von Hand: am Handy Bluetooth aus- und wieder einschalten.
 - **Freisprechen (HFP):** Ein echtes Auto bietet auch Freisprechen und Audio an. Auf Raspberry Pi OS mit Desktop

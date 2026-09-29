@@ -190,4 +190,12 @@ void RemoveLeftoverHotspot(Logger& logger)
     DeleteConnectionProfile(20s);
     logger.Write(LogLevel::Info, "WLAN", "Removed the hotspot an earlier run left behind");
 }
+
+// Switches the Wi-Fi chip off (nmcli radio wifi off), also for other networks; Hotspot::Start switches it on again.
+void SwitchWifiOff(Logger& logger)
+{
+    const auto result = RunCommand({"nmcli", "radio", "wifi", "off"}, 10s);
+    if (result.isStarted && result.exitCode == 0) logger.Write(LogLevel::Info, "WLAN", "Wi-Fi switched off");
+    else logger.Write(LogLevel::Warning, "WLAN", "Switching the Wi-Fi off failed: " + Brief(result));
+}
 }

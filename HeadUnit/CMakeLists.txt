@@ -19,7 +19,8 @@ add_library(headunit_core src/CommandLine.cpp src/logging/LogLevel.cpp src/loggi
   src/androidauto/ConsoleController.cpp src/androidauto/DisplayConfig.cpp src/androidauto/PhoneScreenDetector.cpp src/androidauto/ProjectionInput.cpp
   src/androidauto/TouchMapping.cpp src/androidauto/TransportReceiveBuffer.cpp
   src/audio/AudioClock.cpp src/audio/PcmFormat.cpp src/audio/Pcm16.cpp src/audio/PcmRingBuffer.cpp src/audio/AudioState.cpp src/audio/MediaActivity.cpp
-  src/audio/WatchedOutput.cpp src/media/MusicLibrary.cpp src/media/StreamText.cpp src/ui/KnobZones.cpp src/ui/HomeTileSetup.cpp src/ui/HomeMenuLayout.cpp)
+  src/audio/WatchedOutput.cpp src/media/MusicLibrary.cpp src/media/StreamText.cpp src/ui/KnobZones.cpp src/ui/HomeTileSetup.cpp src/ui/HomeMenuLayout.cpp
+  src/ui/BluetoothPhones.cpp src/ui/TouchDrag.cpp src/remote/RemoteCommand.cpp)
 target_include_directories(headunit_core PUBLIC src)
 target_compile_definitions(headunit_core PRIVATE $<$<CONFIG:DebugLevelLog,ReleaseLevelLog>:HEADUNIT_VERBOSE_LOGGING>)
 if(MSVC)
@@ -113,8 +114,9 @@ if(HEADUNIT_BUILD_APP)
   add_executable(HeadUnit src/main.cpp src/platform/ShutdownSignal.cpp src/radio/RadioBrowser.cpp
     src/ui/MainWindow.cpp src/ui/ScriptedPhoneTest.cpp src/ui/VideoWidget.cpp src/ui/RotaryKnob.cpp src/ui/AudioDisplay.cpp src/ui/CarPanel.cpp
     src/ui/MenuStyle.cpp src/ui/MenuPage.cpp src/ui/HomeMenu.cpp src/ui/SettingsPage.cpp src/ui/PairingPage.cpp src/ui/PlayerPage.cpp
-    src/ui/MultimediaPage.cpp src/ui/RadioPage.cpp)
+    src/ui/MultimediaPage.cpp src/ui/RadioPage.cpp src/ui/BluetoothPage.cpp src/ui/VolumeOverlay.cpp src/remote/RemoteServer.cpp)
   target_link_libraries(HeadUnit PRIVATE headunit_usb headunit_media Qt6::Widgets Qt6::Concurrent Qt6::Network)
+  target_compile_definitions(HeadUnit PRIVATE $<$<CONFIG:Release,ReleaseLevelLog>:HEADUNIT_KIOSK>)
   if(HEADUNIT_WIRELESS_ENABLED)
     target_link_libraries(HeadUnit PRIVATE headunit_wireless)
   endif()
@@ -142,7 +144,7 @@ endif()
 if(BUILD_TESTING)
   add_executable(CoreTests tests/CoreTests.cpp tests/TestSupport.cpp tests/UsbDescriptorTests.cpp tests/AoaTests.cpp tests/AutoConnectTests.cpp
     tests/PhoneWatchTests.cpp tests/DisplayTests.cpp tests/ConsoleTests.cpp tests/AudioTests.cpp tests/MenuTests.cpp tests/MediaTests.cpp
-    tests/LoggingTests.cpp tests/CommandLineTests.cpp tests/TransportBufferTests.cpp)
+    tests/LoggingTests.cpp tests/CommandLineTests.cpp tests/TransportBufferTests.cpp tests/RemoteCommandTests.cpp)
   target_link_libraries(CoreTests PRIVATE headunit_core)
   add_test(NAME CoreTests COMMAND CoreTests)
   if(HEADUNIT_BUILD_APP)

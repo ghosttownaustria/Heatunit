@@ -120,21 +120,43 @@ void HomeMenu::DisplayChanged()
     m_scroll = m_targetScroll = HomeMenuScroll(m_focus, Width(), Count());
 }
 
-// A press on a tile or an edge arrow lights it until the release.
+// A press on a tile or an edge arrow lights it until the release; it may also become a swipe.
 void HomeMenu::mousePressEvent(QMouseEvent* event)
 {
     if (event->button() != Qt::LeftButton) return;
     const Spot spot = SpotAt(event->position());
     if (spot.tile || spot.edge != 0) m_pressed = spot;
+    if (const auto point = ToDesign(event->position())) {
+        m_drag.Press(point->x(), point->y());
+        m_dragScroll = m_scroll;
+    }
     update();
 }
 
-// Like a button: it acts when the click also ends on it. A tile keeps the focus afterwards.
+// A swipe moves the row with the finger (no further than its ends); nothing is lit meanwhile.
+void HomeMenu::mouseMoveEvent(QMouseEvent* event)
+{
+    const auto point = ToDesign(event->position());
+    if (!point || !m_drag.Move(point->x(), point->y())) return;
+    m_pressed.reset();
+    m_scrollAnimation->stop();
+    m_scroll = std::clamp(m_dragScroll - m_drag.DeltaX(), 0.0, std::max(0.0, HomeRowWidth(Count()) - Width()));
+    update();
+}
+
+// Like a button: it acts when the click also ends on it. A tile keeps the focus afterwards. After a swipe the tile in
+// the middle gets the focus, and the row slides there from where the finger left it.
 void HomeMenu::mouseReleaseEvent(QMouseEvent* event)
 {
     if (event->button() != Qt::LeftButton) return;
+    m_drag.Release();
     const auto pressed = std::exchange(m_pressed, std::nullopt);
     update();
+    if (m_drag.IsDragging()) {
+        m_targetScroll = -1;   // the row is where the finger left it, not where the focus had put it
+        Focus(SwipeFocus(m_focus, m_scroll, Width(), Count(), m_drag.DeltaX()));
+        return;
+    }
     if (!pressed || *pressed != SpotAt(event->position())) return;
     if (pressed->edge != 0) {
         Move(pressed->edge);

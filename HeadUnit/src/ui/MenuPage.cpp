@@ -1,18 +1,23 @@
 #include "ui/MenuPage.h"
 #include "ui/HomeMenuLayout.h"
 #include "ui/MenuStyle.h"
+#include <QFontMetricsF>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QTime>
 #include <QTimer>
+#include <utility>
 
 namespace headunit {
 namespace {
 const QPointF kClockPosition(12.249, 62.337);   // start of the baseline
 }
 
-// A page with its clock, which updates once a minute (checked every second).
+// A page with its clock, which updates once a minute (checked every second). The page watches its own mouse events,
+// so that the status bar gets its touches before the page.
 MenuPage::MenuPage(QWidget* parent) : QWidget(parent)
 {
+    installEventFilter(this);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     setCursor(Qt::PointingHandCursor);
     auto* clock = new QTimer(this);
@@ -27,6 +32,20 @@ void MenuPage::SetDisplay(const DisplayConfig& display)
     m_display = display;
     DisplayChanged();
     update();
+}
+
+// What the status bar shows; redrawn when it changed.
+void MenuPage::SetStatus(const StatusState& status)
+{
+    if (status == m_status) return;
+    m_status = status;
+    update();
+}
+
+// Who acts on a touch of the status bar's speaker, microphone or home.
+void MenuPage::SetStatusHandler(std::function<void(StatusButton)> handler)
+{
+    m_onStatus = std::move(handler);
 }
 
 // Back while the page is in front; true when the page took it itself (closing a list it opened).
@@ -90,14 +109,66 @@ void MenuPage::paintEvent(QPaintEvent*)
     painter.setFont(menu::Font(menu::kFontSize));
     painter.setPen(menu::kText);
     painter.drawText(kClockPosition, m_clock);
+    PaintStatus(painter);
     Paint(painter);
+}
+
+// A press on the status bar's symbols is theirs: lit while the finger is on it, acting when it is lifted there. The
+// page never sees it.
+bool MenuPage::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched != this) return QWidget::eventFilter(watched, event);
+    const auto type = event->type();
+    if (type != QEvent::MouseButtonPress && type != QEvent::MouseMove && type != QEvent::MouseButtonRelease && type != QEvent::MouseButtonDblClick)
+        return QWidget::eventFilter(watched, event);
+    const auto* mouse = static_cast<QMouseEvent*>(event);
+    if (type == QEvent::MouseButtonPress || type == QEvent::MouseButtonDblClick) {
+        if (mouse->button() != Qt::LeftButton) return false;
+        m_statusPressed = StatusButtonUnder(mouse->position());
+        if (m_statusPressed) update();
+        return m_statusPressed.has_value();
+    }
+    if (!m_statusPressed) return false;
+    if (type == QEvent::MouseButtonRelease && mouse->button() == Qt::LeftButton) {
+        const auto pressed = std::exchange(m_statusPressed, std::nullopt);
+        update();
+        if (StatusButtonUnder(mouse->position()) == pressed && m_onStatus) m_onStatus(*pressed);
+    }
+    return true;
 }
 
 // Where the display is drawn: its shape, as large as the widget allows and centred, like the phone's picture.
 QRectF MenuPage::ScreenRect() const
 {
-    const QSizeF shown = QSizeF(m_display.width, m_display.height).scaled(QSizeF(size()), Qt::KeepAspectRatio);
-    return QRectF(QPointF((width() - shown.width()) / 2, (height() - shown.height()) / 2), shown);
+    return menu::ScreenRectIn(QSizeF(size()), m_display);
+}
+
+// The right side of the status bar: the sound's source (shortened to fit), the speaker, the microphone and home.
+void MenuPage::PaintStatus(QPainter& painter) const
+{
+    const double width = Width();
+    if (!m_status.source.empty()) {
+        const QFont font = menu::Font(menu::kFontSize);
+        const QString source = menu::Elided(QString::fromStdString(m_status.source), font, StatusSourceMaxWidth(width));
+        painter.setFont(font);
+        painter.setPen(menu::kText);
+        painter.drawText(QPointF(StatusSourceRight(width) - QFontMetricsF(font).horizontalAdvance(source), kStatusBaseline), source);
+    }
+    const auto draw = [&](StatusButton button, menu::Icon icon, bool isStruck) {
+        const StatusBox box = StatusIconBox(button, width);
+        menu::DrawIcon(painter, icon, QRectF(box.left, box.top, box.width, box.height), isStruck, m_statusPressed == button);
+    };
+    draw(StatusButton::Speaker, menu::Icon::Speaker, m_status.isMuted);
+    draw(StatusButton::Microphone, menu::Icon::Microphone, m_status.isMicrophoneMuted);
+    draw(StatusButton::Home, menu::Icon::Home, false);
+}
+
+// The status bar's symbol at a widget position, if any.
+std::optional<StatusButton> MenuPage::StatusButtonUnder(const QPointF& position) const
+{
+    const auto point = ToDesign(position);
+    if (!point) return std::nullopt;
+    return StatusButtonAt(point->x(), point->y(), Width());
 }
 
 // Redraws when the minute changed.

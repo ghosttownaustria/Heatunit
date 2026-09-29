@@ -17,10 +17,13 @@ struct CommandLine {
     RunMode mode{RunMode::Window};
     std::optional<DisplayConfig> display;
     bool isWirelessRequested{};   // --wireless: accepted for old launchers, wireless Android Auto runs anyway
+    std::optional<int> apiPort;   // --api-port: the port of the remote API (0 switches it off)
     bool isHelpRequested{};
     std::string error;            // why the arguments were refused; empty when they were accepted
 };
 
+// A TCP port number from 0 to 65535, or nothing for any other text.
+std::optional<int> ParsePort(std::string_view text);
 CommandLine ParseCommandLine(const std::vector<std::string_view>& arguments, bool hasWireless);
 std::string CommandLineHelp(bool hasWireless);
 }

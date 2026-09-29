@@ -93,7 +93,9 @@ void TestConsoleController() {
     effect = console.Press(ConsoleKey::Back);
     Check(console.CurrentScreen() == Screen::RadioHome && effect.phoneKeys.empty(), "Back on the settings did not return to the home menu");
     console.Press(ConsoleKey::Menu);
-    Check(ConsoleController::IsRadioPage(Screen::Settings) && ConsoleController::IsRadioScreen(Screen::RadioHome) && ConsoleController::IsRadioScreen(Screen::Radio) &&
+    effect = console.Open(Screen::Bluetooth);
+    Check(console.CurrentScreen() == Screen::Bluetooth && !effect.message.empty(), "The Bluetooth tile did not open its page");
+    Check(ConsoleController::IsRadioPage(Screen::Bluetooth) && ConsoleController::IsRadioPage(Screen::Settings) && ConsoleController::IsRadioScreen(Screen::RadioHome) && ConsoleController::IsRadioScreen(Screen::Radio) &&
         !ConsoleController::IsRadioScreen(Screen::ProjectionHome) && ConsoleController::IsRadioPage(Screen::Multimedia) &&
         !ConsoleController::IsRadioPage(Screen::RadioHome), "The radio's screens are not told apart");
     effect = console.Press(ConsoleKey::Projection);

@@ -2,13 +2,14 @@
 #include "androidauto/AndroidDeviceDetector.h"
 #include "audio/AudioEngine.h"
 #include "logging/Logger.h"
+#include "platform/BuildProfile.h"
+#include "platform/Environment.h"
 #include "platform/ShutdownSignal.h"
 #include "ui/MainWindow.h"
 #include "usb/AndroidUsbProbe.h"
 #include "usb/DriverRepair.h"
 #include "usb/UsbBackendFactory.h"
 #ifdef HEADUNIT_WIRELESS
-#include "platform/Environment.h"
 #include "wireless/Hotspot.h"
 #include "wireless/WirelessDiagnostics.h"
 #endif
@@ -33,6 +34,7 @@ constexpr bool kHasWireless = true;
 constexpr bool kHasWireless = false;
 #endif
 constexpr int kCloseCheckIntervalMs = 200;
+constexpr int kDefaultApiPort = 47050;
 
 // Plays two seconds of a quiet 440 Hz tone through this platform's audio engine, at the pace of a live stream: a check
 // of the sound output that needs no phone. Succeeds when the output device took most of the audio.
@@ -132,6 +134,26 @@ MainWindow::TestMode TestModeOf(RunMode mode)
     }
 }
 
+// Whether the window is the car's full-screen one: in a release build, for the car mode (and the smoke test, which shows
+// what the car shows). HEADUNIT_KIOSK=1 / 0 switches it on / off in any build, for development.
+bool IsCarWindow(MainWindow::TestMode mode)
+{
+    if (mode != MainWindow::TestMode::None && mode != MainWindow::TestMode::Smoke) return false;
+    if (const auto setting = GetEnv("HEADUNIT_KIOSK"); setting && !setting->empty()) return *setting != "0";
+    return kIsKioskBuild;
+}
+
+// The remote API's port: --api-port, else HEADUNIT_API_PORT, else the default; 0 means the API is off.
+int ApiPort(const CommandLine& commandLine)
+{
+    if (commandLine.apiPort) return *commandLine.apiPort;
+    if (const auto setting = GetEnv("HEADUNIT_API_PORT"); setting && !setting->empty()) {
+        if (const auto port = ParsePort(*setting)) return *port;
+        std::cerr << "HEADUNIT_API_PORT is not a port number; the default " << kDefaultApiPort << " is used\n";
+    }
+    return kDefaultApiPort;
+}
+
 // The window, in the car mode or one of its test modes, until it closes. Closing properly (also on Ctrl+C or a service
 // stop) ends a running session and takes the wireless mode's hotspot down again.
 int RunWindow(int argc, char* argv[], IUsbBackend& backend, Logger& logger, const CommandLine& commandLine)
@@ -141,9 +163,16 @@ int RunWindow(int argc, char* argv[], IUsbBackend& backend, Logger& logger, cons
     RemoveLeftoverHotspot(logger);
 #endif
     QApplication application(argc, argv);
-    MainWindow window(backend, logger, TestModeOf(commandLine.mode));
+    const MainWindow::TestMode testMode = TestModeOf(commandLine.mode);
+    MainWindow window(backend, logger, testMode);
+    const bool isCarWindow = IsCarWindow(testMode);
+    if (isCarWindow) window.EnterKioskMode();
     if (commandLine.display) window.SetDisplay(*commandLine.display);
-    window.show();
+    if (testMode == MainWindow::TestMode::None || testMode == MainWindow::TestMode::Smoke) {
+        if (const int port = ApiPort(commandLine); port != 0) window.StartRemoteApi(port);
+    }
+    if (isCarWindow) window.showFullScreen();
+    else window.show();
     if (commandLine.isWirelessRequested) logger.Write(LogLevel::Info, "APP", "--wireless: wireless Android Auto runs from the start anyway");
     InstallShutdownSignalHandlers();
     QTimer closeWatch;

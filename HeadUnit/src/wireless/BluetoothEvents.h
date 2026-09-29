@@ -1,6 +1,8 @@
 #pragma once
+#include "ui/BluetoothPhones.h"
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace headunit {
 // A phone asks to pair. It shows `code` and asks its user to confirm; a car shows the same code and asks too.
@@ -19,5 +21,8 @@ struct BluetoothEvents {
     std::function<void(const PairingRequest&)> onPairingRequest;
     // The pairing request has ended (answered, cancelled by the phone, timed out): the question can go.
     std::function<void()> onPairingEnd;
+    // The paired phones, whenever one pairs, connects or disconnects, or Android Auto starts or ends on one; empty once
+    // the service stops.
+    std::function<void(const std::vector<BluetoothPhone>&)> onPhonesChanged;
 };
 }

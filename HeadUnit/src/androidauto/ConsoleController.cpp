@@ -62,6 +62,7 @@ ConsoleEffect ConsoleController::Open(Screen page)
     case Screen::Multimedia: m_screen = page; return Message("Multimedia: Musikordner");
     case Screen::Radio: m_screen = page; return Message("Radio: Internetradio");
     case Screen::Settings: m_screen = page; return Message("Settings: Kacheln des Startmenues");
+    case Screen::Bluetooth: m_screen = page; return Message("Bluetooth: gekoppelte Handys");
     case Screen::RadioHome: m_screen = page; return Message("Radio-Startmenue");
     default: return {};
     }

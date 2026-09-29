@@ -61,11 +61,12 @@ void BluetoothContext::EndPairing(bool isRefusing)
 }
 
 // A phone opened the Android Auto service: its connected socket waits for WaitForPhone.
-void BluetoothContext::AddPhone(int fd)
+void BluetoothContext::AddPhone(int fd, const QString& devicePath)
 {
     {
         std::lock_guard lock(m_mutex);
         m_phones.push_back(fd);
+        m_phonePaths[fd] = devicePath;
     }
     m_hasPhone.notify_all();
 }
@@ -84,8 +85,50 @@ int BluetoothContext::WaitForPhone(std::chrono::milliseconds timeout)
 void BluetoothContext::CloseWaitingPhones()
 {
     std::lock_guard lock(m_mutex);
-    for (const int fd : m_phones) ::close(fd);
+    for (const int fd : m_phones) {
+        ::close(fd);
+        m_phonePaths.erase(fd);
+    }
     m_phones.clear();
+}
+
+// The device whose Android Auto socket `fd` is (empty for an unknown socket).
+QString BluetoothContext::PhonePathOf(int fd)
+{
+    std::lock_guard lock(m_mutex);
+    const auto found = m_phonePaths.find(fd);
+    return found != m_phonePaths.end() ? found->second : QString();
+}
+
+// Notes the phone a wireless session runs on (empty: none runs).
+void BluetoothContext::SetAndroidAutoPhone(const QString& devicePath)
+{
+    std::lock_guard lock(m_mutex);
+    m_androidAutoPhone = devicePath;
+}
+
+// Tells the window which phones are paired, which are connected and which one runs Android Auto (service thread; it
+// asks BlueZ).
+void BluetoothContext::PublishPhones()
+{
+    if (!m_events.onPhonesChanged) return;
+    QString androidAutoPhone;
+    {
+        std::lock_guard lock(m_mutex);
+        androidAutoPhone = m_androidAutoPhone;
+    }
+    auto bus = QDBusConnection::systemBus();
+    std::vector<BluetoothPhone> phones;
+    for (const auto& device : bluez::ReadBluez(bus).paired) {
+        if (device.isPhone) phones.push_back({bluez::Text(device.path), device.name, device.isConnected, device.path == androidAutoPhone});
+    }
+    m_events.onPhonesChanged(phones);
+}
+
+// Tells the window that no phones can be listed (the service stopped).
+void BluetoothContext::PublishNoPhones() const
+{
+    if (m_events.onPhonesChanged) m_events.onPhonesChanged({});
 }
 
 // Notes a phone that was connected before the service existed (service thread).

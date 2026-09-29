@@ -6,7 +6,8 @@
 #include <cstdint>
 
 namespace headunit {
-// The simulated car audio system: master volume in radio-style steps, mute, and per-stream activity for the display.
+// The simulated car audio system: master volume in radio-style steps, mute, the microphone's mute, and per-stream
+// activity for the display.
 // Shared by the output threads and the window.
 class AudioState {
 public:
@@ -24,6 +25,8 @@ public:
     void ChangeVolume(int delta);
     void SetMuted(bool isMuted);
     void ToggleMute();
+    bool IsMicrophoneMuted() const;
+    void ToggleMicrophoneMute();
     float Gain() const;
     void ReportAudio(AudioKind kind, float peak, std::size_t bytes);
     Meter ReadMeter(AudioKind kind);
@@ -42,6 +45,7 @@ private:
 
     std::atomic<int> m_volume{15};
     std::atomic_bool m_isMuted{false};
+    std::atomic_bool m_isMicrophoneMuted{false};
     std::array<StreamMeter, kAudioKindCount> m_meters;
 };
 }

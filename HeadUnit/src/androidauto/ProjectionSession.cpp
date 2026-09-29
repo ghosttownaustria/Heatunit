@@ -175,6 +175,7 @@ void ProjectionSession::onServiceDiscoveryRequest(const control::ServiceDiscover
     const VideoLayout layout = VideoLayoutOf(display);
     const std::string frame = layout.HasMargins() ? " (" + std::to_string(layout.codecWidth) + "x" + std::to_string(layout.codecHeight) + " frame, margins " +
         std::to_string(layout.marginWidth) + "x" + std::to_string(layout.marginHeight) + ")" : std::string();
+    if (m_callbacks.onPhoneName) m_callbacks.onPhoneName(!request.device_name().empty() ? request.device_name() : request.label_text());
     Status("Service discovery received from " + request.device_name() + "; advertising video " + DisplayText(display) + " at " +
         std::to_string(DisplayDensity(display)) + " dpi" + frame + ", audio, microphone, sensors and touch");
     const auto response = BuildServiceDiscoveryResponse(display);
@@ -271,9 +272,14 @@ void ProjectionSession::onMediaIndication(const aasdk::common::DataConstBuffer& 
     onMediaWithTimestampIndication(0, buffer);
 }
 
-// The phone asks for the video focus: granted.
-void ProjectionSession::onVideoFocusRequest(const video::VideoFocusRequestNotification&)
+// The phone asks for the video focus: granted. When it asks for the car's own screen (the exit button in its launcher),
+// the window shows the radio's home menu; the picture keeps coming, so going back to the phone needs nothing more.
+void ProjectionSession::onVideoFocusRequest(const video::VideoFocusRequestNotification& request)
 {
+    if (request.mode() == video::VIDEO_FOCUS_NATIVE) {
+        Status("The phone asked for the car's own screen");
+        if (m_callbacks.onNativeScreen) m_callbacks.onNativeScreen();
+    }
     FocusVideo();
     m_video->receive(shared_from_this());
 }

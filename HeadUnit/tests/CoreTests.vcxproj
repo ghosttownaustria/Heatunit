@@ -37,6 +37,7 @@
     <ClCompile Include="LoggingTests.cpp" />
     <ClCompile Include="CommandLineTests.cpp" />
     <ClCompile Include="TransportBufferTests.cpp" />
+    <ClCompile Include="RemoteCommandTests.cpp" />
     <ClCompile Include="..\src\CommandLine.cpp" />
     <ClCompile Include="..\src\logging\LogLevel.cpp" />
     <ClCompile Include="..\src\logging\Logger.cpp" />
@@ -65,9 +66,12 @@
     <ClCompile Include="..\src\audio\WatchedOutput.cpp" />
     <ClCompile Include="..\src\media\MusicLibrary.cpp" />
     <ClCompile Include="..\src\media\StreamText.cpp" />
+    <ClCompile Include="..\src\ui\BluetoothPhones.cpp" />
     <ClCompile Include="..\src\ui\KnobZones.cpp" />
     <ClCompile Include="..\src\ui\HomeTileSetup.cpp" />
     <ClCompile Include="..\src\ui\HomeMenuLayout.cpp" />
+    <ClCompile Include="..\src\ui\TouchDrag.cpp" />
+    <ClCompile Include="..\src\remote\RemoteCommand.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>

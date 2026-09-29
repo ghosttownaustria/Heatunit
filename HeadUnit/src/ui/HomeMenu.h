@@ -1,6 +1,7 @@
 #pragma once
 #include "ui/HomeMenuEntry.h"
 #include "ui/MenuPage.h"
+#include "ui/TouchDrag.h"
 #include <functional>
 #include <optional>
 #include <vector>
@@ -11,8 +12,9 @@ namespace headunit {
 // The radio's home menu (layout in HomeMenuLayout.h, look from docs/design/home-menu.svg): the row of tiles the user has
 // chosen, the focused one in the middle, arrows at the edges where more tiles follow and the bar at the bottom. Turning
 // the knob moves the focus, pushing it opens the focused tile; the left and right arrows move the focused tile itself
-// one place along the row (the window stores the new order and hands the tiles back). A click on a tile opens it, a
-// click on an edge arrow moves the focus that way.
+// one place along the row (the window stores the new order and hands the tiles back). A tap on a tile opens it, a tap
+// on an edge arrow moves the focus that way; swiping moves the row with the finger, and the tile that ends up in the
+// middle gets the focus.
 class HomeMenu final : public MenuPage {
 public:
     explicit HomeMenu(QWidget* parent = nullptr);
@@ -31,6 +33,7 @@ protected:
     void Paint(QPainter& painter) override;
     void DisplayChanged() override;
     void mousePressEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
 
@@ -52,6 +55,8 @@ private:
     double m_targetScroll{};
     QVariantAnimation* m_scrollAnimation{};
     int m_wheelCarry{};
+    TouchDrag m_drag;
+    double m_dragScroll{};              // the scroll when the finger went down
 
     Spot SpotAt(const QPointF& position) const;
     int Count() const;

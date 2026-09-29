@@ -31,6 +31,8 @@ public:
     int WaitForPhone(std::chrono::milliseconds timeout);
     bool ReconnectPhones();
     AutoConnectResult Serve(int rfcommFd, std::atomic_bool& isStopRequested, ProjectionCallbacks callbacks);
+    void SwitchToPhone(const std::string& devicePath);
+    void SwitchRadiosOff();
 
 private:
     using Clock = std::chrono::steady_clock;
@@ -63,5 +65,6 @@ private:
     void CheckWifi(std::chrono::milliseconds wait = std::chrono::milliseconds::zero());
     void KeepRunning();
     void WaitForWifi(const std::atomic_bool& isStopRequested);
+    void ShowWifi();
 };
 }

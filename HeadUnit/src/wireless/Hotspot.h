@@ -10,9 +10,10 @@ struct HotspotConfig {
     std::string password;        // WPA2, 8 to 63 characters
     std::string band{"a"};       // "a" = 5 GHz, "bg" = 2.4 GHz
     int channel{36};
-    // The name is not broadcast. Off by default: Android Auto looks for the network it was told about over Bluetooth in
-    // its Wi-Fi scan, and a hidden network does not show up there by name (the working wireless adapters broadcast theirs).
-    bool isHidden{false};
+    // The name is not broadcast, so the network does not show up in anybody's Wi-Fi list; the phone gets its name over
+    // Bluetooth anyway. Whether Android Auto joins a hidden network is not certain, so WirelessStation falls back to a
+    // visible one when a phone that got the details does not join (see WirelessSettings).
+    bool isHidden{true};
 };
 
 // The running hotspot, as the phone is told about it.
@@ -44,4 +45,5 @@ private:
 };
 
 void RemoveLeftoverHotspot(Logger& logger);
+void SwitchWifiOff(Logger& logger);
 }

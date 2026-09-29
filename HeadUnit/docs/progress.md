@@ -1,5 +1,97 @@
 # Progress
 
+## 2026-09-29: remote API and GPIO bridge
+
+The functions of the simulated console can be driven by other programs (design: `docs/superpowers/specs/2026-09-29-remote-api-design.md`, use: `docs/api.md`).
+
+- **Remote API**: JSON lines over TCP on 127.0.0.1:47050 (`--api-port`, `HEADUNIT_API_PORT`, 0 = off): console keys, knob
+  (push, arrows, rotate), media keys, volume, mute, `status`. Portable `RemoteCommand` + Qt `RemoteServer`; wired in
+  `MainWindow::StartRemoteApi`, in the normal mode and `--smoke-test`.
+  - Verified here: CoreTests (`RemoteCommandTests`, `TestApiPort`) pass, build without warnings (MSBuild Debug x64); the
+    running debug app answered every command over TCP (volume 15 -> 18, mute, menu, Back, errors for garbage and unknown
+    names) and logged the console lines. Default port 5040 turned out to be taken on Windows ("address protected"), hence 47050.
+  - Not verified: Linux build (CMake/CI), Pi, the release/kiosk build with the API, several clients at once.
+- **`GpioBridge.py`** (repository root, one file): tkinter window with the real buttons, the encoder and a connection
+  indicator; forwards to the API, runs alone for testing (window fields clickable). GPIO through gpiozero.
+  - Verified here: against the running app on Windows, the window showed "Verbunden" and a HOME sent from it reached
+    the app; the link logic against a fake server. Not verified: the real GPIO pins and the encoder direction on the Pi
+    (use `--invert-rotation` if it turns the wrong way), tkinter/gpiozero on Raspberry Pi OS.
+
+## 2026-09-29: quit in the settings, full screen in release
+
+From the user's list; one commit per point.
+
+- **Quit in the Settings tile**: `SettingsPage` has a "Quit" button below the tile list (the last stop of the knob, a
+  tap works too). It calls the same `MainWindow::Quit` as the button under the window's picture, so the radio can be
+  quit without the window's controls.
+  - Verified here: `windows-debug` builds without warnings; `HEADUNIT_TEST_PAGE=Settings --smoke-test` picture at
+    1600x600 shows the button below the eight rows. Not verified: the tap and the knob on the Pi.
+- **Car window in release builds**: the release profiles (`release`, `release_level_log`; define `HEADUNIT_KIOSK`, set in
+  `CMakeLists.txt` and `msbuild/Common.props`) start `MainWindow::EnterKioskMode` and `showFullScreen`: no frame, no
+  simulated console, display choice, Beenden button or history, no mouse cursor. The display is picked from the screen's
+  pixel size (`BestDisplayFor`: closest shape, then closest height; `--display` still overrides). Close requests of the
+  window manager (Alt+F4, a task switcher; `QCloseEvent::spontaneous`) are refused; the Quit button in the settings, and
+  SIGINT/SIGTERM (service stop, shutdown), still end the program. `HEADUNIT_KIOSK=1` / `0` forces the mode on / off in any
+  build (for development); test modes other than `--smoke-test` never use it.
+  - Verified here: builds without warnings, CoreTests (`TestBestDisplay`) and ProtocolTests pass; a debug build with
+    `HEADUNIT_KIOSK=1 --smoke-test` on a 3840x2160 screen showed the settings page over the full screen, display 1920x1080.
+    Not verified: a release build, Alt+F4 / other shortcuts on the Pi. Keys that the desktop itself handles (Ctrl+Alt+T, a
+    panel, TTY switching) are not the program's to block; for a real kiosk run it in a session without a desktop.
+
+## 2026-09-28 (night): quit button, hidden Wi-Fi, volume bar, Bluetooth tile, status bar, touch
+
+From the user's list and the new design `docs/design/heatunit.svg` (status bar, Bluetooth tile); one commit per point.
+
+- **Beenden** (the button under the picture, where "Android Auto verbinden" / "Verbindung beenden" was): quits like
+  switching a car off. The session ends with its goodbye, the watch ends, and on Linux `WirelessStation::SwitchRadiosOff`
+  takes the station down and switches the Bluetooth adapter (`Powered` false, drops every phone) and the Wi-Fi chip
+  (`nmcli radio wifi off`) off; then the window closes. The next start switches both on again (as before:
+  `PowerOn`, `nmcli radio wifi on`). Closing the window otherwise still only takes the hotspot and the service down.
+  Connecting again is the Android Auto tile or the projection key; the texts that named the old button say so.
+  - Verified here: `windows-debug` builds without warnings, CoreTests and ProtocolTests pass; the Linux sources passed
+    the syntax check against POSIX stubs. Not verified: the click itself and the radios going off on the Pi.
+- **Hidden Wi-Fi HEATUNIT-AA** (asked for "only if possible and nothing breaks"): the hotspot is hidden again by
+  default. The earlier switch to a visible network rested on a suspicion that was never tested (the real cause then was
+  the unpublished RFCOMM service), so it is unknown whether Android Auto joins a hidden network. To keep wireless
+  working either way, the fallback of 2026-09-27 is back: when a phone got the Wi-Fi details and did not join,
+  `WirelessStation::ShowWifi` broadcasts the name from then on (`wireless/wifiVisible` in `QSettings`), restarts the
+  hotspot and calls the paired phones again. `HEADUNIT_WIFI_HIDDEN=1/0` fixes it without fallback.
+  - Verified here: syntax check of the changed wireless sources. Not verified: whether the SM-F776B joins the hidden
+    network (first try on the Pi shows it: a session, or "Das Handy ist dem verborgenen WLAN nicht beigetreten" after
+    up to 60 s, then visible).
+- **Volume bar on the screen** (in the style of the tiles): `VolumeOverlay` over the page or the phone's picture for
+  2.5 s after any change of volume or mute: the tiles' frame with the orange focus corners, the speaker symbol of the
+  new design (struck and grey when muted), 30 growing segments in the lit orange, the number. Touch or drag on it sets
+  the volume. `HEADUNIT_TEST_VOLUME=1` shows it in the `--smoke-test` picture. `LitCorner` became the shared `LitBrush`,
+  `MenuPage::ScreenRect` uses the shared `ScreenRectIn`.
+  - Verified here: builds without warnings, CoreTests (`TestVolumeBar`) pass, smoke picture at 1600x600 shows the bar
+    centred over the home menu. Not verified: touch dragging on a real touch screen, the bar over a running projection.
+- **Bluetooth tile** (symbol from the new design): `BluetoothPage` lists the paired phones with their state, the
+  Android Auto phone first in orange; choosing another one ends the running session and has the station reconnect the
+  chosen phone, which starts Android Auto on it (the handover goes through the watch's worker, which owns the station).
+  The phone list comes from BlueZ on every pair/connect/disconnect and session start/end. New `Screen::Bluetooth`; a
+  saved tile order gets the tile appended at its end. The new design is kept as `docs/design/heatunit.svg`.
+  - Verified here: builds without warnings, CoreTests pass (`TestBluetoothPhones`, the tile and console tests for 8
+    tiles), `HEADUNIT_TEST_PAGE=Bluetooth --smoke-test` picture with made-up phones; the Linux sources passed the
+    syntax check. Not verified: the list with real phones and the switch between two phones (needs a second phone).
+- **Status bar** from the new design on every radio page: the source of the sound (the station or title of the radio's
+  own player while it sounds, else the connected phone: its Bluetooth name when wireless, the name from service
+  discovery over USB), then speaker (mute), microphone (mute; `AudioState` keeps the state, capture is still not
+  implemented) and home (the Home key). Touching a symbol lights it orange; muted symbols are grey and struck. The
+  player pages' top buttons moved left of the bar.
+  - Verified here: builds without warnings, CoreTests (`TestStatusBar`, microphone mute) and ProtocolTests pass, smoke
+    pictures of the home menu and the music page at 1600x600 and 800x480; Linux sources syntax-checked. Not verified:
+    the names shown with a real phone (which field the SM-F776B fills over USB), touches on a real touch screen.
+- **Touch only:** taps worked already (Qt turns touches into mouse events); new are swiping the home row (the row
+  follows the finger, the tile in the middle gets the focus, a flick moves one on), scrolling the lists with the finger,
+  a sideways swipe above the music/radio list to skip, and dragging a row on the settings page to move its tile (so the
+  order no longer needs the arrow keys). Drags never click (`TouchDrag`). Android Auto's own exit button
+  (`VIDEO_FOCUS_NATIVE`) now brings the radio's home menu to the front, so a touch-only car can leave the projection;
+  with the status bar's Home and the volume bar nothing on the screen needs the simulated console any more.
+  - Verified here: builds without warnings (CMake and MSBuild), CoreTests (`TestTouch`) and ProtocolTests pass. Not
+    verified: the gestures on the Pi's touch screen (only the rules are tested; mouse drags on Windows behave the same
+    way but were not driven here), and whether the SM-F776B sends `VIDEO_FOCUS_NATIVE` from its exit button.
+
 ## 2026-09-28: C++ coding standard applied to the whole project; `bin/` layout and four build profiles
 
 The user's C++ coding standard (global CLAUDE.md) is now applied throughout, with the exceptions recorded in the

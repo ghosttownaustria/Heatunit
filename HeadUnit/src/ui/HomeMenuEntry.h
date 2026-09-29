@@ -5,11 +5,11 @@
 
 namespace headunit {
 // The tiles of the radio's home menu.
-enum class HomeMenuEntry { AndroidAuto, Multimedia, Radio, Telephone, Navigation, Vehicle, Settings };
+enum class HomeMenuEntry { AndroidAuto, Multimedia, Radio, Telephone, Navigation, Vehicle, Bluetooth, Settings };
 
 // Every tile there is, in the order a new radio shows them.
 inline constexpr HomeMenuEntry kHomeMenuEntries[] = {HomeMenuEntry::AndroidAuto, HomeMenuEntry::Multimedia, HomeMenuEntry::Radio,
-    HomeMenuEntry::Telephone, HomeMenuEntry::Navigation, HomeMenuEntry::Vehicle, HomeMenuEntry::Settings};
+    HomeMenuEntry::Telephone, HomeMenuEntry::Navigation, HomeMenuEntry::Vehicle, HomeMenuEntry::Bluetooth, HomeMenuEntry::Settings};
 inline constexpr int kHomeMenuCount = static_cast<int>(std::size(kHomeMenuEntries));
 
 // The title a tile shows.
@@ -22,6 +22,7 @@ constexpr const char* HomeMenuTitle(HomeMenuEntry entry)
     case HomeMenuEntry::Telephone: return "Telephone";
     case HomeMenuEntry::Navigation: return "Navigation";
     case HomeMenuEntry::Vehicle: return "Vehicle";
+    case HomeMenuEntry::Bluetooth: return "Bluetooth";
     case HomeMenuEntry::Settings: return "Settings";
     }
     return "";
@@ -36,12 +37,13 @@ constexpr const char* HomeMenuId(HomeMenuEntry entry)
     }
 }
 
-// The radio's own page a tile opens: its music player, its tuner and its settings.
+// The radio's own page a tile opens: its music player, its tuner, the paired phones and its settings.
 constexpr std::optional<ConsoleController::Screen> HomeMenuPage(HomeMenuEntry entry)
 {
     switch (entry) {
     case HomeMenuEntry::Multimedia: return ConsoleController::Screen::Multimedia;
     case HomeMenuEntry::Radio: return ConsoleController::Screen::Radio;
+    case HomeMenuEntry::Bluetooth: return ConsoleController::Screen::Bluetooth;
     case HomeMenuEntry::Settings: return ConsoleController::Screen::Settings;
     default: return std::nullopt;
     }

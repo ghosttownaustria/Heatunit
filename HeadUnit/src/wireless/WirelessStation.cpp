@@ -15,6 +15,26 @@ constexpr auto kRetryDelay = 60s;
 constexpr auto kWifiWait = 60s;
 // How long the phone may take from the Bluetooth handshake to its TCP connection.
 constexpr auto kLinkTimeout = 60s;
+
+// Marks a phone as the one Android Auto runs on, for as long as the mark lives (the Bluetooth page shows it).
+class AndroidAutoMark {
+public:
+    // Marks the phone at `devicePath`.
+    AndroidAutoMark(BluetoothService& bluetooth, const std::string& devicePath) : m_bluetooth(bluetooth)
+    {
+        m_bluetooth.SetAndroidAutoPhone(devicePath);
+    }
+    // Takes the mark away: no phone runs Android Auto.
+    ~AndroidAutoMark()
+    {
+        m_bluetooth.SetAndroidAutoPhone({});
+    }
+    AndroidAutoMark(const AndroidAutoMark&) = delete;
+    AndroidAutoMark& operator=(const AndroidAutoMark&) = delete;
+
+private:
+    BluetoothService& m_bluetooth;
+};
 }
 
 // A station that is not started yet. `events.onStatus` receives the steps for the window, the pairing events the
@@ -78,16 +98,41 @@ AutoConnectResult WirelessStation::Serve(int rfcommFd, std::atomic_bool& isStopR
     if (link.tcpFd < 0) {
         result.isStoppedByUser = isStopRequested;
         result.message = link.message;
-        if (link.hasSentInfo && !isStopRequested && m_settings.hotspot.isHidden)
-            result.message += " Das WLAN ist verborgen (HEADUNIT_WIFI_HIDDEN); Android Auto findet es dann meist nicht.";
+        if (link.hasSentInfo && !isStopRequested && m_settings.hotspot.isHidden) {
+            if (m_settings.isVisibilityFixed) result.message += " Das WLAN ist verborgen (HEADUNIT_WIFI_HIDDEN=1); Android Auto findet es dann womoeglich nicht.";
+            else ShowWifi();
+        }
         return result;
     }
     Report("Handy im WLAN verbunden (" + link.peer + "); starte Android Auto.");
+    const std::string phonePath = m_bluetooth.PhoneOf(phone.Get());
+    // The status bar names the phone as it is called over Bluetooth, the name its owner gave it.
+    if (const std::string name = m_bluetooth.PhoneName(phonePath); !name.empty() && callbacks.onPhoneName) {
+        callbacks.onPhoneName = [report = std::move(callbacks.onPhoneName), name](const std::string&) { report(name); };
+    }
+    const AndroidAutoMark mark(m_bluetooth, phonePath);
     const auto session = RunAndroidAutoSession(std::make_shared<SocketTransport>(link.tcpFd), m_logger, isStopRequested, std::move(callbacks));
     result.hasVideo = session.hasVideo;
     result.isStoppedByUser = session.isStoppedByUser;
     result.message = session.message;
     return result;
+}
+
+// The person chose this phone on the Bluetooth page (the window has ended the running session): it is connected anew,
+// which starts Android Auto on it.
+void WirelessStation::SwitchToPhone(const std::string& devicePath)
+{
+    m_bluetooth.SwitchToPhone(devicePath);
+}
+
+// The person quit HeadUnit with its button, as when a car is switched off: everything is taken down, then the Bluetooth
+// adapter (which drops every phone's Bluetooth link) and the Wi-Fi chip are switched off. The next start switches both
+// on again.
+void WirelessStation::SwitchRadiosOff()
+{
+    StopAll();
+    m_bluetooth.SwitchOff();
+    SwitchWifiOff(m_logger);
 }
 
 // A step for the log and the window.
@@ -202,5 +247,19 @@ void WirelessStation::WaitForWifi(const std::atomic_bool& isStopRequested)
     if (!m_wifiStart.valid()) StartWifi();
     const auto deadline = Clock::now() + kWifiWait;
     while (!isStopRequested && m_wifiStart.valid() && Clock::now() < deadline) CheckWifi(200ms);
+}
+
+// The phone got the details of the hidden network and did not join it: Android Auto on this phone does not find a
+// hidden network. The name is broadcast from now on (remembered), and the hotspot starts again; once it is up, the
+// paired phones are asked to connect again (CheckWifi).
+void WirelessStation::ShowWifi()
+{
+    m_settings.hotspot.isHidden = false;
+    RememberVisibleWifi();
+    Report("Das Handy ist dem verborgenen WLAN nicht beigetreten. Das WLAN '" + m_settings.hotspot.ssid +
+        "' ist ab jetzt sichtbar und startet neu; das Handy verbindet sich danach von selbst.");
+    if (m_wifiStart.valid()) m_wifiStart.wait();
+    m_wifiStart = {};
+    StartWifi();
 }
 }

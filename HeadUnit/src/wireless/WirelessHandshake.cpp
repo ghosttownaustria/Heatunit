@@ -123,7 +123,7 @@ std::string WifiFailureAdvice(int status)
     switch (static_cast<aaw::Status>(status)) {
     case aaw::STATUS_WIFI_INCORRECT_CREDENTIALS:
         return "Das Handy meldet ein falsches WLAN-Passwort. Am Handy in den WLAN-Einstellungen HEATUNIT-AA 'Vergessen' "
-               "und Android Auto neu verbinden (Taste Android Auto verbinden).";
+               "und Android Auto neu verbinden (Kachel Android Auto).";
     case aaw::STATUS_WIFI_DISABLED:
     case aaw::STATUS_PHONE_WIFI_DISABLED:
         return "Das WLAN am Handy ist aus: einschalten.";
