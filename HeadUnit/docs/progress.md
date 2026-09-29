@@ -1,5 +1,22 @@
 # Progress
 
+## 2026-09-29: remote API and GPIO bridge
+
+The functions of the simulated console can be driven by other programs (design: `docs/superpowers/specs/2026-09-29-remote-api-design.md`, use: `docs/api.md`).
+
+- **Remote API**: JSON lines over TCP on 127.0.0.1:47050 (`--api-port`, `HEADUNIT_API_PORT`, 0 = off): console keys, knob
+  (push, arrows, rotate), media keys, volume, mute, `status`. Portable `RemoteCommand` + Qt `RemoteServer`; wired in
+  `MainWindow::StartRemoteApi`, in the normal mode and `--smoke-test`.
+  - Verified here: CoreTests (`RemoteCommandTests`, `TestApiPort`) pass, build without warnings (MSBuild Debug x64); the
+    running debug app answered every command over TCP (volume 15 -> 18, mute, menu, Back, errors for garbage and unknown
+    names) and logged the console lines. Default port 5040 turned out to be taken on Windows ("address protected"), hence 47050.
+  - Not verified: Linux build (CMake/CI), Pi, the release/kiosk build with the API, several clients at once.
+- **`GpioBridge.py`** (repository root, one file): tkinter window with the real buttons, the encoder and a connection
+  indicator; forwards to the API, runs alone for testing (window fields clickable). GPIO through gpiozero.
+  - Verified here: against the running app on Windows, the window showed "Verbunden" and a HOME sent from it reached
+    the app; the link logic against a fake server. Not verified: the real GPIO pins and the encoder direction on the Pi
+    (use `--invert-rotation` if it turns the wrong way), tkinter/gpiozero on Raspberry Pi OS.
+
 ## 2026-09-29: quit in the settings, full screen in release
 
 From the user's list; one commit per point.

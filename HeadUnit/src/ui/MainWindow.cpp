@@ -1,4 +1,5 @@
 #include "ui/MainWindow.h"
+#include "remote/RemoteServer.h"
 #include "androidauto/PhoneWatch.h"
 #include "androidauto/ProjectionKeys.h"
 #include "audio/AudioClock.h"
@@ -202,6 +203,23 @@ void MainWindow::EnterKioskMode()
     SetDisplay(BestDisplayFor(pixels.width(), pixels.height()));
     m_logger.Write(LogLevel::Info, "UI", "Car mode: full screen " + std::to_string(pixels.width()) + "x" + std::to_string(pixels.height()) +
         ", display " + DisplayText(m_display));
+}
+
+// Lets other programs work everything the simulated console offers, over TCP on 127.0.0.1 (docs/api.md): the console
+// keys, the knob, the media keys and the volume run the same actions as the panel's buttons, also when the panel is hidden.
+void MainWindow::StartRemoteApi(int port)
+{
+    RemoteCommandDeps deps;
+    deps.pressConsole = [this](ConsoleKey key) { PressConsole(key); };
+    deps.sendKey = [this](unsigned keycode, bool isDown) { SendKey(keycode, isDown); };
+    deps.rotate = [this](int detents) { Rotate(detents); };
+    deps.changeVolume = [this](int delta) { m_audioState->ChangeVolume(delta); };
+    deps.toggleMute = [this] { m_audioState->ToggleMute(); };
+    deps.readStatus = [this] {
+        return RemoteStatus{m_audioState->Volume(), m_audioState->IsMuted(), RemotePageName(m_console.CurrentScreen()), m_console.IsProjectionConnected()};
+    };
+    m_remote = new RemoteServer(std::move(deps), m_logger, this);
+    m_remote->Listen(port);
 }
 
 // Closing first lets a session say goodbye to the phone and release the USB interface, and takes the hotspot and

@@ -7,6 +7,7 @@
 #include "audio/AudioState.h"
 #include "audio/MediaActivity.h"
 #include "logging/Logger.h"
+#include "remote/RemoteCommand.h"
 #include "media/AudioPlayer.h"
 #include "ui/BluetoothPhones.h"
 #include "ui/HomeMenuEntry.h"
@@ -44,6 +45,7 @@ class MenuPage;
 class MultimediaPage;
 class PairingPage;
 class RadioPage;
+class RemoteServer;
 class SettingsPage;
 class VideoWidget;
 class VolumeOverlay;
@@ -69,6 +71,7 @@ public:
 
     void SetDisplay(const DisplayConfig& display);
     void EnterKioskMode();
+    void StartRemoteApi(int port);
 
 protected:
     void closeEvent(QCloseEvent* event) override;
@@ -106,6 +109,7 @@ private:
     std::shared_ptr<MediaActivity> m_phoneMedia{std::make_shared<MediaActivity>()};   // when the phone's music plays
     std::int64_t m_localStartMs{};                    // when the radio's own player last started or resumed
     std::set<unsigned> m_localKeys;                   // keys held down whose press the radio's side took
+    RemoteServer* m_remote{};                         // the remote API (docs/api.md); owned by the window as its child
     CarPanel* m_panel{};
     QWidget* m_controls{};                            // the development controls under the picture
     QLabel* m_status{};

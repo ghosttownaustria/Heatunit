@@ -60,6 +60,10 @@ CI (`.github/workflows/build.yml`): Linux full build (`linux-release`) + tests +
 core-only. The full Windows Qt build is not in CI. `src/wireless/*` and `#ifdef HEADUNIT_WIRELESS` code only compiles on
 Linux (needs Qt6 DBus), so on Windows it can only be reviewed by reading; CI or the Pi catches errors there.
 
+Remote API for other programs (`HeadUnit/docs/api.md`): JSON lines over TCP on 127.0.0.1:47050 (`--api-port`,
+`HEADUNIT_API_PORT`); `RemoteCommand` in the core, `RemoteServer` + `MainWindow::StartRemoteApi` in the app; `GpioBridge.py`
+in the repo root is the client for the real buttons and encoder. A new console action must be added to the API as well.
+
 App diagnostics (no window needed for most): `--scan`, `--probe-usb`, `--start-accessory`, `--repair-driver`,
 `--recover-phone`, `--test-projection`, `--test-input`, `--test-audio`, `--test-tone`, `--test-console`, `--test-keys`,
 `--smoke-test`, `--display WxH` (parsed in `src/CommandLine.cpp`). Useful env vars: `HEADUNIT_LOG_LEVEL=trace|debug|info|warning|error`,

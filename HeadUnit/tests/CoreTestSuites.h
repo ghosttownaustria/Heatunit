@@ -13,3 +13,4 @@ void RunMediaTests();
 void RunLoggingTests();
 void RunCommandLineTests();
 void RunTransportBufferTests();
+void RunRemoteCommandTests();
