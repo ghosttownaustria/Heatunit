@@ -310,9 +310,10 @@ label); `WirelessStation::Serve` replaces it with the phone's Bluetooth name. `P
 Volume bar: `VolumeOverlay` is a child of the screens' `QStackedWidget`, above the page or the phone's picture in front
 (raised by `ShowVolume` and `ShowScreen`). `MainWindow::UpdateVolumeBar` (every tick) shows it for 2.5 s whenever the
 volume or the mute state differs from what it showed last, whoever changed it. It paints in the pages' design units
-(`menu::ScreenRectIn` gives the same screen rectangle as `MenuPage`), and a mask limits it to the panel, so touches beside
-it reach what is below. The portable `ui/VolumeBar.h` (CoreTests) has the panel's place and which volume a touch at a
-position sets; touching or dragging on it calls the window's handler (unmute, set the volume).
+(`menu::ScreenRectIn` gives the same screen rectangle as `MenuPage`), and a mask limits it to the panel and its soft
+shadow, so touches beside it reach what is below. The look follows `docs/design/heatunit.svg`: shaded panel, speaker
+symbol, one continuous line lit up to the volume, deliberately without number or visible steps. The portable
+`ui/VolumeBar.h` (CoreTests) has the panel's place and which volume (nearest step) a touch at a position sets; touching or dragging on it calls the window's handler (unmute, set the volume).
 
 Knob routing: while a page is in front, `MainWindow::SendKey` gives the controller's arrows and push to it
 (`PressLocally`); the media keys (play/pause, track skip, from the panel or the keyboard) go to the radio's own player

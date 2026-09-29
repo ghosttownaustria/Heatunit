@@ -5,17 +5,30 @@
 #include "ui/VolumeBar.h"
 #include <QEvent>
 #include <QMouseEvent>
+#include <QLinearGradient>
 #include <QPainter>
+#include <QPen>
 #include <QRegion>
+#include <QSizeF>
 #include <QTimer>
-#include <algorithm>
 #include <utility>
 
 namespace headunit {
 namespace {
 constexpr int kShowMs = 2500;
-// The segments grow from left to right, standing on one line near the bottom of the panel.
-constexpr double kSegmentBaseline = 480, kSegmentLowest = 18, kSegmentHighest = 60, kSegmentGap = 4;
+constexpr double kSpeakerLeft = 29, kLineWidth = 4.84;
+constexpr QSizeF kSpeakerSize{17, 24};
+// Layers of the shadow: each adds a little black, so it fades out to the sides; it hangs slightly lower than the panel.
+constexpr int kShadowAlpha = 5;
+constexpr double kShadowDrop = 4;
+
+// A soft black shadow around `panel`, so the panel stands out from what is behind it.
+void DrawShadow(QPainter& painter, const QRectF& panel)
+{
+    for (int grow = static_cast<int>(headunit::kVolumeShadowMargin); grow > 0; --grow) {
+        painter.fillRect(panel.adjusted(-grow, -grow, grow, grow).translated(0, kShadowDrop), QColor(0, 0, 0, kShadowAlpha));
+    }
+}
 }
 
 // A hidden bar over the whole of `parent` (the screens), following its size.
@@ -66,7 +79,7 @@ bool VolumeOverlay::eventFilter(QObject* watched, QEvent* event)
     return QWidget::eventFilter(watched, event);
 }
 
-// Draws the panel in design units: the tiles' frame with the focus corners, the speaker, the segments and the number.
+// Draws the panel in design units: shadow, shaded face, the speaker and the line lit up to the volume.
 void VolumeOverlay::paintEvent(QPaintEvent*)
 {
     using namespace menu;
@@ -79,23 +92,22 @@ void VolumeOverlay::paintEvent(QPaintEvent*)
     const double scale = screen.height() / kHomeMenuHeight;
     painter.scale(scale, scale);
     const QRectF panel = PanelRect();
-    painter.fillRect(panel, QColor(0, 0, 0, 235));
-    DrawFocus(painter, panel);
-    DrawIcon(painter, Icon::Speaker, QRectF(panel.left() + 28, panel.top() + 30, kVolumeSymbolRoom - 50, panel.height() - 60), m_isMuted);
+    DrawShadow(painter, panel);
+    QLinearGradient face(panel.bottomLeft(), panel.topLeft());
+    face.setColorAt(0, QColor(26, 26, 26));
+    face.setColorAt(1, QColor(88, 88, 88));
+    painter.fillRect(panel, face);
+    DrawIcon(painter, Icon::Speaker, QRectF(panel.left() + kSpeakerLeft, panel.center().y() - kSpeakerSize.height() / 2, kSpeakerSize.width(),
+        kSpeakerSize.height()), m_isMuted);
 
     const VolumePanel layout = VolumePanelOf(DesignWidth());
-    const double cell = (layout.barRight - layout.barLeft) / AudioState::kMaxVolume;
-    const QRectF bar(layout.barLeft, kSegmentBaseline - kSegmentHighest, layout.barRight - layout.barLeft, kSegmentHighest);
-    const QBrush lit = m_isMuted ? QBrush(kDim) : LitBrush(bar);
-    for (int step = 0; step < AudioState::kMaxVolume; ++step) {
-        const double height = kSegmentLowest + (kSegmentHighest - kSegmentLowest) * step / (AudioState::kMaxVolume - 1);
-        const QRectF segment(layout.barLeft + step * cell, kSegmentBaseline - height, std::max(1.0, cell - kSegmentGap), height);
-        painter.fillRect(segment, step < m_volume ? lit : QBrush(kLine));
-    }
-    painter.setFont(Font(44));
-    painter.setPen(m_isMuted ? kDim : kText);
-    painter.drawText(QRectF(layout.barRight, panel.top(), panel.right() - layout.barRight - 24, panel.height()), Qt::AlignRight | Qt::AlignVCenter,
-        QString::number(m_volume));
+    const double y = panel.center().y();
+    const double litRight = layout.barLeft + (layout.barRight - layout.barLeft) * m_volume / AudioState::kMaxVolume;
+    painter.setPen(QPen(kText, kLineWidth, Qt::SolidLine, Qt::SquareCap));
+    painter.drawLine(QPointF(layout.barLeft, y), QPointF(layout.barRight, y));
+    if (m_volume <= 0) return;
+    painter.setPen(QPen(m_isMuted ? kDim : QColor(255, 45, 0), kLineWidth + 1, Qt::SolidLine, Qt::SquareCap));
+    painter.drawLine(QPointF(layout.barLeft, y), QPointF(litRight, y));
 }
 
 // A touch on the panel keeps the bar; on the segments it sets the volume and starts dragging.
@@ -140,13 +152,14 @@ QRectF VolumeOverlay::PanelRect() const
     return QRectF(layout.left, kVolumePanelTop, layout.right - layout.left, kVolumePanelHeight);
 }
 
-// Only the panel is drawn and takes input; touches beside it reach the page or the phone's picture below.
+// Only the panel and its shadow are drawn and take input; touches beside them reach the page or the phone's picture below.
 void VolumeOverlay::UpdateMask()
 {
     const QRectF screen = ScreenRect();
     if (screen.isEmpty()) return;
     const double scale = screen.height() / kHomeMenuHeight;
-    const QRectF panel = PanelRect();
+    const double margin = kVolumeShadowMargin + kShadowDrop;
+    const QRectF panel = PanelRect().adjusted(-margin, -margin, margin, margin);
     const QRectF shown(screen.topLeft() + panel.topLeft() * scale, panel.size() * scale);
     setMask(QRegion(shown.toAlignedRect().adjusted(-2, -2, 2, 2)));
 }
