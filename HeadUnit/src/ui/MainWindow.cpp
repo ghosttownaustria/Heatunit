@@ -226,6 +226,7 @@ QWidget* MainWindow::BuildScreens(QWidget* parent)
     });
     m_settings = new SettingsPage(m_screens);
     m_settings->SetChangeHandler([this](const HomeTileSetup& setup) { SetTiles(setup); });
+    m_settings->SetQuitHandler([this] { Quit(); });
     m_bluetoothPage = new BluetoothPage(m_screens);
 #ifdef HEADUNIT_WIRELESS
     m_bluetoothPage->SetAvailable(true);
@@ -380,7 +381,7 @@ void MainWindow::SetState(State state)
     m_displayChoice->setEnabled(state == State::Idle || state == State::Watching);
 }
 
-// The button quits like switching the car off: the phone gets its goodbye, Bluetooth and the Wi-Fi are switched off
+// The button (and the one in the settings) quits like switching the car off: the phone gets its goodbye, Bluetooth and the Wi-Fi are switched off
 // (WatchPhones does that once the session is over) and the window closes (see closeEvent).
 void MainWindow::Quit()
 {

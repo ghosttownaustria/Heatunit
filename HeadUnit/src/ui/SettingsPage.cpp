@@ -13,6 +13,7 @@ namespace {
 constexpr double kHintBaseline = 168;
 constexpr double kListTop = 190, kRowHeight = 44;
 constexpr double kCheckSize = 26, kCheckRight = 22;   // the tick box, from the row's right edge
+constexpr double kQuitTop = 550, kQuitHeight = 44, kQuitWidth = 240;   // the button below the list
 }
 
 // A page with every tile, shown.
@@ -26,18 +27,24 @@ void SettingsPage::SetChangeHandler(std::function<void(const HomeTileSetup&)> ha
     m_onChange = std::move(handler);
 }
 
+// Who quits the program when the button is pushed.
+void SettingsPage::SetQuitHandler(std::function<void()> handler)
+{
+    m_onQuit = std::move(handler);
+}
+
 // The setup to show; the focus stays on its row where possible.
 void SettingsPage::SetSetup(const HomeTileSetup& setup)
 {
     m_setup = setup;
-    m_focus = std::clamp(m_focus, 0, std::max(0, Count() - 1));
+    m_focus = std::clamp(m_focus, 0, QuitIndex());
     update();
 }
 
-// Turning moves through the list.
+// Turning moves through the list and on to the quit button.
 void SettingsPage::Turn(int steps)
 {
-    m_focus = std::clamp(m_focus + steps, 0, std::max(0, Count() - 1));
+    m_focus = std::clamp(m_focus + steps, 0, QuitIndex());
     update();
 }
 
@@ -45,7 +52,7 @@ void SettingsPage::Turn(int steps)
 void SettingsPage::Nudge(unsigned keycode)
 {
     if (keycode != keys::DpadUp && keycode != keys::DpadDown) return;
-    if (Count() == 0) return;
+    if (m_focus >= Count()) return;
     HomeTileSetup setup = m_setup;
     const int direction = keycode == keys::DpadUp ? -1 : +1;
     if (!MoveTile(setup, setup.tiles[static_cast<std::size_t>(m_focus)].entry, direction, false)) return;
@@ -53,10 +60,11 @@ void SettingsPage::Nudge(unsigned keycode)
     if (m_onChange) m_onChange(setup);
 }
 
-// Pushing shows or hides the focused tile.
+// Pushing shows or hides the focused tile, or quits on the quit button.
 void SettingsPage::Push()
 {
-    Toggle(m_focus);
+    if (m_focus == QuitIndex()) Quit();
+    else Toggle(m_focus);
 }
 
 // Draws the Settings tile, the title with its hint and one row with a tick box per tile.
@@ -86,14 +94,15 @@ void SettingsPage::Paint(QPainter& painter)
         painter.setPen(kDim);
         painter.drawText(QRectF(row.left(), row.top(), check.left() - 16 - row.left(), row.height()), Qt::AlignRight | Qt::AlignVCenter, "always shown");
     }
+    DrawTextButton(painter, QuitRect(), "Quit", m_focus == QuitIndex());
 }
 
 // Remembers the row a click starts on; it may also become a drag of that row.
 void SettingsPage::mousePressEvent(QMouseEvent* event)
 {
     if (event->button() != Qt::LeftButton) return;
-    m_pressed = RowAt(event->position());
-    m_dragRow = m_pressed;
+    m_pressed = TargetAt(event->position());
+    m_dragRow = m_pressed && *m_pressed < Count() ? m_pressed : std::nullopt;
     m_dragStartRow = m_pressed.value_or(0);
     if (const auto point = ToDesign(event->position())) m_drag.Press(point->x(), point->y());
 }
@@ -117,16 +126,17 @@ void SettingsPage::mouseMoveEvent(QMouseEvent* event)
     update();
 }
 
-// A click that ends on the row it started on focuses and ticks it; a drag ticks nothing.
+// A click that ends on the row it started on focuses and ticks it (on the quit button: quits); a drag ticks nothing.
 void SettingsPage::mouseReleaseEvent(QMouseEvent* event)
 {
     if (event->button() != Qt::LeftButton) return;
     m_drag.Release();
     m_dragRow.reset();
     const auto pressed = std::exchange(m_pressed, std::nullopt);
-    if (!pressed || pressed != RowAt(event->position())) return;
+    if (!pressed || pressed != TargetAt(event->position())) return;
     m_focus = *pressed;
-    Toggle(*pressed);
+    if (*pressed == QuitIndex()) Quit();
+    else Toggle(*pressed);
     update();
 }
 
@@ -134,6 +144,18 @@ void SettingsPage::mouseReleaseEvent(QMouseEvent* event)
 int SettingsPage::Count() const
 {
     return static_cast<int>(m_setup.tiles.size());
+}
+
+// The focus index of the quit button: the one after the last row.
+int SettingsPage::QuitIndex() const
+{
+    return Count();
+}
+
+// Where the quit button is, in design units.
+QRectF SettingsPage::QuitRect() const
+{
+    return QRectF(menu::kPageColumnLeft, kQuitTop, kQuitWidth, kQuitHeight);
 }
 
 // Where row `index` is, in design units.
@@ -151,6 +173,19 @@ std::optional<int> SettingsPage::RowAt(const QPointF& position) const
         if (RowRect(index).contains(*point)) return index;
     }
     return std::nullopt;
+}
+
+// The row or the quit button (QuitIndex) at a widget position.
+std::optional<int> SettingsPage::TargetAt(const QPointF& position) const
+{
+    if (const auto point = ToDesign(position); point && QuitRect().contains(*point)) return QuitIndex();
+    return RowAt(position);
+}
+
+// Hands the request to quit to the window.
+void SettingsPage::Quit()
+{
+    if (m_onQuit) m_onQuit();
 }
 
 // Shows or hides tile `index`; a change goes to the window.

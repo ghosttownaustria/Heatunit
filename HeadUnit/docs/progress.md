@@ -1,5 +1,15 @@
 # Progress
 
+## 2026-09-29: quit in the settings, full screen in release
+
+From the user's list; one commit per point.
+
+- **Quit in the Settings tile**: `SettingsPage` has a "Quit" button below the tile list (the last stop of the knob, a
+  tap works too). It calls the same `MainWindow::Quit` as the button under the window's picture, so the radio can be
+  quit without the window's controls.
+  - Verified here: `windows-debug` builds without warnings; `HEADUNIT_TEST_PAGE=Settings --smoke-test` picture at
+    1600x600 shows the button below the eight rows. Not verified: the tap and the knob on the Pi.
+
 ## 2026-09-28 (night): quit button, hidden Wi-Fi, volume bar, Bluetooth tile, status bar, touch
 
 From the user's list and the new design `docs/design/heatunit.svg` (status bar, Bluetooth tile); one commit per point.
