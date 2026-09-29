@@ -32,7 +32,7 @@ inline constexpr double kPageTitleBaseline = 132;
 enum class Symbol { Previous, Play, Pause, Stop, Next };
 
 // The symbols of the status bar (docs/design/heatunit.svg).
-enum class Icon { Speaker };
+enum class Icon { Speaker, Microphone, Home };
 
 QRectF ScreenRectIn(const QSizeF& area, const DisplayConfig& display);
 QFont Font(int pixels);
@@ -43,6 +43,6 @@ void DrawButton(QPainter& painter, const QRectF& box, Symbol symbol, bool isFocu
 void DrawTextButton(QPainter& painter, const QRectF& box, const QString& text, bool isFocused);
 void DrawCheck(QPainter& painter, const QRectF& box, bool isOn);
 void DrawRow(QPainter& painter, const QRectF& row, const QString& text, const QString& note, bool isFocused, bool isCurrent);
-void DrawIcon(QPainter& painter, Icon icon, const QRectF& box, bool isStruck);
+void DrawIcon(QPainter& painter, Icon icon, const QRectF& box, bool isStruck, bool isLit = false);
 QBrush LitBrush(const QRectF& box);
 }

@@ -105,6 +105,11 @@ void TestAudioState() {
     Check(state.IsMuted(), "Turning the volume down cancelled mute");
     state.ChangeVolume(+1);
     Check(!state.IsMuted() && state.Volume() == 20, "Turning the volume up while muted did not unmute");
+    Check(!state.IsMicrophoneMuted(), "The microphone starts muted");
+    state.ToggleMicrophoneMute();
+    Check(state.IsMicrophoneMuted() && !state.IsMuted() && state.Gain() > 0.0f, "Muting the microphone touched the sound");
+    state.ToggleMicrophoneMute();
+    Check(!state.IsMicrophoneMuted(), "The microphone did not come back");
 
     Check(!state.ReadMeter(AudioKind::Media).isActive, "A stream that never played is active");
     state.ReportAudio(AudioKind::Media, 0.4f, 100);

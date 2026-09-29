@@ -167,6 +167,7 @@
     <ClInclude Include="src\ui\ScriptedPhoneTest.h" />
     <ClInclude Include="src\ui\ScriptedTestHost.h" />
     <ClInclude Include="src\ui\SettingsPage.h" />
+    <ClInclude Include="src\ui\StatusBar.h" />
     <ClInclude Include="src\ui\VideoWidget.h" />
     <ClInclude Include="src\ui\VolumeBar.h" />
     <ClInclude Include="src\ui\VolumeOverlay.h" />

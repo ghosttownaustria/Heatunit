@@ -158,6 +158,25 @@ const char* const kSpeakerIcon =
     "C114.371,80.337 113.181,81.112 111.872,81.112C110.057,81.112 108.562,79.618 108.562,77.802C108.562,77.218 108.717,76.645 109.01,76.14"
     "C114.01,66.43 116.33,54.97 116.24,43.42C116.185,31.422 113.513,19.579 108.41,8.72L108.42,8.68Z";
 
+const char* const kMicrophoneIcon =
+    "M85.6,57.11C85.6,53.9 83,51.31 79.8,51.31C76.59,51.31 74,53.91 74,57.11C74,68.54 71.26,77.98 65.71,84.28"
+    "C60.68,89.98 53.08,93.27 42.81,93.27C32.54,93.27 24.94,89.99 19.91,84.29C14.35,77.99 11.62,68.55 11.62,57.11"
+    "C11.62,53.9 9.02,51.31 5.82,51.31C2.61,51.31 0.02,53.91 0.02,57.11C0.02,71.36 3.71,83.44 11.21,91.95"
+    "C16.73,98.21 24.17,102.45 33.54,104.1L33.54,113.62L19.32,113.62C16.78,113.62 14.7,115.7 14.7,118.24L14.7,122.87"
+    "L70.94,122.87L70.94,118.24C70.94,115.7 68.86,113.62 66.32,113.62L52.07,113.62L52.07,104.1"
+    "C61.44,102.44 68.87,98.21 74.4,91.94C81.9,83.44 85.6,71.36 85.6,57.11ZM42.8,0C54.64,0 64.32,9.69 64.32,21.52"
+    "L64.32,22.08L52.75,22.08L52.75,35.79L64.33,35.79L64.33,42.77L52.75,42.77L52.75,56.48L64.33,56.48L64.33,61.41"
+    "C64.33,73.25 54.64,82.93 42.81,82.93C30.97,82.93 21.29,73.24 21.29,61.41L21.29,56.48L32.87,56.48L32.87,42.77"
+    "L21.28,42.77L21.28,35.79L32.86,35.79L32.86,22.08L21.28,22.08L21.28,21.52C21.28,9.69 30.96,0 42.8,0Z";
+const char* const kHomeIcon =
+    "M181.568,511.832L29.337,511.832C21.247,511.832 13.909,508.532 8.605,503.227C3.3,497.923 0,490.585 0,482.495"
+    "L0,244.611C0.059,238.93 2.298,233.265 6.733,229.043L241.038,5.915C249.274,-1.931 262.322,-2.012 270.654,5.915"
+    "L503.168,227.238C507.95,231.195 511,237.169 511,243.852L511,482.495C511,490.459 507.684,497.886 502.358,503.212"
+    "C497.105,508.465 489.767,511.832 481.663,511.832L327.059,511.832C315.168,511.832 305.517,502.181 305.517,490.29"
+    "L305.517,364.721C305.517,350.612 299.778,337.808 290.539,328.576L290.458,328.495C281.227,319.257 268.422,313.517 254.314,313.517"
+    "C240.227,313.517 227.401,319.279 218.125,328.532C208.872,337.808 203.111,350.634 203.111,364.721L203.111,490.29"
+    "C203.111,502.181 193.459,511.832 181.568,511.832Z";
+
 // Reads the design's path data: absolute M, L, C and Z commands, a letter may be left out when it repeats (pairs
 // after M are lines). Stops at anything else.
 QPainterPath ParsePath(std::string_view data, Qt::FillRule rule)
@@ -424,9 +443,11 @@ void DrawRow(QPainter& painter, const QRectF& row, const QString& text, const QS
 }
 
 // A symbol of the status bar, as large as fits into `box` and centred there. Struck (muted): dim, with an orange slash.
-void DrawIcon(QPainter& painter, Icon icon, const QRectF& box, bool isStruck)
+// Lit (a finger is on it): in the lit orange.
+void DrawIcon(QPainter& painter, Icon icon, const QRectF& box, bool isStruck, bool isLit)
 {
-    static const std::array<QPainterPath, 1> kIcons = {ParsePath(kSpeakerIcon, Qt::WindingFill)};
+    static const std::array<QPainterPath, 3> kIcons = {ParsePath(kSpeakerIcon, Qt::WindingFill), ParsePath(kMicrophoneIcon, Qt::WindingFill),
+        ParsePath(kHomeIcon, Qt::WindingFill)};
     const QPainterPath& path = kIcons[static_cast<std::size_t>(icon)];
     const QRectF bounds = path.boundingRect();
     if (bounds.isEmpty()) return;
@@ -437,7 +458,7 @@ void DrawIcon(QPainter& painter, Icon icon, const QRectF& box, bool isStruck)
     painter.translate(fitted.topLeft());
     painter.scale(scale, scale);
     painter.translate(-bounds.topLeft());
-    painter.fillPath(path, isStruck ? kDim : kText);
+    painter.fillPath(path, isLit ? LitBrush(QRectF(bounds)) : QBrush(isStruck ? kDim : kText));
     painter.restore();
     if (!isStruck) return;
     const QLineF slash(fitted.topLeft(), fitted.bottomRight());

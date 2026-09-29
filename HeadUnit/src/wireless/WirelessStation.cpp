@@ -105,7 +105,12 @@ AutoConnectResult WirelessStation::Serve(int rfcommFd, std::atomic_bool& isStopR
         return result;
     }
     Report("Handy im WLAN verbunden (" + link.peer + "); starte Android Auto.");
-    const AndroidAutoMark mark(m_bluetooth, m_bluetooth.PhoneOf(phone.Get()));
+    const std::string phonePath = m_bluetooth.PhoneOf(phone.Get());
+    // The status bar names the phone as it is called over Bluetooth, the name its owner gave it.
+    if (const std::string name = m_bluetooth.PhoneName(phonePath); !name.empty() && callbacks.onPhoneName) {
+        callbacks.onPhoneName = [report = std::move(callbacks.onPhoneName), name](const std::string&) { report(name); };
+    }
+    const AndroidAutoMark mark(m_bluetooth, phonePath);
     const auto session = RunAndroidAutoSession(std::make_shared<SocketTransport>(link.tcpFd), m_logger, isStopRequested, std::move(callbacks));
     result.hasVideo = session.hasVideo;
     result.isStoppedByUser = session.isStoppedByUser;

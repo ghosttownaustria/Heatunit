@@ -155,6 +155,14 @@ std::string BluetoothService::PhoneOf(int fd)
     return Text(m_context.PhonePathOf(fd));
 }
 
+// The name a paired phone gave itself ("Jakob's Flip 8"); empty when BlueZ does not know it.
+std::string BluetoothService::PhoneName(const std::string& devicePath)
+{
+    if (devicePath.empty()) return {};
+    const std::string name = bluez::DeviceName(QString::fromStdString(devicePath));
+    return name == devicePath ? std::string() : name;
+}
+
 // Notes the phone a wireless session runs on (empty: none) and tells the window.
 void BluetoothService::SetAndroidAutoPhone(const std::string& devicePath)
 {

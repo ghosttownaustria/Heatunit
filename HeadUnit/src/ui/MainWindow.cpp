@@ -168,9 +168,7 @@ void MainWindow::SetDisplay(const DisplayConfig& display)
     }
     m_console.SetDisplay(display);
     m_video->SetDisplay(display);
-    for (MenuPage* page : {static_cast<MenuPage*>(m_homeMenu), static_cast<MenuPage*>(m_music), static_cast<MenuPage*>(m_radio),
-             static_cast<MenuPage*>(m_settings), static_cast<MenuPage*>(m_bluetoothPage), static_cast<MenuPage*>(m_pairing)})
-        page->SetDisplay(display);
+    for (MenuPage* page : MenuPages()) page->SetDisplay(display);
     m_volumeBar->SetDisplay(display);
     for (int index = 0; index < static_cast<int>(std::size(kDisplays)); ++index) {
         if (kDisplays[index] == display) m_displayChoice->setCurrentIndex(index);
@@ -242,6 +240,7 @@ QWidget* MainWindow::BuildScreens(QWidget* parent)
              static_cast<QWidget*>(m_radio), static_cast<QWidget*>(m_settings), static_cast<QWidget*>(m_bluetoothPage),
              static_cast<QWidget*>(m_pairing)})
         m_screens->addWidget(screen);
+    for (MenuPage* page : MenuPages()) page->SetStatusHandler([this](StatusButton button) { PressStatus(button); });
     m_volumeBar = new VolumeOverlay(m_screens);
     m_volumeBar->SetVolumeHandler([this](int volume) {
         m_audioState->SetMuted(false);
@@ -505,6 +504,9 @@ ProjectionCallbacks MainWindow::MakeCallbacks()
     callbacks.onStatus = [this](const std::string& status) {
         QMetaObject::invokeMethod(this, [this, status] { ShowStep(QString::fromStdString(status)); }, Qt::QueuedConnection);
     };
+    callbacks.onPhoneName = [this](const std::string& name) {
+        QMetaObject::invokeMethod(this, [this, name] { m_phoneName = QString::fromStdString(name); }, Qt::QueuedConnection);
+    };
     callbacks.onFrame = [this](VideoFrame frame) {
         std::lock_guard lock(m_frameMutex);
         m_latestFrame = std::move(frame);
@@ -533,6 +535,7 @@ void MainWindow::OnAttemptStart()
 void MainWindow::OnAttemptEnd(const AutoConnectResult& result)
 {
     m_console.SetProjectionConnected(false);
+    m_phoneName.clear();
     ClearPicture(result.hasVideo || result.isStoppedByUser ? "Android Auto beendet." : "Android Auto ist nicht verbunden.");
     m_status->setText("Android Auto: nicht verbunden");
     ShowScreen();
@@ -579,13 +582,14 @@ void MainWindow::ShowStep(const QString& text)
     m_history->appendPlainText(text);
 }
 
-// The window's tick (every 33 ms): the newest frame, the audio display and the volume bar, who has the sound, and the
-// scripted test.
+// The window's tick (every 33 ms): the newest frame, the audio display, the volume bar and the status bar, who has the
+// sound, and the scripted test.
 void MainWindow::Tick()
 {
     ShowLatestFrame();
     UpdateAudioDisplay();
     UpdateVolumeBar();
+    UpdateStatusBar();
     KeepOneSound();
     if (m_state == State::Connecting && !m_isTestFinished && m_scriptedTest) m_scriptedTest->Tick();
 }
@@ -633,6 +637,48 @@ void MainWindow::UpdateVolumeBar()
     m_shownVolume = volume;
     m_wasMuted = isMuted;
     m_volumeBar->ShowVolume(volume, isMuted);
+}
+
+// The pages' status bar: the source of the sound (the radio's own player while it sounds, else the projected phone),
+// and whether the sound and the microphone are muted. Handed to the pages only when it changed.
+void MainWindow::UpdateStatusBar()
+{
+    StatusState status;
+    status.isMuted = m_audioState->IsMuted();
+    status.isMicrophoneMuted = m_audioState->IsMicrophoneMuted();
+    QString local = m_radio->SoundingName();
+    if (local.isEmpty()) local = m_music->SoundingName();
+    status.source = StatusSourceText(local.toStdString(), m_console.IsProjectionConnected(), m_phoneName.toStdString());
+    if (status == m_shownStatus) return;
+    m_shownStatus = status;
+    for (MenuPage* page : MenuPages()) page->SetStatus(status);
+}
+
+// A touch on the status bar: the speaker mutes the sound, the microphone mutes the microphone, home is the Home key.
+void MainWindow::PressStatus(StatusButton button)
+{
+    switch (button) {
+    case StatusButton::Speaker:
+        m_audioState->ToggleMute();
+        break;
+    case StatusButton::Microphone: {
+        m_audioState->ToggleMicrophoneMute();
+        const std::string message = m_audioState->IsMicrophoneMuted() ? "Mikrofon stumm" : "Mikrofon an";
+        m_logger.Write(LogLevel::Info, "AUDIO", message);
+        ShowStep(QString::fromStdString(message));
+        break;
+    }
+    case StatusButton::Home:
+        PressConsole(ConsoleKey::Home);
+        break;
+    }
+    UpdateStatusBar();
+}
+
+// The radio's pages, which share the display's shape and the status bar.
+std::vector<MenuPage*> MainWindow::MenuPages() const
+{
+    return {m_homeMenu, m_music, m_radio, m_settings, m_bluetoothPage, m_pairing};
 }
 
 // The keyboard: controller keys go through the console (see ConsoleController), phone keys to the radio's side or the

@@ -14,7 +14,7 @@ using State = AudioPlayer::State;
 using Part = PageFocus::Part;
 // Layout in design units (the screen is 600 high): the tile as on the home menu, everything else in the column at its
 // right (see menu::kPageTile).
-constexpr double kHeaderTop = 24, kHeaderHeight = 50, kHeaderGap = 12, kHeaderMinWidth = 140, kHeaderMaxWidth = 420;
+constexpr double kHeaderTop = 24, kHeaderHeight = 50, kHeaderGap = 12, kHeaderMinWidth = 140, kHeaderMaxWidth = 360;
 constexpr double kSubtitleBaseline = 168;
 constexpr double kProgressTop = 182, kProgressHeight = 5;
 constexpr double kControlsTop = 200, kControlHeight = 52, kControlWidth = 84, kControlGap = 12;
@@ -157,6 +157,12 @@ void PlayerPage::StartPlayer(const std::string& source)
     update();
 }
 
+// What the status bar names while this page's source sounds (the station, the title); empty otherwise.
+QString PlayerPage::SoundingName() const
+{
+    return IsOwnSoundingNow() ? NowTitle() : QString();
+}
+
 // Tells the window that this page is about to start or resume the player.
 void PlayerPage::NotifyWillPlay()
 {
@@ -284,12 +290,12 @@ double PlayerPage::Right() const
     return Width() - menu::kPageTile.left();
 }
 
-// Where header button `index` is: right-aligned at the top, next to nothing but the clock.
+// Where header button `index` is: at the top, right-aligned up to the status bar.
 QRectF PlayerPage::HeaderRect(int index) const
 {
     const QStringList buttons = HeaderButtons();
     const QFontMetricsF metrics(menu::Font(24));
-    double right = Right();
+    double right = StatusBarLeft(Width()) - kHeaderGap;
     for (int button = static_cast<int>(buttons.size()) - 1; button >= 0; --button) {
         const double width = std::clamp(metrics.horizontalAdvance(buttons[button]) + 44, kHeaderMinWidth, kHeaderMaxWidth);
         if (button == index) return QRectF(right - width, kHeaderTop, width, kHeaderHeight);

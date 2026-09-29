@@ -25,6 +25,7 @@ public:
     void Nudge(unsigned keycode) override;
     void Push() override;
     bool MediaKey(unsigned keycode);
+    QString SoundingName() const;
     virtual void GiveWay();
 
 protected:

@@ -155,6 +155,7 @@
     <ClInclude Include="src\ui\ScriptedPhoneTest.h"><Filter>src\ui</Filter></ClInclude>
     <ClInclude Include="src\ui\ScriptedTestHost.h"><Filter>src\ui</Filter></ClInclude>
     <ClInclude Include="src\ui\SettingsPage.h"><Filter>src\ui</Filter></ClInclude>
+    <ClInclude Include="src\ui\StatusBar.h"><Filter>src\ui</Filter></ClInclude>
     <ClInclude Include="src\ui\VideoWidget.h"><Filter>src\ui</Filter></ClInclude>
     <ClInclude Include="src\ui\VolumeBar.h"><Filter>src\ui</Filter></ClInclude>
     <ClInclude Include="src\ui\VolumeOverlay.h"><Filter>src\ui</Filter></ClInclude>

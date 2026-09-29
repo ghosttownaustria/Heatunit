@@ -19,6 +19,8 @@ struct ProjectionCallbacks {
     // The display size announced to the phone (video resolution, touchscreen and density); fixed for the whole session.
     DisplayConfig display{kDefaultDisplay};
     std::function<void(const std::string&)> onStatus;
+    // The name the phone gave in its service discovery request (the status bar names it as the sound's source).
+    std::function<void(const std::string&)> onPhoneName;
     std::function<void(VideoFrame)> onFrame;
     // Touch, keys and rotary input from the window; the session attaches to it while it runs.
     std::shared_ptr<ProjectionInput> input;

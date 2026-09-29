@@ -270,6 +270,16 @@ home menu (Back first goes to the page, which may close something it opened, the
   Real DAB+ reception would need a tuner; a DAB+ source (for example `welle-cli` with an RTL-SDR stick, which serves the
   programmes as http streams) would plug in as another list of stream URLs.
 
+Status bar: every `MenuPage` draws it after the clock (layout in the portable `ui/StatusBar.h`, CoreTests: the
+symbols' boxes from `docs/design/heatunit.svg` measured from the right edge, touch areas, `StatusBarLeft`, and
+`StatusSourceText`: the radio's own player while it sounds, else the projected phone). `MainWindow::UpdateStatusBar`
+(every tick) hands a `StatusState` (source, sound muted, microphone muted) to all pages when it changed. The page's
+event filter on itself takes presses on the symbols before the page's own mouse handlers; `PressStatus` mutes the
+sound, toggles `AudioState`'s microphone mute (no capture exists yet, so it is only the switch) or presses Home. The
+phone's name comes from `ProjectionCallbacks::onPhoneName` (the service discovery request's device name, else its
+label); `WirelessStation::Serve` replaces it with the phone's Bluetooth name. `PlayerPage`'s top buttons end left of
+`StatusBarLeft`.
+
 Volume bar: `VolumeOverlay` is a child of the screens' `QStackedWidget`, above the page or the phone's picture in front
 (raised by `ShowVolume` and `ShowScreen`). `MainWindow::UpdateVolumeBar` (every tick) shows it for 2.5 s whenever the
 volume or the mute state differs from what it showed last, whoever changed it. It paints in the pages' design units

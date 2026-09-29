@@ -13,6 +13,7 @@
 #include "ui/HomeTileSetup.h"
 #include "ui/ScriptedPhoneTest.h"
 #include "ui/ScriptedTestHost.h"
+#include "ui/StatusBar.h"
 #include "usb/AutoConnectSystem.h"
 #include "usb/IUsbBackend.h"
 #include <QFutureWatcher>
@@ -23,6 +24,7 @@
 #include <optional>
 #include <set>
 #include <string>
+#include <vector>
 
 class QCloseEvent;
 class QComboBox;
@@ -97,6 +99,8 @@ private:
     VolumeOverlay* m_volumeBar{};                     // over the screens for a moment whenever the volume changes
     int m_shownVolume{};                              // the volume and mute state the bar showed last
     bool m_wasMuted{};
+    StatusState m_shownStatus;                        // what the pages' status bar shows
+    QString m_phoneName;                              // the connected phone's name, for the status bar
     HomeTileSetup m_tiles;                            // which tiles the home menu shows (remembered)
     std::shared_ptr<MediaActivity> m_phoneMedia{std::make_shared<MediaActivity>()};   // when the phone's music plays
     std::int64_t m_localStartMs{};                    // when the radio's own player last started or resumed
@@ -146,6 +150,9 @@ private:
     void ShowLatestFrame();
     void UpdateAudioDisplay();
     void UpdateVolumeBar();
+    void UpdateStatusBar();
+    void PressStatus(StatusButton button);
+    std::vector<MenuPage*> MenuPages() const;
     bool HandleKey(QKeyEvent* event, bool isDown);
     bool HandleExtraKey(int key);
     MenuPage* FrontPage() const;

@@ -36,6 +36,14 @@ From the user's list and the new design `docs/design/heatunit.svg` (status bar, 
   - Verified here: builds without warnings, CoreTests pass (`TestBluetoothPhones`, the tile and console tests for 8
     tiles), `HEADUNIT_TEST_PAGE=Bluetooth --smoke-test` picture with made-up phones; the Linux sources passed the
     syntax check. Not verified: the list with real phones and the switch between two phones (needs a second phone).
+- **Status bar** from the new design on every radio page: the source of the sound (the station or title of the radio's
+  own player while it sounds, else the connected phone: its Bluetooth name when wireless, the name from service
+  discovery over USB), then speaker (mute), microphone (mute; `AudioState` keeps the state, capture is still not
+  implemented) and home (the Home key). Touching a symbol lights it orange; muted symbols are grey and struck. The
+  player pages' top buttons moved left of the bar.
+  - Verified here: builds without warnings, CoreTests (`TestStatusBar`, microphone mute) and ProtocolTests pass, smoke
+    pictures of the home menu and the music page at 1600x600 and 800x480; Linux sources syntax-checked. Not verified:
+    the names shown with a real phone (which field the SM-F776B fills over USB), touches on a real touch screen.
 
 ## 2026-09-28: C++ coding standard applied to the whole project; `bin/` layout and four build profiles
 

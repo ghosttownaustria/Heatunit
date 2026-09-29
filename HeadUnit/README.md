@@ -67,6 +67,12 @@ einer Groesse, ohne sie zu merken (auch fuer die `--test-...`-Laeufe, die sonst 
     das Handy-Symbol), Multimedia, Radio, Bluetooth und Settings oeffnen die Seiten des Radios, Telephone und Navigation
     wirken wie die Tasten Tel und Nav; Vehicle hat noch keine Funktion. Ein Klick auf einen Randpfeil geht eine
     Kachel weiter, das Mausrad ueber dem Menue dreht.
+- **Statusleiste** (oben auf allen Seiten des Radios, nach [docs/design/heatunit.svg](docs/design/heatunit.svg)):
+  links die Uhr, rechts die Tonquelle, Lautsprecher, Mikrofon und Home. Die Tonquelle ist der laufende Radiosender
+  bzw. Musiktitel des Radios, sonst der Name des verbundenen Handys (kabellos der Bluetooth-Name wie "Jakob's Flip 8",
+  per USB der Name, den das Handy Android Auto meldet). Tippen auf den **Lautsprecher** schaltet den Ton stumm (wie
+  Stumm; durchgestrichen und grau, solange stumm), auf das **Mikrofon** das Mikrofon (die Aufnahme ist noch nicht
+  angebunden, bisher ist es nur der Schalter), **Home** wirkt wie die Taste HOME.
 - **Bluetooth:** Die gekoppelten Handys mit ihrem Zustand ("Android Auto", "Connected", "Not connected"); das
   Handy, auf dem Android Auto laeuft, steht oben in Orange. Drehen (oder Pfeil hoch/runter) waehlt, Druecken oder
   Tippen macht das gewaehlte Handy zum Android-Auto-Handy: die laufende Sitzung endet, das Handy wird ueber Bluetooth

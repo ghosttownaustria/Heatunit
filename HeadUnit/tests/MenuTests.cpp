@@ -8,6 +8,7 @@
 #include "ui/HomeTileSetup.h"
 #include "ui/KnobZones.h"
 #include "ui/PageFocus.h"
+#include "ui/StatusBar.h"
 #include "ui/VolumeBar.h"
 #include <cmath>
 #include <string>
@@ -205,6 +206,29 @@ void TestBluetoothPhones() {
     Check(SortedPhones({}).empty(), "An empty list got phones");
 }
 
+// The status bar: the symbols where the design has them, measured from the right edge on every display, touch areas
+// side by side, and the source's name, the radio's own player first.
+void TestStatusBar() {
+    const StatusBox home = StatusIconBox(StatusButton::Home, 1600);
+    Check(home.left == 1532.5 && home.top == 32.5 && std::abs(StatusIconBox(StatusButton::Speaker, 1600).left - 1401.9) < 0.01 &&
+        StatusIconBox(StatusButton::Microphone, 1000).left == 872, "The status bar's symbols are not where the design has them");
+    for (const double width : {1000.0, 1600.0}) {
+        for (const StatusButton button : {StatusButton::Speaker, StatusButton::Microphone, StatusButton::Home}) {
+            const StatusBox icon = StatusIconBox(button, width);
+            Check(StatusButtonAt(icon.left + icon.width / 2, icon.top + icon.height / 2, width) == button, "A symbol does not take a touch on it");
+        }
+        Check(StatusTouchBox(StatusButton::Speaker, width).left + StatusTouchBox(StatusButton::Speaker, width).width ==
+            StatusTouchBox(StatusButton::Microphone, width).left, "The touch areas leave a gap");
+        Check(!StatusButtonAt(width - 100, 150, width) && !StatusButtonAt(100, 50, width) && !StatusButtonAt(width - 5, 50, width),
+            "A touch beside the symbols hit one");
+        Check(StatusBarLeft(width) < StatusSourceRight(width) && StatusSourceRight(width) < StatusIconBox(StatusButton::Speaker, width).left,
+            "The source's name runs into the symbols");
+    }
+    Check(StatusBarLeft(1600) == 975 && StatusBarLeft(1000) == 525, "The status bar takes the wrong room");
+    Check(StatusSourceText("Oe3", true, "Flip") == "Oe3" && StatusSourceText("", true, "Flip") == "Flip" &&
+        StatusSourceText("", true, "") == "Android Auto" && StatusSourceText("", false, "Flip").empty(), "The source of the sound is named wrongly");
+}
+
 // The volume bar: centred, never wider than 1000 units nor closer than 50 to the edges, and a touch lights the segment
 // under it with all before it.
 void TestVolumeBar() {
@@ -223,8 +247,8 @@ void TestVolumeBar() {
 }
 }
 
-// The radio's menu pages: the knob, the home menu's layout and tiles, the focus on the player pages, the volume bar and the
-// Bluetooth page's list.
+// The radio's menu pages: the knob, the home menu's layout and tiles, the focus on the player pages, the volume bar, the
+// Bluetooth page's list and the status bar.
 void RunMenuTests()
 {
     TestKnobZones();
@@ -233,4 +257,5 @@ void RunMenuTests()
     TestPlayerPageFocus();
     TestVolumeBar();
     TestBluetoothPhones();
+    TestStatusBar();
 }

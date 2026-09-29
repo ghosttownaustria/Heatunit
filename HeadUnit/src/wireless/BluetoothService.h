@@ -39,6 +39,7 @@ public:
     void ConnectPairedPhones(bool isReconnectingAll = false);
     int WaitForPhone(std::chrono::milliseconds timeout);
     std::string PhoneOf(int fd);
+    std::string PhoneName(const std::string& devicePath);
     void SetAndroidAutoPhone(const std::string& devicePath);
     void SwitchToPhone(const std::string& devicePath);
 
