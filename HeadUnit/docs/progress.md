@@ -1,5 +1,19 @@
 # Progress
 
+## 2026-09-29: video decoding on its own thread
+
+Android Auto felt slow on the Pi. The whole session (USB reads, TLS, protobuf, H.264 decode, colour conversion, the
+acknowledgement of every video packet) ran on the one protocol thread, so the phone was paced by the decoder.
+
+- **`VideoDecodeWorker`** (portable, in `headunit_core`): `ProjectionSession` hands each video packet to a decode thread
+  (ordered queue of 4, nothing is dropped; `Submit` waits when it is full) and acknowledges at once. Failures are counted
+  on the worker; 200 in a row still end the session, posted to the strand. `hasVideo` is now an atomic set on the decode thread.
+  - Verified here: CoreTests (`VideoDecodeWorkerTests`: order, own thread, back-pressure, failure runs, destruction with a
+    full queue) and ProtocolTests pass; MSBuild Debug x64 and the core-only preset build without warnings.
+  - Not verified: any effect on the Pi. Measure with `top -H -d 2 -n 2 -p $(pgrep -n HeadUnit)` (the first sample of
+    `top -n 1` is an average since start and says nothing) while Android Auto runs. Ideas not done yet: hardware decode
+    (`h264_v4l2m2m`), fewer per-frame copies, USB read-ahead.
+
 ## 2026-09-29: remote API and GPIO bridge
 
 The functions of the simulated console can be driven by other programs (design: `docs/superpowers/specs/2026-09-29-remote-api-design.md`, use: `docs/api.md`).

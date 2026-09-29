@@ -14,3 +14,4 @@ void RunLoggingTests();
 void RunCommandLineTests();
 void RunTransportBufferTests();
 void RunRemoteCommandTests();
+void RunVideoDecodeWorkerTests();

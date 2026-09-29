@@ -35,7 +35,7 @@ main (composition/lifetime)
         +-- ConnectAndroidAuto -> AOA switch and claimed libusb interface
               +-- ProjectionTransport : AASDK ITransport
               +-- AndroidAutoSession -> AASDK framing/TLS/channels
-              +-- VideoDecoder (FFmpeg H.264 -> RGB)
+              +-- VideoDecodeWorker (own thread, ordered queue) -> VideoDecoder (FFmpeg H.264 -> RGB)
               +-- latest-frame mailbox -> Qt timer -> VideoWidget
         +-- QStackedWidget: VideoWidget (phone) or a MenuPage of the radio, chosen by ConsoleController
         |     +-- HomeMenu, MultimediaPage (MusicLibrary), RadioPage (RadioBrowser -> radio-browser.info)

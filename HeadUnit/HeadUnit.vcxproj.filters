@@ -95,6 +95,7 @@
     <ClCompile Include="src\usb\WindowsUsbBackend.cpp"><Filter>src\usb</Filter></ClCompile>
     <ClCompile Include="src\video\FfmpegHandles.cpp"><Filter>src\video</Filter></ClCompile>
     <ClCompile Include="src\video\VideoDecoder.cpp"><Filter>src\video</Filter></ClCompile>
+    <ClCompile Include="src\video\VideoDecodeWorker.cpp"><Filter>src\video</Filter></ClCompile>
     <ClInclude Include="src\CommandLine.h"><Filter>src</Filter></ClInclude>
     <ClInclude Include="src\androidauto\AndroidAutoSession.h"><Filter>src\androidauto</Filter></ClInclude>
     <ClInclude Include="src\androidauto\AndroidDeviceDetector.h"><Filter>src\androidauto</Filter></ClInclude>
@@ -184,6 +185,7 @@
     <ClInclude Include="src\usb\WindowsUsbBackend.h"><Filter>src\usb</Filter></ClInclude>
     <ClInclude Include="src\video\FfmpegHandles.h"><Filter>src\video</Filter></ClInclude>
     <ClInclude Include="src\video\VideoDecoder.h"><Filter>src\video</Filter></ClInclude>
+    <ClInclude Include="src\video\VideoDecodeWorker.h"><Filter>src\video</Filter></ClInclude>
     <None Include="src\audio\MiniaudioImpl.cpp"><Filter>src\audio</Filter></None>
     <None Include="src\audio\MiniaudioPcmStream.cpp"><Filter>src\audio</Filter></None>
     <None Include="src\usb\LinuxDriverRepair.cpp"><Filter>src\usb</Filter></None>

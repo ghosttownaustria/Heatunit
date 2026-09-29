@@ -11,6 +11,7 @@ set(HEADUNIT_AUDIO_BACKEND "auto" CACHE STRING "Audio output: auto (WASAPI on Wi
 set_property(CACHE HEADUNIT_AUDIO_BACKEND PROPERTY STRINGS auto wasapi miniaudio)
 include(cmake/BuildProfiles.cmake)
 include(CTest)
+find_package(Threads REQUIRED)
 
 # The portable core: no Qt, no operating system API.
 add_library(headunit_core src/CommandLine.cpp src/logging/LogLevel.cpp src/logging/Logger.cpp src/platform/Environment.cpp
@@ -20,8 +21,9 @@ add_library(headunit_core src/CommandLine.cpp src/logging/LogLevel.cpp src/loggi
   src/androidauto/TouchMapping.cpp src/androidauto/TransportReceiveBuffer.cpp
   src/audio/AudioClock.cpp src/audio/PcmFormat.cpp src/audio/Pcm16.cpp src/audio/PcmRingBuffer.cpp src/audio/AudioState.cpp src/audio/MediaActivity.cpp
   src/audio/WatchedOutput.cpp src/media/MusicLibrary.cpp src/media/StreamText.cpp src/ui/KnobZones.cpp src/ui/HomeTileSetup.cpp src/ui/HomeMenuLayout.cpp
-  src/ui/BluetoothPhones.cpp src/ui/TouchDrag.cpp src/remote/RemoteCommand.cpp)
+  src/ui/BluetoothPhones.cpp src/ui/TouchDrag.cpp src/remote/RemoteCommand.cpp src/video/VideoDecodeWorker.cpp)
 target_include_directories(headunit_core PUBLIC src)
+target_link_libraries(headunit_core PUBLIC Threads::Threads)
 target_compile_definitions(headunit_core PRIVATE $<$<CONFIG:DebugLevelLog,ReleaseLevelLog>:HEADUNIT_VERBOSE_LOGGING>)
 if(MSVC)
   target_compile_options(headunit_core PUBLIC /W4 /utf-8 /permissive-)
@@ -144,7 +146,7 @@ endif()
 if(BUILD_TESTING)
   add_executable(CoreTests tests/CoreTests.cpp tests/TestSupport.cpp tests/UsbDescriptorTests.cpp tests/AoaTests.cpp tests/AutoConnectTests.cpp
     tests/PhoneWatchTests.cpp tests/DisplayTests.cpp tests/ConsoleTests.cpp tests/AudioTests.cpp tests/MenuTests.cpp tests/MediaTests.cpp
-    tests/LoggingTests.cpp tests/CommandLineTests.cpp tests/TransportBufferTests.cpp tests/RemoteCommandTests.cpp)
+    tests/LoggingTests.cpp tests/CommandLineTests.cpp tests/TransportBufferTests.cpp tests/RemoteCommandTests.cpp tests/VideoDecodeWorkerTests.cpp)
   target_link_libraries(CoreTests PRIVATE headunit_core)
   add_test(NAME CoreTests COMMAND CoreTests)
   if(HEADUNIT_BUILD_APP)

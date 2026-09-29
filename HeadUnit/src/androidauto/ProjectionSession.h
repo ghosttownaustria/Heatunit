@@ -13,6 +13,7 @@
 #include <aasdk/Messenger/Cryptor.hpp>
 #include <aasdk/Messenger/Messenger.hpp>
 #include <aasdk/Transport/ITransport.hpp>
+#include "video/VideoDecodeWorker.h"
 #include <atomic>
 #include <chrono>
 #include <memory>
@@ -80,7 +81,8 @@ private:
     std::shared_ptr<aasdk::channel::inputsource::InputSourceService> m_input;
     std::vector<std::shared_ptr<AudioSinkChannel>> m_audio;
     std::shared_ptr<MicrophoneChannel> m_microphone;
-    std::unique_ptr<VideoDecoder> m_decoder;
+    std::atomic_bool m_hasDecodedFrame{};   // set on the decode thread
+    std::unique_ptr<VideoDecodeWorker> m_decoder;   // last of the members it uses: it is joined first when they go
     ProjectionResult m_result;
     Clock::time_point m_started{Clock::now()};
     Clock::time_point m_lastPing{};
@@ -89,7 +91,6 @@ private:
     Clock::time_point m_lastVersionRequest{};
     int m_versionRequests{1};
     int m_videoSession{-1};
-    int m_decodeFailures{};
     std::uint64_t m_inputToken{};
     bool m_isInputReady{};
     bool m_isEnding{};
@@ -102,6 +103,7 @@ private:
 
     void StartChannels();
     void AttachInput();
+    void StartVideoDecoding();
     void ShowFrame(VideoFrame frame);
     aasdk::channel::SendPromise::Pointer Promise();
     aasdk::channel::SendPromise::Pointer Promise(std::function<void()> onSent);
