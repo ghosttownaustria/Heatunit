@@ -81,6 +81,11 @@ a session requests a stop and closes once the worker has finished; with `m_isRad
 first calls `WirelessStation::SwitchRadiosOff` (station down, `BluetoothService::SwitchOff` powers the adapter off,
 `SwitchWifiOff` runs `nmcli radio wifi off`). Connecting again goes through the Android Auto tile or the projection
 key.
+The same quit is the **Quit** button of the Settings tile. In the release profiles (`HEADUNIT_KIOSK`,
+`platform/BuildProfile.h`) the window is the car's: `EnterKioskMode` hides the simulated console and the controls
+under the picture, removes the frame and the cursor, picks the display with `BestDisplayFor` from the screen's pixel
+size and refuses the window manager's close requests (`spontaneous` close events); `main` shows it full screen. The
+Quit button (and SIGINT/SIGTERM) is then the way out.
 
 FFmpeg accepts only the advertised H.264 video path. Decoded RGB frames replace
 the previous mailbox frame under a mutex; a 33 ms Qt timer consumes the newest
@@ -186,7 +191,7 @@ Display size: `DisplayConfig` (portable) is the one place that knows the offered
 them. `VideoLayoutOf` maps a display to a `VideoLayout`: the frame the phone encodes (smallest fixed
 resolution that holds the display), the margins that fit the display's shape into it, and the shown area.
 `MainWindow` holds the chosen size (combo box, only enabled while idle, remembered with `QSettings`,
-`--display` override for a run) and hands it to the session in `ProjectionCallbacks::display`;
+`--display` override for a run; the car window has no combo box and takes `BestDisplayFor` the screen) and hands it to the session in `ProjectionCallbacks::display`;
 `DisplayService.h` turns it into the video service's `VideoConfiguration` (resolution, margins, density), and
 the session announces the shown area as the touchscreen. Video and touch therefore share one coordinate
 space: the pixels of the shown area, which `VideoWidget::SetFrame` cuts out of each decoded frame (the phone

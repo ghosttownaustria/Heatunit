@@ -116,6 +116,7 @@ if(HEADUNIT_BUILD_APP)
     src/ui/MenuStyle.cpp src/ui/MenuPage.cpp src/ui/HomeMenu.cpp src/ui/SettingsPage.cpp src/ui/PairingPage.cpp src/ui/PlayerPage.cpp
     src/ui/MultimediaPage.cpp src/ui/RadioPage.cpp src/ui/BluetoothPage.cpp src/ui/VolumeOverlay.cpp)
   target_link_libraries(HeadUnit PRIVATE headunit_usb headunit_media Qt6::Widgets Qt6::Concurrent Qt6::Network)
+  target_compile_definitions(HeadUnit PRIVATE $<$<CONFIG:Release,ReleaseLevelLog>:HEADUNIT_KIOSK>)
   if(HEADUNIT_WIRELESS_ENABLED)
     target_link_libraries(HeadUnit PRIVATE headunit_wireless)
   endif()

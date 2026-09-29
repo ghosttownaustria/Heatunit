@@ -143,6 +143,7 @@
     <ClInclude Include="src\media\AudioPlayer.h" />
     <ClInclude Include="src\media\MusicLibrary.h" />
     <ClInclude Include="src\media\StreamText.h" />
+    <ClInclude Include="src\platform\BuildProfile.h" />
     <ClInclude Include="src\platform\Environment.h" />
     <ClInclude Include="src\platform\ShutdownSignal.h" />
     <ClInclude Include="src\platform\WindowsSupport.h" />

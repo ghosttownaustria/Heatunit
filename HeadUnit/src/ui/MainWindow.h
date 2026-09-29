@@ -68,6 +68,7 @@ public:
     ~MainWindow() override;
 
     void SetDisplay(const DisplayConfig& display);
+    void EnterKioskMode();
 
 protected:
     void closeEvent(QCloseEvent* event) override;
@@ -106,6 +107,7 @@ private:
     std::int64_t m_localStartMs{};                    // when the radio's own player last started or resumed
     std::set<unsigned> m_localKeys;                   // keys held down whose press the radio's side took
     CarPanel* m_panel{};
+    QWidget* m_controls{};                            // the development controls under the picture
     QLabel* m_status{};
     QLabel* m_step{};
     QComboBox* m_displayChoice{};
@@ -122,6 +124,7 @@ private:
     std::optional<VideoFrame> m_latestFrame;
     unsigned m_displayedFrames{};
     bool m_isCloseRequested{};
+    bool m_isKiosk{};                                 // the window is the car's: full screen, only the program's own way out
     State m_state{State::Idle};
     QFutureWatcher<AutoConnectResult> m_watcher;
     QFutureWatcher<UsbScanResult> m_scanWatcher;

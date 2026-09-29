@@ -4,6 +4,7 @@
 #include "audio/AudioClock.h"
 #include "audio/WatchedOutput.h"
 #include "platform/Environment.h"
+#include "platform/BuildProfile.h"
 #include "ui/BluetoothPage.h"
 #include "ui/CarPanel.h"
 #include "ui/HomeMenu.h"
@@ -22,8 +23,10 @@
 #include <QComboBox>
 #include <QDir>
 #include <QHBoxLayout>
+#include <QGuiApplication>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QScreen>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSettings>
@@ -175,10 +178,41 @@ void MainWindow::SetDisplay(const DisplayConfig& display)
     }
 }
 
+// The car's window: the picture and the radio's pages over the whole screen, shown for the size of that screen, without
+// the simulated console, the display choice, the button and the history. It has no frame, and the window manager's own
+// requests to close it (Alt+F4, a task switcher) are refused: the way out is the Quit button in the settings. Called
+// before the window is shown; a display given on the command line still overrides the size found here.
+void MainWindow::EnterKioskMode()
+{
+    m_isKiosk = true;
+    m_panel->hide();
+    m_controls->hide();
+    QLayout* root = centralWidget()->layout();
+    root->setContentsMargins(0, 0, 0, 0);
+    root->setSpacing(0);
+    if (QLayout* left = root->itemAt(0)->layout()) {
+        left->setContentsMargins(0, 0, 0, 0);
+        left->setSpacing(0);
+    }
+    setWindowFlag(Qt::FramelessWindowHint);
+    setCursor(Qt::BlankCursor);
+    const QScreen* screen = QGuiApplication::primaryScreen();
+    if (!screen) return;
+    const QSize pixels = screen->geometry().size() * screen->devicePixelRatio();
+    SetDisplay(BestDisplayFor(pixels.width(), pixels.height()));
+    m_logger.Write(LogLevel::Info, "UI", "Car mode: full screen " + std::to_string(pixels.width()) + "x" + std::to_string(pixels.height()) +
+        ", display " + DisplayText(m_display));
+}
+
 // Closing first lets a session say goodbye to the phone and release the USB interface, and takes the hotspot and
 // Bluetooth down; FinishConnect closes the window once that has happened. The watch's flag goes first (see PhoneWatch).
 void MainWindow::closeEvent(QCloseEvent* event)
 {
+    if (m_isKiosk && event->spontaneous()) {
+        m_logger.Write(LogLevel::Info, "UI", "Car mode: a close request of the window manager was refused");
+        event->ignore();
+        return;
+    }
     if (m_state == State::Idle) {
         QMainWindow::closeEvent(event);
         return;
@@ -256,6 +290,10 @@ QWidget* MainWindow::BuildScreens(QWidget* parent)
 // status line and the history of steps.
 void MainWindow::BuildControls(QWidget* parent, QVBoxLayout* layout)
 {
+    m_controls = new QWidget(parent);
+    auto* box = new QVBoxLayout(m_controls);
+    box->setContentsMargins(0, 0, 0, 0);
+    layout->addWidget(m_controls);
     auto* controls = new QHBoxLayout();
     auto* displayLabel = new QLabel("Displaygroesse:", parent);
     m_displayChoice = new QComboBox(parent);
@@ -277,7 +315,7 @@ void MainWindow::BuildControls(QWidget* parent, QVBoxLayout* layout)
     controls->addWidget(displayLabel);
     controls->addWidget(m_displayChoice);
     controls->addWidget(m_button, 1);
-    layout->addLayout(controls);
+    box->addLayout(controls);
 #ifdef HEADUNIT_WIRELESS
     m_step = new QLabel("Android Auto startet von selbst: Handy per USB-Kabel anstecken und entsperren, oder kabellos "
         "(einmal in den Bluetooth-Einstellungen des Handys mit HEATUNIT koppeln).", parent);
@@ -287,15 +325,15 @@ void MainWindow::BuildControls(QWidget* parent, QVBoxLayout* layout)
     m_step->setWordWrap(true);
     m_step->setTextFormat(Qt::PlainText);
     m_step->setTextInteractionFlags(Qt::TextSelectableByMouse);
-    layout->addWidget(m_step);
+    box->addWidget(m_step);
     m_status = new QLabel(parent);
-    layout->addWidget(m_status);
+    box->addWidget(m_status);
     m_history = new QPlainTextEdit(parent);
     m_history->setReadOnly(true);
     m_history->setMaximumBlockCount(500);
     m_history->setMaximumHeight(120);
     m_history->setFocusPolicy(Qt::NoFocus);
-    layout->addWidget(m_history);
+    box->addWidget(m_history);
 }
 
 // The centre console at the right: its keys go through the console or straight to the phone, its volume keys to the

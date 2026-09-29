@@ -131,6 +131,7 @@
     <ClInclude Include="src\media\AudioPlayer.h"><Filter>src\media</Filter></ClInclude>
     <ClInclude Include="src\media\MusicLibrary.h"><Filter>src\media</Filter></ClInclude>
     <ClInclude Include="src\media\StreamText.h"><Filter>src\media</Filter></ClInclude>
+    <ClInclude Include="src\platform\BuildProfile.h"><Filter>src\platform</Filter></ClInclude>
     <ClInclude Include="src\platform\Environment.h"><Filter>src\platform</Filter></ClInclude>
     <ClInclude Include="src\platform\ShutdownSignal.h"><Filter>src\platform</Filter></ClInclude>
     <ClInclude Include="src\platform\WindowsSupport.h"><Filter>src\platform</Filter></ClInclude>

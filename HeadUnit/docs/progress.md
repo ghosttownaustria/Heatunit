@@ -9,6 +9,17 @@ From the user's list; one commit per point.
   quit without the window's controls.
   - Verified here: `windows-debug` builds without warnings; `HEADUNIT_TEST_PAGE=Settings --smoke-test` picture at
     1600x600 shows the button below the eight rows. Not verified: the tap and the knob on the Pi.
+- **Car window in release builds**: the release profiles (`release`, `release_level_log`; define `HEADUNIT_KIOSK`, set in
+  `CMakeLists.txt` and `msbuild/Common.props`) start `MainWindow::EnterKioskMode` and `showFullScreen`: no frame, no
+  simulated console, display choice, Beenden button or history, no mouse cursor. The display is picked from the screen's
+  pixel size (`BestDisplayFor`: closest shape, then closest height; `--display` still overrides). Close requests of the
+  window manager (Alt+F4, a task switcher; `QCloseEvent::spontaneous`) are refused; the Quit button in the settings, and
+  SIGINT/SIGTERM (service stop, shutdown), still end the program. `HEADUNIT_KIOSK=1` / `0` forces the mode on / off in any
+  build (for development); test modes other than `--smoke-test` never use it.
+  - Verified here: builds without warnings, CoreTests (`TestBestDisplay`) and ProtocolTests pass; a debug build with
+    `HEADUNIT_KIOSK=1 --smoke-test` on a 3840x2160 screen showed the settings page over the full screen, display 1920x1080.
+    Not verified: a release build, Alt+F4 / other shortcuts on the Pi. Keys that the desktop itself handles (Ctrl+Alt+T, a
+    panel, TTY switching) are not the program's to block; for a real kiosk run it in a session without a desktop.
 
 ## 2026-09-28 (night): quit button, hidden Wi-Fi, volume bar, Bluetooth tile, status bar, touch
 

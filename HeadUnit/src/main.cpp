@@ -2,13 +2,14 @@
 #include "androidauto/AndroidDeviceDetector.h"
 #include "audio/AudioEngine.h"
 #include "logging/Logger.h"
+#include "platform/BuildProfile.h"
+#include "platform/Environment.h"
 #include "platform/ShutdownSignal.h"
 #include "ui/MainWindow.h"
 #include "usb/AndroidUsbProbe.h"
 #include "usb/DriverRepair.h"
 #include "usb/UsbBackendFactory.h"
 #ifdef HEADUNIT_WIRELESS
-#include "platform/Environment.h"
 #include "wireless/Hotspot.h"
 #include "wireless/WirelessDiagnostics.h"
 #endif
@@ -132,6 +133,15 @@ MainWindow::TestMode TestModeOf(RunMode mode)
     }
 }
 
+// Whether the window is the car's full-screen one: in a release build, for the car mode (and the smoke test, which shows
+// what the car shows). HEADUNIT_KIOSK=1 / 0 switches it on / off in any build, for development.
+bool IsCarWindow(MainWindow::TestMode mode)
+{
+    if (mode != MainWindow::TestMode::None && mode != MainWindow::TestMode::Smoke) return false;
+    if (const auto setting = GetEnv("HEADUNIT_KIOSK"); setting && !setting->empty()) return *setting != "0";
+    return kIsKioskBuild;
+}
+
 // The window, in the car mode or one of its test modes, until it closes. Closing properly (also on Ctrl+C or a service
 // stop) ends a running session and takes the wireless mode's hotspot down again.
 int RunWindow(int argc, char* argv[], IUsbBackend& backend, Logger& logger, const CommandLine& commandLine)
@@ -141,9 +151,13 @@ int RunWindow(int argc, char* argv[], IUsbBackend& backend, Logger& logger, cons
     RemoveLeftoverHotspot(logger);
 #endif
     QApplication application(argc, argv);
-    MainWindow window(backend, logger, TestModeOf(commandLine.mode));
+    const MainWindow::TestMode testMode = TestModeOf(commandLine.mode);
+    MainWindow window(backend, logger, testMode);
+    const bool isCarWindow = IsCarWindow(testMode);
+    if (isCarWindow) window.EnterKioskMode();
     if (commandLine.display) window.SetDisplay(*commandLine.display);
-    window.show();
+    if (isCarWindow) window.showFullScreen();
+    else window.show();
     if (commandLine.isWirelessRequested) logger.Write(LogLevel::Info, "APP", "--wireless: wireless Android Auto runs from the start anyway");
     InstallShutdownSignalHandlers();
     QTimer closeWatch;
