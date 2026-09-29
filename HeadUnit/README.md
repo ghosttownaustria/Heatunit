@@ -26,7 +26,7 @@ bleibt, startet nach einer beendeten Sitzung erst nach neuem Anstecken wieder, o
 **Android Auto** bzw. der Projektionstaste.
 
 **Displaygroesse.** Solange keine Sitzung laeuft, laesst sich die Displaygroesse
-waehlen (neben dem Knopf Beenden): 800 x 480, 1280 x 720 (HD), 1600 x 600 (Ultrawide) oder 1920 x 1080 (Full HD). Das Handy erfaehrt sie
+eingeben (Feld neben dem Knopf Beenden, Breite x Hoehe in Pixeln, z. B. 1024x600, mit Enter uebernehmen). Im Vollbild (Release) wird automatisch die genaue Bildschirmgroesse genommen. Das Handy erfaehrt sie
 beim Verbinden (Video-Aufloesung, Touchflaeche und passende Bilddichte), darum ist die Auswahl waehrend einer
 Verbindung gesperrt. Die Wahl wird gemerkt (Windows-Benutzer, Registry `HKCU\Software\HeadUnit`); das
 Startmenue im Bildfeld zeigt schon vor dem Verbinden die Form des gewaehlten Displays.

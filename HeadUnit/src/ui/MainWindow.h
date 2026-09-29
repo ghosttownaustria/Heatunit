@@ -28,7 +28,7 @@
 #include <vector>
 
 class QCloseEvent;
-class QComboBox;
+class QLineEdit;
 class QHBoxLayout;
 class QKeyEvent;
 class QLabel;
@@ -114,7 +114,7 @@ private:
     QWidget* m_controls{};                            // the development controls under the picture
     QLabel* m_status{};
     QLabel* m_step{};
-    QComboBox* m_displayChoice{};
+    QLineEdit* m_displayInput{};
     QPushButton* m_button{};
     QPlainTextEdit* m_history{};
     std::atomic_bool m_isStopRequested{};             // ends the running connection or session
@@ -140,6 +140,7 @@ private:
     void BuildControls(QWidget* parent, QVBoxLayout* layout);
     void BuildPanel(QWidget* parent, QHBoxLayout* layout);
     void ConnectSignals();
+    void ApplyTypedDisplay();
     void StartMode();
     void SetState(State state);
     void Quit();

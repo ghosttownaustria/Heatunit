@@ -1,5 +1,21 @@
 # Progress
 
+## 2026-09-29: display size in exact pixels
+
+On the Pi (screen 1024x600) the car window picked the "closest" of four fixed displays, 800x480, and Qt scaled the phone's
+picture up by 1.28 (soft, pixelated). The fixed list is gone.
+
+- **`DisplayConfig`** is any size from 320x200 to 7680x4320. The car window takes the screen's exact pixel size
+  (`DisplayForScreen`, default 800x480 only for a screen without a size); the window's display combo box is a text field
+  "WxH"; `--display WIDTHxHEIGHT` takes any size. A display larger than 1920x1080 is announced scaled down to that frame
+  with its own shape (`PhoneSizeOf`); a display between two frames, like 1024x600, rides in the next larger frame with
+  margins (1280x720 frame, 1228x720 shown area, 52 px width margin) and is scaled down to the screen.
+  - Verified here: CoreTests (`DisplayTests`, `CommandLineTests`, video configuration in ProtocolTests) and the smoke
+    window at 1024x600; builds without warnings (MSBuild Debug x64, core-only preset).
+  - Not verified: **the phone with a taller-than-frame display** (width margin; the wide 1600x600 case with a height margin
+    was measured on the phone, this mirror case was not), touch position at the edges, the Pi. If the phone ignores
+    the width margin the picture is stretched horizontally: then this needs a different fit.
+
 ## 2026-09-29: video decoding on its own thread
 
 Android Auto felt slow on the Pi. The whole session (USB reads, TLS, protobuf, H.264 decode, colour conversion, the

@@ -1,4 +1,5 @@
 #include "CoreTestSuites.h"
+#include "TestDisplays.h"
 #include "TestSupport.h"
 #include "androidauto/DisplayConfig.h"
 #include "androidauto/PhoneScreenDetector.h"
@@ -69,13 +70,15 @@ void TestTouchMappingOtherDisplays() {
 
 // The offered displays, their densities, their text form and how the video frame carries each of them.
 void TestDisplayConfig() {
-    Check(std::size(kDisplays) == 4 && kDisplays[0] == DisplayConfig{800, 480} && kDisplays[1] == DisplayConfig{1280, 720} && kDisplays[2] == DisplayConfig{1600, 600} &&
-        kDisplays[3] == DisplayConfig{1920, 1080}, "The offered display sizes changed");
     Check(kDefaultDisplay == DisplayConfig{800, 480}, "The default display is not 800x480");
     Check(DisplayDensity({800, 480}) == 160 && DisplayDensity({1280, 720}) == 240 && DisplayDensity({1920, 1080}) == 360, "The density does not follow the display height");
     Check(DisplayDensity({1600, 600}) == 240, "The density of the 1600x600 display does not follow its shown height (720)");
-    for (const auto& display : kDisplays) Check(IsSupportedDisplay(display), "An offered display is not supported");
-    Check(!IsSupportedDisplay({1024, 600}) && !IsSupportedDisplay({480, 800}) && !IsSupportedDisplay({0, 0}) && !IsSupportedDisplay({1280, 480}), "An unknown display was accepted");
+    Check(DisplayDensity({1024, 600}) == 240, "The density of the 1024x600 display does not follow its shown height (720)");
+    for (const auto& display : kTestDisplays) Check(IsValidDisplay(display), "A test display is not valid");
+    Check(IsValidDisplay({1024, 600}) && IsValidDisplay({1366, 768}) && IsValidDisplay({480, 800}) && IsValidDisplay(kMinDisplay) && IsValidDisplay(kMaxDisplay),
+        "A display within the range was refused");
+    Check(!IsValidDisplay({0, 0}) && !IsValidDisplay({-800, 480}) && !IsValidDisplay({319, 480}) && !IsValidDisplay({800, 199}) && !IsValidDisplay({7681, 4320}),
+        "A display outside the range was accepted");
     Check(DisplayText({1280, 720}) == "1280 x 720", "The display text is wrong");
     for (const char* text : {"1280x720", "1280 x 720", "1280X720", "  1280 x 720 ", "1280 X 720"})
         Check(ParseDisplay(text) == std::optional<DisplayConfig>(DisplayConfig{1280, 720}), "A valid display text was not parsed");
@@ -91,30 +94,31 @@ void TestDisplayConfig() {
     Check(ultra == VideoLayout{1920, 1080, 0, 360, 1920, 720}, "1600x600 is not fitted into the 1920x1080 frame with a 360 px height margin");
     Check(ultra.HasMargins() && ultra.Left() == 0 && ultra.Top() == 180 && !VideoLayoutOf({1280, 720}).HasMargins(), "The shown area of the 1600x600 display starts in the wrong place");
     Check(VideoLayoutOf({1024, 600}) == VideoLayout{1280, 720, 52, 0, 1228, 720}, "A display taller than its frame is not fitted with a width margin");
-    Check(VideoLayoutOf({3840, 2160}) == VideoLayout{0, 0, 0, 0, 3840, 2160} && VideoLayoutOf({1920, 1200}) == VideoLayout{0, 0, 0, 0, 1920, 1200},
-        "A display that no frame holds got a frame");
+    // A display larger than the largest frame is announced scaled down to it, with the same shape.
+    Check(VideoLayoutOf({3840, 2160}) == VideoLayout{1920, 1080, 0, 0, 1920, 1080} && VideoLayoutOf({2560, 1440}) == VideoLayout{1920, 1080, 0, 0, 1920, 1080},
+        "A 16:9 display larger than the largest frame was not scaled down to it");
+    Check(VideoLayoutOf({1920, 1200}) == VideoLayout{1920, 1080, 192, 0, 1728, 1080}, "A 16:10 display larger than the largest frame was not scaled down and fitted");
+    Check(VideoLayoutOf({3200, 1200}) == VideoLayout{1920, 1080, 0, 360, 1920, 720}, "A very wide display larger than the largest frame was not scaled down and fitted");
     Check(VideoLayoutOf({0, 0}).codecWidth == 0 && VideoLayoutOf({-800, 480}).codecWidth == 0 && VideoLayoutOf({800, 0}).codecWidth == 0, "A display without a size got a frame");
-    for (const auto& display : kDisplays) {
+    for (const auto& display : kTestDisplays) {
         const auto layout = VideoLayoutOf(display);
         Check(layout.codecWidth > 0 && layout.marginWidth % 2 == 0 && layout.marginHeight % 2 == 0 && layout.width == layout.codecWidth - layout.marginWidth &&
             layout.height == layout.codecHeight - layout.marginHeight, "The layout of " + DisplayText(display) + " is inconsistent");
-        Check(layout.width * display.height == layout.height * display.width, "The shown area of " + DisplayText(display) + " has another shape than the display");
+        Check(std::abs(layout.width * display.height - layout.height * display.width) <= 2 * display.height, "The shown area of " + DisplayText(display) + " has another shape than the display");
     }
-    for (const char* text : {"", "x", "1280", "1280x", "x720", "1024x600", "1280x720x1", "abc", "1280x720p", "-1280x720", "+1280x720", "1280,720", "720x1280", "0x0"})
+    for (const char* text : {"", "x", "1280", "1280x", "x720", "1280x720x1", "1024x100", "8000x600", "abc", "1280x720p", "-1280x720", "+1280x720", "1280,720", "0x0"})
         Check(!ParseDisplay(text), "An invalid display text was accepted");
-    for (const auto& display : kDisplays) Check(ParseDisplay(DisplayText(display)) == std::optional<DisplayConfig>(display), "A display text does not read back");
+    for (const auto& display : kTestDisplays) Check(ParseDisplay(DisplayText(display)) == std::optional<DisplayConfig>(display), "A display text does not read back");
 }
 
-// The display a release build picks for the screen it finds: the closest shape, then the closest height.
-void TestBestDisplay() {
-    for (const auto& display : kDisplays) Check(BestDisplayFor(display.width, display.height) == display, "A screen of an offered size did not get that display");
-    Check(BestDisplayFor(1024, 600) == DisplayConfig{800, 480}, "A 1024x600 screen did not get the 800x480 display");
-    Check(BestDisplayFor(1366, 768) == DisplayConfig{1280, 720}, "A 1366x768 screen did not get the 1280x720 display");
-    Check(BestDisplayFor(2560, 1440) == DisplayConfig{1920, 1080}, "A 2560x1440 screen did not get the 1920x1080 display");
-    Check(BestDisplayFor(1280, 400) == DisplayConfig{1600, 600}, "A very wide screen did not get the ultrawide display");
-    Check(BestDisplayFor(0, 0) == kDefaultDisplay && BestDisplayFor(-1, 480) == kDefaultDisplay && BestDisplayFor(800, 0) == kDefaultDisplay,
+// The display a car window takes for the screen it finds: exactly the screen's pixels, the default for a screen without a size.
+void TestDisplayForScreen() {
+    for (const auto& display : kTestDisplays) Check(DisplayForScreen(display.width, display.height) == display, "A screen did not get a display of its own size");
+    Check(DisplayForScreen(1024, 600) == DisplayConfig{1024, 600} && DisplayForScreen(1366, 768) == DisplayConfig{1366, 768} && DisplayForScreen(1280, 400) == DisplayConfig{1280, 400},
+        "A screen of an unusual size did not get exactly that size");
+    Check(DisplayForScreen(0, 0) == kDefaultDisplay && DisplayForScreen(-1, 480) == kDefaultDisplay && DisplayForScreen(800, 0) == kDefaultDisplay,
         "A screen without a size did not get the default display");
-    Check(IsSupportedDisplay(BestDisplayFor(480, 800)), "A portrait screen got a display that is not offered");
+    Check(DisplayForScreen(10000, 5000) == kDefaultDisplay, "A screen beyond the range did not get the default display");
 }
 
 // A picture of the phone, dark like Android Auto's bar, with the navigation bar button drawn in one of
@@ -187,7 +191,7 @@ void TestPhoneScreenDetector() {
     ringOnly.Ring();
     Check(ringOnly.Detect() == PhoneScreen::Unknown, "A focus ring alone was read as a known screen");
     // Every display size carries the same layout, scaled by its height (the wide ones are only wider).
-    for (const auto& display : kDisplays) {
+    for (const auto& display : kTestDisplays) {
         const std::string size = DisplayText(display);
         Picture dots(display);
         dots.Dots();
@@ -233,6 +237,6 @@ void RunDisplayTests()
     TestTouchMapping();
     TestTouchMappingOtherDisplays();
     TestDisplayConfig();
-    TestBestDisplay();
+    TestDisplayForScreen();
     TestPhoneScreenDetector();
 }

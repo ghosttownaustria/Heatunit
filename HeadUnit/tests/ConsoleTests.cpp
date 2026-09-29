@@ -1,4 +1,5 @@
 #include "CoreTestSuites.h"
+#include "TestDisplays.h"
 #include "TestSupport.h"
 #include "androidauto/ConsoleController.h"
 #include "androidauto/DisplayConfig.h"
@@ -216,7 +217,7 @@ void TestDashboardButtonOnDisplays() {
     Check(DashboardButtonPosition({1280, 720}) == std::make_pair(63, 657), "The dashboard button is wrong on a 1280x720 display");
     // The 1600x600 display is shown as 1920x720: the button is where it is on a 720 px high display.
     Check(DashboardButtonPosition({1600, 600}) == std::make_pair(63, 657), "The dashboard button is wrong on a 1600x600 display");
-    for (const auto& display : kDisplays) {
+    for (const auto& display : kTestDisplays) {
         const auto [x, y] = DashboardButtonPosition(display);
         const auto layout = VideoLayoutOf(display);
         const double scale = LayoutScale(layout.height);

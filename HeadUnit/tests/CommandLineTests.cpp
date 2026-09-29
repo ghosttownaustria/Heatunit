@@ -58,8 +58,9 @@ void TestRefusedArguments()
     Check(Parse({"--bogus"}).error == "Unknown option: --bogus", "An unknown option was accepted");
     Check(!Parse({"--scan", "--smoke-test"}).error.empty(), "Two run modes were accepted");
     Check(!Parse({"--wireless", "--scan"}).error.empty(), "--wireless and a run mode were accepted together");
-    Check(Parse({"--display"}).error.find("1280x720") != std::string::npos, "A missing display size did not list the sizes");
-    Check(!Parse({"--display", "1024x600"}).error.empty(), "An unknown display size was accepted");
+    Check(Parse({"--display"}).error.find("WIDTHxHEIGHT") != std::string::npos, "A missing display size did not explain the format");
+    Check(Parse({"--display", "1024x600"}).error.empty() && Parse({"--display", "1024x600"}).display == DisplayConfig{1024, 600}, "A display size that is in range was refused");
+    Check(!Parse({"--display", "100x100"}).error.empty() && !Parse({"--display", "abc"}).error.empty(), "A display size out of range was accepted");
     Check(!Parse({"--test-bluetooth"}, false).error.empty() && !Parse({"--wireless"}, false).error.empty(),
         "A build without wireless accepted a wireless option");
 }
