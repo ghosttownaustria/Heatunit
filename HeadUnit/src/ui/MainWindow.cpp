@@ -185,7 +185,8 @@ void MainWindow::EnterKioskMode()
         left->setSpacing(0);
     }
     setWindowFlag(Qt::FramelessWindowHint);
-    setCursor(Qt::BlankCursor);
+    // The child widgets set their own pointing-hand cursors, which a window cursor does not hide.
+    QApplication::setOverrideCursor(Qt::BlankCursor);
     const QScreen* screen = QGuiApplication::primaryScreen();
     if (!screen) return;
     const QSize pixels = screen->geometry().size() * screen->devicePixelRatio();
