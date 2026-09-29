@@ -206,6 +206,9 @@ void TestBluetoothPhones() {
     Check(!CanSwitchTo(sorted[0]) && CanSwitchTo(sorted[1]) && CanSwitchTo(sorted[4]) && !CanSwitchTo(BluetoothPhone{}),
         "The wrong phones can be chosen for Android Auto");
     Check(SortedPhones({}).empty(), "An empty list got phones");
+    const BluetoothPhone manual{"/p/6", "Pixel", true, false, false};
+    Check(PhoneStateText(manual) == "Connected, manual" && PhoneStateText(sorted[0]) == "Android Auto", "A manual phone's state reads wrongly");
+    Check(BluetoothPhone{}.isAutoConnect, "A phone does not connect by itself by default");
 }
 
 // The status bar: the symbols where the design has them, measured from the right edge on every display, touch areas

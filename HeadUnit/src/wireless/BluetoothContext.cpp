@@ -5,6 +5,11 @@
 #include <utility>
 
 namespace headunit {
+namespace {
+// How long a manual phone may connect after the person pressed Connect for it.
+constexpr auto kManualConnectionWindow = std::chrono::minutes(2);
+}
+
 // A context that logs to `logger` and tells the window through `events`.
 BluetoothContext::BluetoothContext(Logger& logger, BluetoothEvents events) : m_logger(logger), m_events(std::move(events))
 {
@@ -60,11 +65,43 @@ void BluetoothContext::EndPairing(bool isRefusing)
     if (wasPending && m_events.onPairingEnd) m_events.onPairingEnd();
 }
 
-// A phone opened the Android Auto service: its connected socket waits for WaitForPhone.
+// The phones that connect only when the person asks (any thread).
+void BluetoothContext::SetManualPhones(std::set<QString> devicePaths)
+{
+    std::lock_guard lock(m_mutex);
+    m_manualPhones = std::move(devicePaths);
+}
+
+// Whether the phone connects only when the person asks (any thread).
+bool BluetoothContext::IsManual(const QString& devicePath)
+{
+    std::lock_guard lock(m_mutex);
+    return m_manualPhones.contains(devicePath);
+}
+
+// The person asked for this phone: it may open the Android Auto service for a while, also when it is a manual phone.
+void BluetoothContext::AllowManualConnection(const QString& devicePath)
+{
+    std::lock_guard lock(m_mutex);
+    m_allowedUntil[devicePath] = std::chrono::steady_clock::now() + kManualConnectionWindow;
+}
+
+// A phone opened the Android Auto service: its connected socket waits for WaitForPhone. A manual phone that nobody asked
+// for is turned away, so that it does not start Android Auto by itself.
 void BluetoothContext::AddPhone(int fd, const QString& devicePath)
 {
     {
         std::lock_guard lock(m_mutex);
+        if (m_manualPhones.contains(devicePath)) {
+            const auto allowed = m_allowedUntil.find(devicePath);
+            const bool isAsked = allowed != m_allowedUntil.end() && std::chrono::steady_clock::now() < allowed->second;
+            if (!isAsked) {
+                ::close(fd);
+                Log(LogLevel::Info, "Phone " + bluez::Text(devicePath) + " is set to connect manually; its Android Auto connection was turned away");
+                return;
+            }
+            m_allowedUntil.erase(allowed);
+        }
         m_phones.push_back(fd);
         m_phonePaths[fd] = devicePath;
     }

@@ -27,7 +27,8 @@ struct PendingPairing {
 
 // What the D-Bus objects of the Bluetooth service share with it: the log and the events for the window, the pairing
 // request that waits for its answer, the phones that were connected before the service existed, the phones that
-// opened the Android Auto service (with the device each socket belongs to) and the phone Android Auto runs on. The D-Bus
+// opened the Android Auto service (with the device each socket belongs to), the phone Android Auto runs on and the phones
+// that must be asked for before they connect (Auto Connect off). The D-Bus
 // objects run on the service's thread; the phones are handed over to whichever thread waits in WaitForPhone.
 class BluetoothContext {
 public:
@@ -38,6 +39,9 @@ public:
     bool CanAskForPairing() const;
     void AskForPairing(const QDBusMessage& message, const QString& devicePath, const std::string& phone, const std::string& code);
     void EndPairing(bool isRefusing);
+    void SetManualPhones(std::set<QString> devicePaths);
+    bool IsManual(const QString& devicePath);
+    void AllowManualConnection(const QString& devicePath);
     void AddPhone(int fd, const QString& devicePath);
     int WaitForPhone(std::chrono::milliseconds timeout);
     void CloseWaitingPhones();
@@ -60,6 +64,8 @@ private:
     std::deque<int> m_phones;              // connected RFCOMM sockets of phones that opened the Android Auto service
     std::map<int, QString> m_phonePaths;   // the device of each such socket, also after it was taken
     QString m_androidAutoPhone;            // the device of the running wireless session
+    std::set<QString> m_manualPhones;      // phones that connect only when the person asks (Auto Connect off)
+    std::map<QString, std::chrono::steady_clock::time_point> m_allowedUntil;   // manual phones the person asked for, until when
 
     std::function<void(bool)> MakeAnswer(std::uint64_t id) const;
 };

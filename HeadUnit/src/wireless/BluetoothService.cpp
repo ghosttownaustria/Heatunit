@@ -175,7 +175,17 @@ void BluetoothService::SetAndroidAutoPhone(const std::string& devicePath)
 void BluetoothService::SwitchToPhone(const std::string& devicePath)
 {
     if (!m_isRunning) return;
+    m_context.AllowManualConnection(QString::fromStdString(devicePath));
     QMetaObject::invokeMethod(m_worker.get(), [this, path = QString::fromStdString(devicePath)] { SwitchToPhoneOnServiceThread(path); }, Qt::QueuedConnection);
+}
+
+// The phones (BlueZ's device paths) that connect only when the person asks for it (Auto Connect off): they are not asked
+// to connect, and when one opens the Android Auto service by itself it is turned away. Any thread.
+void BluetoothService::SetManualPhones(const std::set<std::string>& devicePaths)
+{
+    std::set<QString> paths;
+    for (const auto& path : devicePaths) paths.insert(QString::fromStdString(path));
+    m_context.SetManualPhones(std::move(paths));
 }
 
 // Runs `work` on the service's thread and returns when it is done.
@@ -314,7 +324,7 @@ void BluetoothService::ConnectPairedOnServiceThread(bool isReconnectingAll)
     std::vector<bluez::PairedDevice> phones;
     bool isAnyDisconnected = false;
     for (const auto& device : bluez::ReadBluez(bus).paired) {
-        if (!device.isPhone) continue;
+        if (!device.isPhone || m_context.IsManual(device.path)) continue;
         phones.push_back(device);
         // A phone that connected while the service existed has seen it; taking its connection down would only break an
         // Android Auto start that may be under way.

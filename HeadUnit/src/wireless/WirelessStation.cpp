@@ -125,6 +125,12 @@ void WirelessStation::SwitchToPhone(const std::string& devicePath)
     m_bluetooth.SwitchToPhone(devicePath);
 }
 
+// The phones whose Auto Connect is off (see BluetoothService::SetManualPhones).
+void WirelessStation::SetManualPhones(const std::set<std::string>& devicePaths)
+{
+    m_bluetooth.SetManualPhones(devicePaths);
+}
+
 // The person quit HeadUnit with its button, as when a car is switched off: everything is taken down, then the Bluetooth
 // adapter (which drops every phone's Bluetooth link) and the Wi-Fi chip are switched off. The next start switches both
 // on again.

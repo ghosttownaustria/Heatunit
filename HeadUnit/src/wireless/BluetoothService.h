@@ -8,6 +8,7 @@
 #include <chrono>
 #include <functional>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -42,6 +43,7 @@ public:
     std::string PhoneName(const std::string& devicePath);
     void SetAndroidAutoPhone(const std::string& devicePath);
     void SwitchToPhone(const std::string& devicePath);
+    void SetManualPhones(const std::set<std::string>& devicePaths);
 
 private:
     BluetoothContext m_context;

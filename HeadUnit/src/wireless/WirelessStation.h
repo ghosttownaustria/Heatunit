@@ -12,6 +12,7 @@
 #include <chrono>
 #include <functional>
 #include <future>
+#include <set>
 #include <string>
 
 namespace headunit {
@@ -32,6 +33,7 @@ public:
     bool ReconnectPhones();
     AutoConnectResult Serve(int rfcommFd, std::atomic_bool& isStopRequested, ProjectionCallbacks callbacks);
     void SwitchToPhone(const std::string& devicePath);
+    void SetManualPhones(const std::set<std::string>& devicePaths);
     void SwitchRadiosOff();
 
 private:
