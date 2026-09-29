@@ -29,6 +29,19 @@ void TestAcceptedArguments()
     Check(Parse({"--test-bluetooth"}).mode == RunMode::TestBluetooth && Parse({"--test-hotspot"}).mode == RunMode::TestHotspot, "The wireless tests were not understood");
 }
 
+// --api-port takes a port number; ParsePort refuses anything that is not one.
+void TestApiPort()
+{
+    Check(!Parse({}).apiPort, "An API port appeared without --api-port");
+    Check(Parse({"--api-port", "6000"}).apiPort == 6000 && Parse({"--api-port", "0"}).apiPort == 0, "--api-port was not taken");
+    Check(Parse({"--api-port", "6000", "--scan"}).error.empty(), "--api-port did not go with a run mode");
+    Check(!Parse({"--api-port"}).error.empty() && !Parse({"--api-port", "70000"}).error.empty() && !Parse({"--api-port", "x1"}).error.empty(),
+        "A bad --api-port was accepted");
+    Check(ParsePort("5040") == 5040 && ParsePort("65535") == 65535 && !ParsePort("65536") && !ParsePort("") && !ParsePort("-1") && !ParsePort("123456"),
+        "ParsePort was wrong");
+    Check(CommandLineHelp(false).find("--api-port") != std::string::npos, "The help does not name --api-port");
+}
+
 // --help ends the reading, also before an argument that would be refused.
 void TestHelp()
 {
@@ -56,6 +69,7 @@ void TestRefusedArguments()
 void RunCommandLineTests()
 {
     TestAcceptedArguments();
+    TestApiPort();
     TestHelp();
     TestRefusedArguments();
 }

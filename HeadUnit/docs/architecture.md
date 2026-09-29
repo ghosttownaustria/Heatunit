@@ -186,6 +186,13 @@ device on its own thread so a sound server that hangs cannot stall the protocol 
 Qt widgets without moc; the portable parts (touch mapping, input bus, PCM helpers) live in `headunit_core`
 and are unit-tested in CoreTests.
 
+Remote API (`docs/api.md`): `RemoteCommand` (portable, `src/remote/`) reads one flat JSON line and runs it through
+injected callbacks (`RemoteCommandDeps`); it has its own small reader, so the core stays free of Qt. `RemoteServer` (Qt,
+no moc) listens on 127.0.0.1 and feeds it line by line in the GUI thread. `MainWindow::StartRemoteApi` supplies the
+callbacks: the same `PressConsole`, `SendKey`, `Rotate` and `AudioState` calls the simulated `CarPanel` makes, so the API
+and the panel cannot drift apart, and it runs in the kiosk build where the panel is hidden. `GpioBridge.py` at the
+repository root is a client of it for the real buttons.
+
 Display size: `DisplayConfig` (portable) is the one place that knows the offered sizes (800x480, 1280x720,
 1600x600, 1920x1080), the fixed Android Auto resolutions that carry them, the density and how to parse/print
 them. `VideoLayoutOf` maps a display to a `VideoLayout`: the frame the phone encodes (smallest fixed

@@ -34,6 +34,7 @@ constexpr bool kHasWireless = true;
 constexpr bool kHasWireless = false;
 #endif
 constexpr int kCloseCheckIntervalMs = 200;
+constexpr int kDefaultApiPort = 47050;
 
 // Plays two seconds of a quiet 440 Hz tone through this platform's audio engine, at the pace of a live stream: a check
 // of the sound output that needs no phone. Succeeds when the output device took most of the audio.
@@ -142,6 +143,17 @@ bool IsCarWindow(MainWindow::TestMode mode)
     return kIsKioskBuild;
 }
 
+// The remote API's port: --api-port, else HEADUNIT_API_PORT, else the default; 0 means the API is off.
+int ApiPort(const CommandLine& commandLine)
+{
+    if (commandLine.apiPort) return *commandLine.apiPort;
+    if (const auto setting = GetEnv("HEADUNIT_API_PORT"); setting && !setting->empty()) {
+        if (const auto port = ParsePort(*setting)) return *port;
+        std::cerr << "HEADUNIT_API_PORT is not a port number; the default " << kDefaultApiPort << " is used\n";
+    }
+    return kDefaultApiPort;
+}
+
 // The window, in the car mode or one of its test modes, until it closes. Closing properly (also on Ctrl+C or a service
 // stop) ends a running session and takes the wireless mode's hotspot down again.
 int RunWindow(int argc, char* argv[], IUsbBackend& backend, Logger& logger, const CommandLine& commandLine)
@@ -156,6 +168,9 @@ int RunWindow(int argc, char* argv[], IUsbBackend& backend, Logger& logger, cons
     const bool isCarWindow = IsCarWindow(testMode);
     if (isCarWindow) window.EnterKioskMode();
     if (commandLine.display) window.SetDisplay(*commandLine.display);
+    if (testMode == MainWindow::TestMode::None || testMode == MainWindow::TestMode::Smoke) {
+        if (const int port = ApiPort(commandLine); port != 0) window.StartRemoteApi(port);
+    }
     if (isCarWindow) window.showFullScreen();
     else window.show();
     if (commandLine.isWirelessRequested) logger.Write(LogLevel::Info, "APP", "--wireless: wireless Android Auto runs from the start anyway");

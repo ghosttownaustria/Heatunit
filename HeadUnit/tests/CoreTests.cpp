@@ -18,6 +18,7 @@ int main()
         RunLoggingTests();
         RunCommandLineTests();
         RunTransportBufferTests();
+        RunRemoteCommandTests();
         std::cout << "All core tests passed\n";
         return 0;
     } catch (const std::exception& error) {
